@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +49,6 @@ import dev.oxide.launcher.ui.screens.rememberTransitionSpec
 import dev.oxide.launcher.utils.network.isUsingMobileData
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.apache.commons.io.FileUtils
@@ -71,6 +71,7 @@ fun DownloadSavesScreen(
     }
 
     val context = LocalContext.current
+    val cleanupScope = rememberCoroutineScope()
 
     //下载资源操作
     var operation by remember { mutableStateOf<DownloadSingleOperation>(DownloadSingleOperation.None) }
@@ -89,7 +90,8 @@ fun DownloadSavesScreen(
                     )
                 },
                 onFileCancelled = { file, folder ->
-                    CoroutineScope(Dispatchers.IO).launch {
+                    // tied to the composition scope so leaving the screen cancels the cleanup
+                    cleanupScope.launch(Dispatchers.IO) {
                         FileUtils.deleteQuietly(
                             File(folder, file.nameWithoutExtension)
                         )

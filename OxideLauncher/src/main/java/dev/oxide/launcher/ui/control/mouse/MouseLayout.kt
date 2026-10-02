@@ -40,11 +40,10 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.ImageLoader
 import coil3.compose.AsyncImage
-import coil3.gif.GifDecoder
 import coil3.request.crossfade
-import coil3.svg.SvgDecoder
+import coil3.SingletonImageLoader
+import coil3.request.ImageRequest
 import dev.oxide.launcher.R
 import dev.oxide.launcher.bridge.CursorShape
 import dev.oxide.launcher.bridge.OxideBridgeStates
@@ -324,15 +323,9 @@ fun MousePointer(
     crossfade: Boolean = false
 ) {
     val context = LocalContext.current
-    val loader = remember(triggerRefresh, crossfade, mouseSize) {
-        ImageLoader.Builder(context)
-            .components {
-                add(GifDecoder.Factory())
-                add(SvgDecoder.Factory())
-            }
-            .crossfade(crossfade)
-            .build()
-    }
+    // Shared application-wide loader. The crossfade is applied per request instead of per loader,
+    // otherwise every tick of the mouse-size slider used to allocate a new ImageLoader.
+    val loader = remember(context) { SingletonImageLoader.get(context) }
 
     val fileExists by produceState(initialValue = false, triggerRefresh, mouseFile) {
         value = withContext(Dispatchers.IO) { mouseFile?.exists() == true }
@@ -354,8 +347,15 @@ fun MousePointer(
 
     val imageAlignment = if (centerIcon) Alignment.Center else Alignment.TopStart
 
+    val request = remember(model, crossfade, triggerRefresh) {
+        ImageRequest.Builder(context)
+            .data(model)
+            .crossfade(crossfade)
+            .build()
+    }
+
     AsyncImage(
-        model = model,
+        model = request,
         imageLoader = loader,
         contentDescription = null,
         alignment = imageAlignment,

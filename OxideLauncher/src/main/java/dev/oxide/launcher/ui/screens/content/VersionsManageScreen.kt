@@ -47,6 +47,7 @@ import androidx.compose.material3.nonInteractiveScrollbar
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -224,25 +225,41 @@ private fun rememberVersions(
     val category = viewModel.versionCategory
     val resortKey = viewModel.resortKey
 
-    return remember(vers, category, resortKey) {
-        derivedStateOf {
-            viewModel.allVersionsCount = vers.size
+    // derivedStateOf must not be used here: this block writes snapshot state (the tab counters)
+    // while Compose is reading derived state, which invalidates state during a read. The inputs are
+    // plain snapshots already, so a plain remember gives the same result and correct scheduling.
+    val result = remember(vers, category, resortKey) {
+        val vanillaVersions = vers.filter { ver -> ver.versionType == VersionType.VANILLA }
+        val modloaderVersions = vers.filter { ver -> ver.versionType == VersionType.MODLOADERS }
 
-            val vanillaVersions = vers
-                .filter { ver -> ver.versionType == VersionType.VANILLA }
-                .also { viewModel.vanillaVersionsCount = it.size }
-            val modloaderVersions = vers
-                .filter { ver -> ver.versionType == VersionType.MODLOADERS }
-                .also { viewModel.modloaderVersionsCount = it.size }
-
-            when (category) {
+        VersionFilterResult(
+            versions = when (category) {
                 VersionCategory.ALL -> vers
                 VersionCategory.VANILLA -> vanillaVersions
                 VersionCategory.MODLOADER -> modloaderVersions
-            }.sortedWith(VersionComparator)
-        }
+            }.sortedWith(VersionComparator),
+            allCount = vers.size,
+            vanillaCount = vanillaVersions.size,
+            modloaderCount = modloaderVersions.size
+        )
     }
+
+    SideEffect {
+        viewModel.allVersionsCount = result.allCount
+        viewModel.vanillaVersionsCount = result.vanillaCount
+        viewModel.modloaderVersionsCount = result.modloaderCount
+    }
+
+    return result.versions
 }
+
+/** 过滤、排序后的版本列表以及三个分类的数量 */
+private data class VersionFilterResult(
+    val versions: List<Version>,
+    val allCount: Int,
+    val vanillaCount: Int,
+    val modloaderCount: Int
+)
 
 @Composable
 fun VersionsManageScreen(

@@ -59,8 +59,10 @@ object Renderers {
 
     /**
      * 获取当前的渲染器列表
+     *
+     * 返回副本，避免调用方直接改动单例内部的列表
      */
-    fun getRenderers(): List<RendererInterface> = renderers
+    fun getRenderers(): List<RendererInterface> = renderers.toList()
 
     /**
      * 加入一些渲染器
@@ -81,7 +83,7 @@ object Renderers {
             false
         } else {
             renderers.add(renderer)
-            Logger.info(TAG, "Renderer loaded: ${renderer.getRendererName()} (${renderer.getRendererId()} - ${renderer.getUniqueIdentifier()})")
+            Logger.debug(TAG, "Renderer loaded: ${renderer.getRendererName()} (${renderer.getRendererId()} - ${renderer.getUniqueIdentifier()})")
             true
         }
     }

@@ -58,12 +58,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.ImageLoader
 import coil3.compose.AsyncImage
-import coil3.gif.GifDecoder
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.crossfade
+import coil3.SingletonImageLoader
 import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.game.account.Account
@@ -613,11 +612,8 @@ private fun BackgroundImage(
 ) {
     val context = LocalContext.current
 
-    val imageLoader = remember(refreshTrigger) {
-        ImageLoader.Builder(context)
-            .components { add(GifDecoder.Factory()) }
-            .build()
-    }
+    // Shared application-wide loader instead of one per background image.
+    val imageLoader = remember(context) { SingletonImageLoader.get(context) }
     val request = remember(refreshTrigger) {
         ImageRequest.Builder(context)
             .data(imageFile)

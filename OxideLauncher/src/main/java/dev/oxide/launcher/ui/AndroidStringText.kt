@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -39,13 +40,19 @@ import androidx.compose.ui.unit.TextUnit
 
 /**
  * Android 可展示字符串文本代理接口，提供不同的文本展现方式
+ *
+ * 该类型被 38 个文件、180 余处当作文本参数使用，其稳定性直接决定 Compose 能否跳过重组：
+ * [StringRes] 的 `args` 是数组，Compose 默认把所有数组视为不稳定类型，会让整棵文本子树
+ * 每次都重新计算。所有实现都是值类型并且 equals 正确，因此显式声明为不可变。
  */
+@Immutable
 sealed interface AndroidStringText {
     /**
      * 直接展示普通字符串
      *
      * @property value 字符串内容
      */
+    @Immutable
     data class Text(val value: String) : AndroidStringText
 
     /**
@@ -53,6 +60,7 @@ sealed interface AndroidStringText {
      *
      * @property value [AnnotatedString] 内容
      */
+    @Immutable
     data class Annotated(val value: AnnotatedString) : AndroidStringText
 
     /**
@@ -61,6 +69,7 @@ sealed interface AndroidStringText {
      * @property key 字符串资源 ID
      * @property args 格式化参数，支持 [AndroidStringText]
      */
+    @Immutable
     data class StringRes(
         @field:androidx.annotation.StringRes
         val key: Int,
@@ -90,6 +99,7 @@ sealed interface AndroidStringText {
      *
      * @property texts 要拼接的字符串列表
      */
+    @Immutable
     data class Appended(
         val texts: List<AndroidStringText>
     ) : AndroidStringText

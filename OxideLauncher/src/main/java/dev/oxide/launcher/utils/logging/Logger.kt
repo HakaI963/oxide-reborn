@@ -28,6 +28,7 @@ import dev.oxide.launcher.utils.printLauncherInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -36,9 +37,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.PrintWriter
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.CoroutineContext
 
@@ -55,10 +56,28 @@ object Logger : CoroutineScope {
      */
     private lateinit var PROCESS_TAG: String
     private val isInitialized = AtomicBoolean(false)
-    private val channel = Channel<LogMessage>(Channel.UNLIMITED)
+
+    // java.time formatters are immutable and thread safe, unlike SimpleDateFormat which has to be
+    // reallocated (and re-parses its pattern) for every single log line.
+    private val FILE_NAME_FORMAT: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ss").withZone(ZoneId.systemDefault())
+    private val LINE_TIME_FORMAT: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(ZoneId.systemDefault())
+    /**
+     * Bounded, so a burst of logging can never grow the queue without limit. When the writer falls
+     * behind the oldest pending line is dropped: a stale log line is always preferable to an
+     * out-of-memory error in the launcher process.
+     */
+    private val channel = Channel<LogMessage>(capacity = 4096, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private val logRetentionDays: Int
         get() = AllSettings.launcherLogRetentionDays.getValue()
+
+    /** Flush the log writer after this many lines. */
+    private const val FLUSH_EVERY_LINES = 64
+
+    /** Number of lines written since the last flush. */
+    private var linesSinceFlush = 0
 
     private var currentLogFile: File? = null
     private var logWriter: PrintWriter? = null
@@ -124,13 +143,13 @@ object Logger : CoroutineScope {
     }
 
     private fun createLogFile(): File {
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss", Locale.US)
         var file: File
         var counter = 0
 
         do {
             val suffix = if (counter == 0) "" else ".$counter"
-            file = File(PathManager.DIR_LAUNCHER_LOGS, "log_${dateFormat.format(Date())}_$PROCESS_TAG$suffix.log")
+            val stamp = FILE_NAME_FORMAT.format(Instant.now())
+            file = File(PathManager.DIR_LAUNCHER_LOGS, "log_${stamp}_$PROCESS_TAG$suffix.log")
             counter++
         } while (!file.createNewFile())
 
@@ -155,7 +174,13 @@ object Logger : CoroutineScope {
                 th.printStackTrace(this@apply)
                 printToLogcat(message.level, th)
             }
-            flush()
+        }
+
+        // PrintWriter is buffered, so flush periodically instead of once per line: the tail of the
+        // log still appears promptly while the syscall count stops scaling with the log volume.
+        if (message.level == Level.ERROR || message.level == Level.WARNING || ++linesSinceFlush >= FLUSH_EVERY_LINES) {
+            linesSinceFlush = 0
+            logWriter?.flush()
         }
     }
 
@@ -182,7 +207,7 @@ object Logger : CoroutineScope {
     }
 
     private fun formatMessage(message: LogMessage): String {
-        val time = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(message.time)
+        val time = LINE_TIME_FORMAT.format(Instant.ofEpochMilli(message.time))
         return buildString {
             append("[$time] [")
             append(message.tag)
@@ -233,9 +258,9 @@ object Logger : CoroutineScope {
             throwable = throwable
         )
 
-        launch {
-            channel.send(logMessage)
-        }
+        // trySend keeps the lines in publication order and avoids allocating a coroutine for every
+        // single line, which the previous launch { channel.send(...) } did (and could reorder).
+        channel.trySend(logMessage)
     }
 
     /**

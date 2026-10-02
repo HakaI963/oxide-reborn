@@ -553,14 +553,18 @@ private class BatDrawer(
         val step = width / (samples - 1)
         val baseTop = height - layerHeight * 0.18f
 
+        // loop invariant: recomputing it per sample cost two divisions for each of the samples on
+        // each of the layers on every frame
+        val waveScale = layerHeight / 2f + 24f
+
         target.rewind()
         target.moveTo(0f, height)
         target.lineTo(0f, baseTop)
         for (index in 0 until samples) {
             val x = index * step
             val factor = 0.5f +
-                0.34f * sin(time + x * 0.9f / (layerHeight / 2f + 24f) + phase) +
-                0.16f * sin(time * 1.7f - x * 1.7f / (layerHeight / 2f + 24f) + phase * 2f)
+                0.34f * sin(time + x * 0.9f / waveScale + phase) +
+                0.16f * sin(time * 1.7f - x * 1.7f / waveScale + phase * 2f)
             val top = baseTop - layerHeight * factor.coerceIn(0.04f, 1f)
             target.lineTo(x, top)
         }

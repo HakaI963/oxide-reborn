@@ -34,7 +34,7 @@ sealed class EnvSettingUnit(
 ) : AbstractSettingUnit<String>(mmkvKey, defaultValue) {
 
     override fun getValue(): String {
-        return rendererEnvMMKV().getString(key, defaultValue)!!
+        return (rendererEnvMMKV().getString(key, defaultValue) ?: defaultValue)
             .also { state = it }
     }
 

@@ -22,7 +22,10 @@ import dev.oxide.launcher.setting.launcherMMKV
 
 class StringSettingUnit(key: String, defaultValue: String) : AbstractSettingUnit<String>(key, defaultValue) {
     override fun getValue(): String {
-        return launcherMMKV().getString(key ,defaultValue)!!
+        // MMKV returns null when the stored blob cannot be decoded as a string (corrupt entry or
+        // a value written under a different type), so fall back to the default instead of crashing
+        // while the settings are being loaded.
+        return (launcherMMKV().getString(key, defaultValue) ?: defaultValue)
             .also { state = it }
     }
 

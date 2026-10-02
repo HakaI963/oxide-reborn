@@ -232,13 +232,15 @@ fun JavaManageScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .nonInteractiveScrollbar(
-                        state = scrollState.scrollIndicatorState!!,
+                        // the indicator state is only created once the scroll state is attached,
+                        // so it must be omitted rather than asserted on during composition
+                        state = scrollState.scrollIndicatorState,
                         orientation = Orientation.Vertical,
                     ),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                 state = scrollState,
             ) {
-                items(runtimes) { runtime ->
+                items(runtimes, key = { it.name }) { runtime ->
                     JavaRuntimeItem(
                         runtime = runtime,
                         modifier = Modifier
@@ -503,7 +505,7 @@ private fun SelectJavaRuntimeDialog(
                         state = scrollState,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(runtimes) { runtime ->
+                        items(runtimes, key = { it.name }) { runtime ->
                             JavaRuntimeItem(
                                 runtime = runtime,
                                 onClick = { onSelectRuntime(runtime) },

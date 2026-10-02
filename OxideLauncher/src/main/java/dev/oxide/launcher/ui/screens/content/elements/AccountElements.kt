@@ -162,6 +162,8 @@ import java.io.IOException
 import java.nio.file.Files
 import java.util.regex.Pattern
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val TAG = "AccountElements"
 
@@ -1403,32 +1405,37 @@ fun ChangeSkinDialog(
                                         }
                                     )
                                 },
-                                update = {
-                                    if (pageFinished) {
-                                        when (skinState) {
-                                            ChangeSkin.None -> loadSkin()
-                                            is ChangeSkin.ChangeSkinData -> {
-                                                runCatching {
-                                                    skinState.cacheFile.inputStream().use { stream ->
-                                                        playerSkin.loadSkin(stream, skinState.skinModel)
-                                                    }
-                                                }.onFailure {
-                                                    playerSkin.loadSkin(
-                                                        skinId = null,
-                                                        skinState.skinModel
-                                                    )
-                                                }
-                                            }
-
-                                            is ChangeSkin.ResetSkin -> resetSkin()
-                                        }
-                                        if (account.isMicrosoftAccount()) {
-                                            playerSkin.loadCape(currentCapeToLoad)
-                                        }
-                                    }
-                                },
                                 modifier = Modifier.fillMaxSize()
                             )
+
+                            // Previously ran from AndroidView's update block, which is invoked on every
+                            // recomposition: each evaluation read the whole PNG, base64 encoded it and
+                            // pushed a multi-hundred-kilobyte string into the WebView.
+                            LaunchedEffect(pageFinished, skinState, currentCapeToLoad) {
+                                if (!pageFinished) return@LaunchedEffect
+                                when (skinState) {
+                                    ChangeSkin.None -> loadSkin()
+                                    is ChangeSkin.ChangeSkinData -> {
+                                        withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                skinState.cacheFile.inputStream().use { stream ->
+                                                    playerSkin.loadSkin(stream, skinState.skinModel)
+                                                }
+                                            }.onFailure {
+                                                playerSkin.loadSkin(
+                                                    skinId = null,
+                                                    skinState.skinModel
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    is ChangeSkin.ResetSkin -> resetSkin()
+                                }
+                                if (account.isMicrosoftAccount()) {
+                                    playerSkin.loadCape(currentCapeToLoad)
+                                }
+                            }
                         }
 
                         Column(

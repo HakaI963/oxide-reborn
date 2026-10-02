@@ -25,20 +25,26 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.core.app.ActivityCompat
+import dev.oxide.launcher.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.sqrt
 import kotlin.time.Duration.Companion.milliseconds
 
 class MicMeter {
+    private companion object {
+        private const val TAG = "MicMeter"
+    }
+
     private val sampleRate = 44100
     private val bufferSize = AudioRecord.getMinBufferSize(
         sampleRate,
@@ -46,8 +52,20 @@ class MicMeter {
         AudioFormat.ENCODING_PCM_16BIT
     )
     
+    private val lock = Any()
     private var audioRecord: AudioRecord? = null
     private var job: Job? = null
+
+    /**
+     * Own scope so start()/stop() tear everything down together. A bare CoroutineScope with no Job
+     * leaked both the coroutine and the AudioRecord whenever stop() was not reached.
+     */
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            CoroutineExceptionHandler { _, throwable ->
+                Logger.error(TAG, "Microphone level loop failed", throwable)
+            }
+    )
 
     /**
      * 开始录音，实时返回相对音量值
@@ -77,33 +95,41 @@ class MicMeter {
 
         audioRecord?.startRecording()
 
-        job = CoroutineScope(Dispatchers.IO).launch {
+        job = scope.launch {
             val buffer = ShortArray(bufferSize)
-            withContext(Dispatchers.IO) {
-                while (true) {
-                    try {
-                        ensureActive()
-                        val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-                        if (read > 0) {
-                            var sum = 0.0
-                            for (i in 0 until read) {
-                                val v = buffer[i].toDouble()
-                                sum += v * v
-                            }
-                            val rms = sqrt(sum / read)
-
-                            val safeRms = max(rms, 1.0)
-
-                            //计算相对分贝值，0 对应完全静音
-                            val db = 20 * log10(safeRms)
-                            val level = max(db, 0.0)
-
-                            onLevelUpdate(level)
+            while (isActive) {
+                try {
+                    val record = synchronized(lock) { audioRecord } ?: break
+                    val read = record.read(buffer, 0, buffer.size)
+                    if (read > 0) {
+                        var sum = 0.0
+                        for (i in 0 until read) {
+                            val v = buffer[i].toDouble()
+                            sum += v * v
                         }
-                        delay(50L.milliseconds)
-                    } catch (_: CancellationException) {
-                        break
+                        val rms = sqrt(sum / read)
+
+                        val safeRms = max(rms, 1.0)
+
+                        //计算相对分贝值，0 对应完全静音
+                        val db = 20 * log10(safeRms)
+                        val level = max(db, 0.0)
+
+                        onLevelUpdate(level)
                     }
+                    delay(50L.milliseconds)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    // stop() releases the AudioRecord while a read may still be in flight, which
+                    // surfaces as IllegalStateException. Swallowing that here used to crash the
+                    // process through the global uncaught exception handler.
+                    Logger.warning(
+                        TAG,
+                        "Microphone read failed, stopping the level meter",
+                        t
+                    )
+                    break
                 }
             }
         }
@@ -113,9 +139,14 @@ class MicMeter {
      * 停止麦克风检查
      */
     fun stop() {
-        job?.cancel()
-        audioRecord?.stop()
-        audioRecord?.release()
-        audioRecord = null
+        synchronized(lock) {
+            job?.cancel()
+            job = null
+            val record = audioRecord
+            audioRecord = null
+            // Releasing can throw when the recorder was never started successfully.
+            runCatching { record?.stop() }
+            runCatching { record?.release() }
+        }
     }
 }

@@ -74,10 +74,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.ImageLoader
 import coil3.compose.AsyncImage
-import coil3.gif.GifDecoder
-import coil3.svg.SvgDecoder
+import coil3.SingletonImageLoader
 import dev.oxide.launcher.R
 import dev.oxide.launcher.game.addons.modloader.ModLoader
 import dev.oxide.launcher.game.path.GamePath
@@ -974,14 +972,10 @@ fun VersionIconImage(
     val defaultIcon = painterResource(defaultIconRes)
 
     val context = LocalContext.current
-    val loader = remember(version, refreshKey) {
-        ImageLoader.Builder(context)
-            .components {
-                add(GifDecoder.Factory())
-                add(SvgDecoder.Factory())
-            }
-            .build()
-    }
+    // The shared loader from OxideApplication (gif + svg decoders, shared memory and disk cache).
+    // Building one per version card allocated an ImageLoader and its own memory cache for every
+    // installed version, none of them ever closed.
+    val loader = remember(context) { SingletonImageLoader.get(context) }
 
     val model = remember(version, refreshKey) {
         version?.let {
