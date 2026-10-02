@@ -29,17 +29,40 @@ import kotlin.random.Random
 
 class MurmurHash2IncrementalTest {
 
+    /**
+     * The incremental implementation must stay bit-compatible with the previous "buffer everything,
+     * then hash" implementation, because mod fingerprints computed by earlier launcher versions are
+     * still stored on disk and compared against freshly computed ones.
+     */
     @Test
-    fun testTwoWay() {
-        val file = File("F:\\Download\\geckolib-forge-1.21.8-5.2.2.jar")
-        val hash1 = way1(file)
-        println("Way 1 hash = $hash1")
-        val hash2 = way2(file)
-        println("Way 2 hash = $hash2")
+    fun incrementalMatchesBufferedImplementation() {
+        val byteToSkip = listOf(0x9, 0xa, 0xd, 0x20)
+        val random = Random(seed = 1337)
+        val dir = createTempDirectory("murmur2-twoway").toFile()
+        try {
+            for (size in intArrayOf(0, 1, 2, 1023, 1024, 1025, 65536)) {
+                val bytes = ByteArray(size) {
+                    when (random.nextInt(5)) {
+                        0 -> byteToSkip[random.nextInt(byteToSkip.size)]
+                        else -> random.nextInt(256)
+                    }.toByte()
+                }
+                val file = dir.resolve("twoway-$size.jar")
+                Files.write(file.toPath(), bytes)
+
+                assertEquals(
+                    "size $size",
+                    way1(file, byteToSkip),
+                    MurmurHash2Incremental.computeHash(file, byteToSkip = byteToSkip)
+                )
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     //Old
-    private fun way1(file: File): Long {
+    private fun way1(file: File, byteToSkip: List<Int>): Long {
         val baos = ByteArrayOutputStream()
         Files.newInputStream(file.toPath()).use { stream ->
             val buf = ByteArray(1024)
@@ -47,17 +70,13 @@ class MurmurHash2IncrementalTest {
             while (stream.read(buf).also { bytesRead = it } != -1) {
                 for (i in 0 until bytesRead) {
                     val b = buf[i]
-                    if (b.toInt() !in listOf(0x9, 0xa, 0xd, 0x20)) {
+                    if (b.toInt() !in byteToSkip) {
                         baos.write(b.toInt())
                     }
                 }
             }
         }
         return Integer.toUnsignedLong(MurmurHash2.hash32(baos.toByteArray(), baos.size(), 1))
-    }
-
-    private fun way2(file: File): Long {
-        return MurmurHash2Incremental.computeHash(file, byteToSkip = listOf(0x9, 0xa, 0xd, 0x20))
     }
 
     /**

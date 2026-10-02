@@ -854,8 +854,20 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
             List<LegacySnapshot> snapshots = new ArrayList<>(1024);
             List<Release> snapshotPrev = new ArrayList<>(1024);
 
-            //noinspection DataFlowIssue
-            try (var reader = new BufferedReader(new InputStreamReader(GameVersionNumber.class.getResourceAsStream("/assets/game/versions.txt"), StandardCharsets.US_ASCII))) {
+            // On Android the data ships inside the APK, so it is reachable as "/assets/...".
+            // On a plain JVM classpath (unit tests) the very same directory is a classpath root,
+            // so the resource is reachable without the "/assets" prefix. Neither being present
+            // must not turn into an NPE: the tables simply stay empty.
+            try (var reader = openDataReader("/assets/game/versions.txt", "/game/versions.txt")) {
+                if (reader == null) {
+                    Logger.INSTANCE.warning("GameVersionNumber", "assets/game/versions.txt is unavailable, "
+                            + "release ordering between legacy snapshots will be unavailable", null);
+                    DEFAULT_GAME_VERSIONS = defaultGameVersions.toArray(new String[0]);
+                    SNAPSHOT_INTS = new int[0];
+                    SNAPSHOT_PREV = new Release[0];
+                    return;
+                }
+
                 Release currentRelease = null;
                 GameVersionNumber prev = null;
 
@@ -890,8 +902,16 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
                 throw new AssertionError(e);
             }
 
-            //noinspection DataFlowIssue
-            try (var reader = new BufferedReader(new InputStreamReader(GameVersionNumber.class.getResourceAsStream("/assets/game/version-alias.csv"), StandardCharsets.US_ASCII))) {
+            try (var reader = openDataReader("/assets/game/version-alias.csv", "/game/version-alias.csv")) {
+                if (reader == null) {
+                    Logger.INSTANCE.warning("GameVersionNumber", "assets/game/version-alias.csv is unavailable, "
+                            + "version aliases will not be resolved", null);
+                    DEFAULT_GAME_VERSIONS = defaultGameVersions.toArray(new String[0]);
+                    SNAPSHOT_INTS = new int[0];
+                    SNAPSHOT_PREV = new Release[0];
+                    return;
+                }
+
                 for (String line; (line = reader.readLine()) != null; ) {
                     if (line.isEmpty())
                         continue;
@@ -928,6 +948,20 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
             }
 
             SNAPSHOT_PREV = snapshotPrev.toArray(new Release[SNAPSHOT_INTS.length]);
+        }
+
+        /**
+         * Opens one of the shipped data files, trying each candidate classpath location in order.
+         *
+         * @return a reader, or {@code null} when none of the locations holds the file
+         */
+        private static BufferedReader openDataReader(String... paths) throws IOException {
+            for (String path : paths) {
+                var stream = GameVersionNumber.class.getResourceAsStream(path);
+                if (stream != null)
+                    return new BufferedReader(new InputStreamReader(stream, StandardCharsets.US_ASCII));
+            }
+            return null;
         }
     }
 }

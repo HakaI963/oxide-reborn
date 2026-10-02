@@ -333,3 +333,18 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
 }
+
+/**
+ * The vendored HMCL `GameVersionNumber` reads `assets/game/versions.txt` and
+ * `assets/game/version-alias.csv` from the classpath while its static initialiser runs, because it
+ * needs the full release history to order legacy snapshots against releases. Those files live in
+ * `src/main/assets` and are only merged into the APK, so put the directory itself on the unit test
+ * classpath; otherwise the tables would silently stay empty and every comparison between a legacy
+ * snapshot and a release would be wrong.
+ */
+tasks.withType<Test>().configureEach {
+    val mainAssetsDir = layout.projectDirectory.dir("src/main/assets")
+    if (mainAssetsDir.asFile.isDirectory) {
+        classpath += files(mainAssetsDir.asFile)
+    }
+}
