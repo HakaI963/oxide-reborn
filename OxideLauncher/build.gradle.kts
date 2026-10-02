@@ -343,8 +343,12 @@ dependencies {
  * snapshot and a release would be wrong.
  */
 tasks.withType<Test>().configureEach {
-    val mainAssetsDir = layout.projectDirectory.dir("src/main/assets")
-    if (mainAssetsDir.asFile.isDirectory) {
-        classpath += files(mainAssetsDir.asFile)
+    val mainAssetsDir = layout.projectDirectory.dir("src/main/assets").asFile
+    if (mainAssetsDir.isDirectory) {
+        // AGP assembles the unit test classpath during its own configuration, so the entry has to
+        // be appended when the task runs; adding it in configureEach alone is silently discarded.
+        doFirst {
+            classpath = classpath.plus(files(mainAssetsDir))
+        }
     }
 }
