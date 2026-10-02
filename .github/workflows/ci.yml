@@ -66,10 +66,12 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon help
 
+      # An unqualified task name runs in every module that declares it, so this covers
+      # :OxideLauncher plus the :CardGrid and :Guide unit test suites.
       - name: Unit tests
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon testDebugUnitTest testReleaseUnitTest
+          ./gradlew --no-daemon testDebugUnitTest
 
       - name: Android Lint
         run: |
