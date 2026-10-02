@@ -228,15 +228,18 @@ fun JavaManageScreen(
             }
 
             val scrollState = rememberLazyListState()
+            // The indicator state only exists once the scroll state is attached; asserting on it
+            // crashes during composition, and the scrollbar can simply be omitted until then.
+            val scrollbarModifier = scrollState.scrollIndicatorState?.let { indicatorState ->
+                Modifier.nonInteractiveScrollbar(
+                    state = indicatorState,
+                    orientation = Orientation.Vertical,
+                )
+            } ?: Modifier
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .nonInteractiveScrollbar(
-                        // the indicator state is only created once the scroll state is attached,
-                        // so it must be omitted rather than asserted on during composition
-                        state = scrollState.scrollIndicatorState,
-                        orientation = Orientation.Vertical,
-                    ),
+                    .then(scrollbarModifier),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                 state = scrollState,
             ) {

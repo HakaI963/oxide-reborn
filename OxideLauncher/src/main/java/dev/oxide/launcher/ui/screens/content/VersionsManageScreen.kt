@@ -46,7 +46,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.nonInteractiveScrollbar
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -220,7 +219,7 @@ private fun rememberVersionViewModel() : VersionsScreenViewModel {
 private fun rememberVersions(
     versions: StateFlow<List<Version>>,
     viewModel: VersionsScreenViewModel,
-): State<List<Version>> {
+): List<Version> {
     val vers by versions.collectAsStateWithLifecycle()
     val category = viewModel.versionCategory
     val resortKey = viewModel.resortKey
@@ -271,7 +270,7 @@ fun VersionsManageScreen(
 ) {
     val viewModel = rememberVersionViewModel()
 
-    val versions by rememberVersions(VersionsManager.versions, viewModel)
+    val versions = rememberVersions(VersionsManager.versions, viewModel)
     val currentVersion by VersionsManager.currentVersion.collectAsStateWithLifecycle()
     val isRefreshing by VersionsManager.isRefreshing.collectAsStateWithLifecycle()
 
