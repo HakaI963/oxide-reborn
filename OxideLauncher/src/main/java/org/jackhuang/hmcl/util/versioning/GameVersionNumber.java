@@ -855,16 +855,37 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
             List<Release> snapshotPrev = new ArrayList<>(1024);
 
             // On Android the data ships inside the APK, so it is reachable as "/assets/...".
-            // On a plain JVM classpath (unit tests) the very same directory is a classpath root,
-            // so the resource is reachable without the "/assets" prefix. Neither being present
-            // must not turn into an NPE: the tables simply stay empty.
+            // On a plain JVM classpath (unit tests) that same directory is a classpath root, so the
+            // resource is reachable without the "/assets" prefix. When neither location holds the
+            // file the tables simply stay empty and a warning is logged: a missing optional data
+            // file must degrade version comparison, never fail class initialisation with an NPE.
+            try {
+                readVersions(defaultGameVersions, snapshots, snapshotPrev);
+                readVersionAliases();
+            } catch (IOException e) {
+                Logger.INSTANCE.warning("GameVersionNumber", "Failed to read the shipped version history", e);
+            }
+
+            DEFAULT_GAME_VERSIONS = defaultGameVersions.toArray(new String[0]);
+
+            SNAPSHOT_INTS = new int[snapshots.size()];
+            for (int i = 0; i < snapshots.size(); i++) {
+                SNAPSHOT_INTS[i] = snapshots.get(i).intValue;
+            }
+
+            SNAPSHOT_PREV = snapshotPrev.toArray(new Release[SNAPSHOT_INTS.length]);
+        }
+
+        private static void readVersions(
+                ArrayDeque<String> defaultGameVersions,
+                List<LegacySnapshot> snapshots,
+                List<Release> snapshotPrev
+        ) throws IOException {
+            //noinspection DataFlowIssue
             try (var reader = openDataReader("/assets/game/versions.txt", "/game/versions.txt")) {
                 if (reader == null) {
-                    Logger.INSTANCE.warning("GameVersionNumber", "assets/game/versions.txt is unavailable, "
-                            + "release ordering between legacy snapshots will be unavailable", null);
-                    DEFAULT_GAME_VERSIONS = defaultGameVersions.toArray(new String[0]);
-                    SNAPSHOT_INTS = new int[0];
-                    SNAPSHOT_PREV = new Release[0];
+                    Logger.INSTANCE.warning("GameVersionNumber",
+                            "assets/game/versions.txt is unavailable, legacy snapshot ordering is degraded", null);
                     return;
                 }
 
@@ -898,17 +919,15 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
 
                     prev = version;
                 }
-            } catch (IOException e) {
-                throw new AssertionError(e);
             }
+        }
 
+        private static void readVersionAliases() throws IOException {
+            //noinspection DataFlowIssue
             try (var reader = openDataReader("/assets/game/version-alias.csv", "/game/version-alias.csv")) {
                 if (reader == null) {
-                    Logger.INSTANCE.warning("GameVersionNumber", "assets/game/version-alias.csv is unavailable, "
-                            + "version aliases will not be resolved", null);
-                    DEFAULT_GAME_VERSIONS = defaultGameVersions.toArray(new String[0]);
-                    SNAPSHOT_INTS = new int[0];
-                    SNAPSHOT_PREV = new Release[0];
+                    Logger.INSTANCE.warning("GameVersionNumber",
+                            "assets/game/version-alias.csv is unavailable, version aliases are not resolved", null);
                     return;
                 }
 
@@ -936,18 +955,7 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
                         SPECIALS.put(version, versionNumber);
                     }
                 }
-            } catch (IOException e) {
-                throw new AssertionError(e);
             }
-
-            DEFAULT_GAME_VERSIONS = defaultGameVersions.toArray(new String[0]);
-
-            SNAPSHOT_INTS = new int[snapshots.size()];
-            for (int i = 0; i < snapshots.size(); i++) {
-                SNAPSHOT_INTS[i] = snapshots.get(i).intValue;
-            }
-
-            SNAPSHOT_PREV = snapshotPrev.toArray(new Release[SNAPSHOT_INTS.length]);
         }
 
         /**
