@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFE08F</color>
+    <!-- Oxide Reborn icon background -->
+    <color name="ic_launcher_background">#FF1F1B18</color>
 </resources>

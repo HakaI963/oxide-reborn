@@ -62,16 +62,24 @@ jobs:
           add-job-summary: on-failure
 
       - name: Gradle configuration check
-        run: ./gradlew --no-daemon help
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon help
 
       - name: Unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest testReleaseUnitTest
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon testDebugUnitTest testReleaseUnitTest
 
       - name: Android Lint
-        run: ./gradlew --no-daemon lintDebug
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon lintDebug
 
       - name: Assemble debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleDebug
 
       - name: Upload lint report
         if: always()

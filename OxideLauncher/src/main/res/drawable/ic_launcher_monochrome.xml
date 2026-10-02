@@ -1,19 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Oxide Reborn launcher icon monochrome (themed icons).
+  ~ Original artwork created for Oxide Reborn. Licensed GPL-3.0 with the rest of the project.
+  -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="1558.9"
-    android:viewportHeight="1800.1">
-  <group android:scaleX="0.41568357"
-      android:scaleY="0.48"
-      android:translateX="455.44543"
-      android:translateY="468.026">
+    android:viewportWidth="108"
+    android:viewportHeight="108"
+    android:tint="#FFFFFFFF">
+
     <path
-        android:pathData="M390,674.9l0,450.3l390,225.2l390,-225.2l0,-450.3l-390,-225.2l-390,225.2z"
-        android:strokeWidth="0"
-        android:fillColor="#fff"/>
-    <path
-        android:pathData="m779.5,0l779.5,450v900l-779.5,450L0,1350.1L0,450L779.5,0ZM289,675.6v448.9c0,36.2 19.3,69.6 50.6,87.7l388.8,224.4c31.3,18.1 69.9,18.1 101.2,0l388.8,-224.4c31.3,-18.1 50.6,-51.5 50.6,-87.7v-448.9c0,-36.2 -19.3,-69.6 -50.6,-87.7l-388.8,-224.4c-31.3,-18.1 -69.9,-18.1 -101.2,0l-388.8,224.4c-31.3,18.1 -50.6,51.5 -50.6,87.7Z"
-        android:strokeWidth="0"
-        android:fillColor="#fff"/>
-  </group>
+        android:pathData="M54,54 L71,24.56 L88,54 L71,83.44 L37,83.44 L20,54 L37,24.56 Z M73,54 L63.5,70.39 L44.5,70.39 L35,54 L44.5,37.61 L63.5,37.61 Z"
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd" />
 </vector>

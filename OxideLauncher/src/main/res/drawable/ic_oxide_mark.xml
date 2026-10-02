@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ~ Oxide Reborn launcher icon foreground.
+  ~ Oxide Reborn logo mark.
   ~ Original artwork created for Oxide Reborn. Licensed GPL-3.0 with the rest of the project.
   -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -9,10 +9,17 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- outer hexagon outline -->
+    <path
+        android:pathData="M88,54 L71,83.44 L37,83.44 L20,54 L37,24.56 L71,24.56 Z"
+        android:strokeColor="#FFF2C79B"
+        android:strokeWidth="2.4"
+        android:strokeLineJoin="round" />
+
     <!-- faceted body: six triangles around the centre -->
     <path
         android:pathData="M54,54 L71,24.56 L88,54 Z"
-        android:fillColor="#FFE59A4E" />
+        android:fillColor="#FFE08A3C" />
     <path
         android:pathData="M54,54 L88,54 L71,83.44 Z"
         android:fillColor="#FFB9631F" />
@@ -27,12 +34,12 @@
         android:fillColor="#FFC06E2B" />
     <path
         android:pathData="M54,54 L37,24.56 L71,24.56 Z"
-        android:fillColor="#FFF3BA80" />
+        android:fillColor="#FFF0B072" />
 
     <!-- hollow core -->
     <path
         android:pathData="M73,54 L63.5,70.39 L44.5,70.39 L35,54 L44.5,37.61 L63.5,37.61 Z"
         android:fillColor="#00000000"
         android:strokeColor="#FFF7E3CB"
-        android:strokeWidth="2.6" />
+        android:strokeWidth="2" />
 </vector>
