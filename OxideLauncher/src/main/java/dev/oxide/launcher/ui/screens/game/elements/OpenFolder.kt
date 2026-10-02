@@ -54,7 +54,6 @@ import androidx.compose.material3.nonInteractiveScrollbar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -119,7 +118,9 @@ fun OpenFolderLayer(
 
     var internalPath by remember { mutableStateOf<File?>(null) }
     var refreshFiles by remember { mutableStateOf(false) }
-    val files = remember { mutableStateListOf<File>() }
+    // 一次性保存不可变列表：之前在 IO 线程上 clear()/addAll() 修改快照列表，
+    // 每次导航都会触发跨线程的全局快照应用与通知。
+    var files by remember { mutableStateOf<List<File>>(emptyList()) }
 
     LaunchedEffect(operation) {
         internalPath = when (operation) {
@@ -129,33 +130,19 @@ fun OpenFolderLayer(
     }
 
     LaunchedEffect(internalPath, refreshFiles) {
-        withContext(Dispatchers.IO) {
-            files.clear()
-            val temp = buildList {
-                internalPath?.listFiles()?.forEach { file ->
-                    add(file)
-                }
-                sortWith { o1, o2 ->
-                    val thisIsFile = o1.isFile
-                    val otherIsFile = o2.isFile
-                    when {
-                        thisIsFile != otherIsFile -> {
-                            if (!thisIsFile) -1 else 1
-                        }
-                        else -> {
-                            val nameCompare = o1.name.compareTo(o2.name)
-                            if (nameCompare != 0) {
-                                nameCompare
-                            } else {
-                                //如果文件名相同，用绝对路径作为最终依据
-                                o1.absolutePath.compareTo(o2.absolutePath)
-                            }
-                        }
-                    }
-                }
-            }
-            files.addAll(temp)
+        val loaded = withContext(Dispatchers.IO) {
+            val entries = internalPath?.listFiles()?.toList() ?: emptyList()
+            // 排序键预先算好，避免排序过程中反复 stat
+            entries.sortedWith(
+                compareBy(
+                    { it.isFile },
+                    { it.name.lowercase() },
+                    { it.name },
+                    { it.absolutePath }
+                )
+            )
         }
+        files = loaded
     }
 
     Box(
@@ -244,7 +231,7 @@ fun OpenFolderLayer(
                                 contentPadding = PaddingValues(all = 12.dp),
                                 state = scrollState,
                             ) {
-                                items(files) { file ->
+                                items(files, key = { it.absolutePath }) { file ->
                                     FileItem(
                                         modifier = Modifier.fillMaxWidth(),
                                         file = file,

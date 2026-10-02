@@ -30,6 +30,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import dev.oxide.launcher.BuildConfig
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
@@ -116,15 +117,20 @@ class PlayerSkin(
             }
             webChromeClient = object : WebChromeClient() {
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-                    Log.d(
-                        "WebViewConsole", (consoleMessage.message()
-                                + " (line " + consoleMessage.lineNumber() + ")")
-                    )
+                    // 皮肤预览页在部分设备上会逐帧输出日志，不加限制会刷满 logcat
+                    if (BuildConfig.DEBUG) {
+                        Log.v(
+                            "WebViewConsole", (consoleMessage.message()
+                                    + " (line " + consoleMessage.lineNumber() + ")")
+                        )
+                    }
                     return true
                 }
 
                 override fun onJsAlert(view: WebView?, url: String?, message: String, result: JsResult): Boolean {
-                    Log.d("WebViewAlert", message)
+                    if (BuildConfig.DEBUG) {
+                        Log.v("WebViewAlert", message)
+                    }
                     result.confirm()
                     return true
                 }

@@ -151,6 +151,7 @@ import dev.oxide.launcher.utils.animation.getAnimateTween
 import dev.oxide.launcher.utils.animation.swapAnimateDpAsState
 import dev.oxide.launcher.utils.file.FolderFileCounter
 import dev.oxide.launcher.utils.file.formatFileSize
+import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.string.isNotEmptyOrBlank
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
@@ -174,6 +175,8 @@ import java.util.LinkedList
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
+
+private const val MODS_UPDATER_TAG = "ModsUpdater"
 
 private class ModsManageViewModel(
     modsDir: File
@@ -474,9 +477,15 @@ private class ModsUpdaterViewModel(
         onStart: () -> Unit = {},
         onStop: () -> Unit = {}
     ) {
-        val minecraftVer = version.getVersionInfo()!!.minecraftVersion
+        //一次取值，避免重复的反序列化；版本目录可能在界面打开期间被删除
+        val versionInfo = version.getVersionInfo()
+        if (versionInfo == null) {
+            Logger.warning(MODS_UPDATER_TAG, "Version ${version.getVersionName()} has no readable version info, skipping the mod update")
+            return
+        }
+        val minecraftVer = versionInfo.minecraftVersion
         //模组更新按主加载器过滤
-        val modLoader = version.getVersionInfo()!!.primaryLoader?.loader ?: ModLoader.UNKNOWN
+        val modLoader = versionInfo.primaryLoader?.loader ?: ModLoader.UNKNOWN
 
         modsUpdater = ModUpdater(
             mods = mods,

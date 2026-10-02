@@ -26,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -258,7 +259,14 @@ class FileOps(private val scope: AccessScope) {
                 Files.move(source, target, StandardCopyOption.ATOMIC_MOVE)
             }
             return
-        } catch (_: Exception) {
+        } catch (e: AtomicMoveNotSupportedException) {
+            // The filesystem or mount cannot do an atomic rename; a copy is the correct fallback.
+            FmLog.debug(TAG, "Atomic move is not supported here, falling back to a copy: ${e.message}")
+        } catch (e: Exception) {
+            // Anything else (permissions, a busy target, a read-only mount) must not silently turn
+            // into a full recursive copy: that is both slow and hides the real cause.
+            FmLog.warn(TAG, "Moving $source to $target failed", e)
+            throw e
         }
 
         copyTree(source, target, checkCancel, onBytes = onBytes)

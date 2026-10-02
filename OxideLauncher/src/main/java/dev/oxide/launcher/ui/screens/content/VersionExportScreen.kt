@@ -315,8 +315,9 @@ private class ExportModpackViewModel(
             val count = FileSelectionData.refreshTreeSelect(_allFiles.value)
             //根据选中的文件数量来判断是否选择了文件
             _selectedFiles.update { count > 0 }
-        } catch (_: CancellationException) {
-
+        } catch (e: CancellationException) {
+            //结构化并发：取消必须继续向上传播，吞掉它会让挂起的调用永远无法结束
+            throw e
         }
     }
 

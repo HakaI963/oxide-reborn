@@ -24,9 +24,12 @@ import android.content.Intent
 import android.os.Bundle
 import dev.oxide.launcher.notification.NoticeProgress
 import dev.oxide.launcher.path.PathManager
+import dev.oxide.launcher.utils.logging.Logger
 import java.io.File
 
 const val PROCESS_SERVICE_PORT = 53151 //random
+
+private const val TAG = "JvmService"
 
 /**
  * 安装 JVM 进程的运行日志文件
@@ -103,8 +106,10 @@ fun stopAllNonMainProcesses(context: Context) {
         .forEach {
             try {
                 android.os.Process.killProcess(it.pid)
-            } catch (_: Exception) {
-                //忽略
+            } catch (e: Exception) {
+                // A surviving :jvm / :game process makes the install wait forever, so it has to be
+                // visible instead of silently ignored.
+                Logger.warning(TAG, "Failed to kill the exclusive process ${it.processName} (pid ${it.pid})", e)
             }
         }
 }
