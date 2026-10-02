@@ -61,10 +61,12 @@ class VersionCompareTest {
 
     @Test
     fun testCompareNewSnapshots() {
-        // A snapshot of a version always precedes the release itself.
-        assertTrue("25.4-snapshot-2".isLowerVer("25.4"))
-        assertTrue("25.4-snapshot-2".isBiggerVer("25.4-snapshot-1"))
-        assertTrue("26.2-snapshot-1".isLowerVer("26.2"))
+        // ReleaseType orders SNAPSHOT before GA, so a snapshot always precedes its release.
+        assertTrue("26.2-snapshot-2".isLowerVer("26.2"))
+        assertTrue("26.2-snapshot-2".isBiggerVer("26.2-snapshot-1"))
+        assertTrue("26.3-snapshot-1".isLowerVer("26.3"))
+        assertTrue("26.2-rc-1".isLowerVer("26.2"))
+        assertTrue("26.2-pre-1".isLowerVer("26.2-rc-1"))
     }
 
     @Test
@@ -79,9 +81,13 @@ class VersionCompareTest {
         // Both sides are releases here, so this only needs the numeric prefix comparison.
         assertTrue("26.1".isBiggerVer("1.21.11"))
         assertTrue("26.2-snapshot-1".isBiggerVer("1.21.11"))
-        assertTrue("25.4-snapshot-1".isBiggerVer("23w40a"))
-        // This one needs the shipped history: 20w14a shipped before 1.21.11.
+        // A year-based major always follows every legacy snapshot.
+        assertTrue("26.2-snapshot-1".isBiggerVer("23w40a"))
+        assertTrue("26.1".isBiggerVer("20w14a"))
+        // These need the shipped history, which records that 20w14a arrived straight after 1.15.2.
         assertTrue("1.21.11".isBiggerVer("20w14a"))
+        assertTrue("1.15.2".isLowerVer("20w14a"))
+        assertTrue("1.16".isBiggerVer("20w14a"))
     }
 
     @Test
@@ -89,6 +95,14 @@ class VersionCompareTest {
         assertTrue("1.21.5".isBiggerOrEqualVer("1.21.5"))
         assertTrue("1.21.5".isLowerOrEqualVer("1.21.5"))
         assertTrue("20w30a".isLowerOrEqualVer("1.21.5"))
+    }
+
+    @Test
+    fun yearBasedMajorStartsAt26() {
+        // The year-based scheme starts at 26, so "25.4" is not a release at all and is handled as
+        // an unrecognised version string. It must therefore never win against a real version.
+        assertTrue("26.1".isLowerVer("25.4"))
+        assertTrue("1.21.11".isLowerVer("25.4"))
     }
 
     @Test
