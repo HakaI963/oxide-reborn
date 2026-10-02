@@ -160,6 +160,24 @@ android {
             isReturnDefaultValues = true
         }
     }
+
+    /*
+     * Android Lint runs on every CI build and aborts the build on a *new* finding. The project
+     * inherited a large number of existing findings from the upstream baseline (mostly
+     * MissingPermission in the vendored SDL/HID code and unused-resource noise in the vendored
+     * HMCL/LWJGL trees); those are recorded in lint-baseline.xml instead of being fixed blind,
+     * and they are still published as a CI artifact so they stay visible.
+     */
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+        warningsAsErrors = false
+        checkDependencies = false
+        checkTestSources = true
+        sarifReport = true
+        htmlReport = true
+        xmlReport = true
+    }
 }
 
 androidComponents {
