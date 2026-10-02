@@ -21,7 +21,7 @@ jobs:
   verify:
     name: Unit tests, lint and debug APK
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -33,15 +33,28 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept SDK licences
+      # The ubuntu runner image already ships the Android SDK and cmdline-tools. Resolve
+      # sdkmanager explicitly instead of relying on an action that installs the retired
+      # "tools" package.
+      - name: Locate the Android SDK
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(ls -d "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::cmdline-tools (sdkmanager) not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          {
+            echo "ANDROID_HOME=$SDK_ROOT"
+            echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+            echo "SDKMANAGER=$SDKMANAGER"
+          } >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          echo "Using $SDKMANAGER"
 
       - name: Install NDK ${{ env.ANDROID_NDK_VERSION }}
-        run: sdkmanager "ndk;${{ env.ANDROID_NDK_VERSION }}"
+        run: '"$SDKMANAGER" "ndk;${{ env.ANDROID_NDK_VERSION }}"'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5

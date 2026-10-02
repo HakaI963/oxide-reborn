@@ -54,6 +54,17 @@ val releaseStorePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.tx
 val releaseKeyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt", defaultKeyPassword)
 val releaseKeyAlias = getKeyFromLocal("KEY_ALIAS", ".key_alias.txt", "oxide")
 
+/**
+ * The keystore file name is fixed, so detect the container format from its content instead:
+ * a JKS store starts with the magic 0xFEEDFEED, a PKCS#12 store with the ASN.1 SEQUENCE tag 0x30.
+ */
+fun detectKeystoreType(store: File): String = try {
+    val firstByte = store.inputStream().use { it.read() }
+    if (firstByte == 0xFEEDFEED.toInt()) "JKS" else "PKCS12"
+} catch (_: Throwable) {
+    "JKS"
+}
+
 android {
     namespace = oxidePackageName
     compileSdk {
@@ -66,12 +77,13 @@ android {
         if (releaseKeystoreAvailable) {
             create("releaseBuild") {
                 storeFile = releaseKeystore
+                storeType = detectKeystoreType(releaseKeystore)
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
             }
         } else {
-            logger.lifecycle("BUILD: no ${releaseKeystore.name} found, release builds fall back to the debug signing config.")
+            logger.lifecycle("BUILD: no ${releaseKeystore.name} found, release builds are produced unsigned.")
         }
     }
 

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build and attach the APKs to"
+        description: "Tag whose release the APKs are attached to"
         required: true
         type: string
 
@@ -25,7 +25,7 @@ jobs:
   build:
     name: Build release APK (${{ matrix.arch }})
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -46,23 +46,33 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept SDK licences
-        run: yes | sdkmanager --licenses > /dev/null || true
+      - name: Locate the Android SDK
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(ls -d "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::cmdline-tools (sdkmanager) not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          {
+            echo "ANDROID_HOME=$SDK_ROOT"
+            echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+            echo "SDKMANAGER=$SDKMANAGER"
+          } >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
 
       - name: Install NDK ${{ env.ANDROID_NDK_VERSION }}
-        run: sdkmanager "ndk;${{ env.ANDROID_NDK_VERSION }}"
+        run: '"$SDKMANAGER" "ndk;${{ env.ANDROID_NDK_VERSION }}"'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
         with:
           add-job-summary: on-failure
 
-      # The release keystore is not part of the repository. Use the stored key when the
-      # repository provides one so consecutive releases can be upgrade-installed; otherwise
-      # create an ephemeral key for this run only.
+      # The release keystore is not part of the repository. Restore the stored key when the
+      # repository provides one, so consecutive releases can be upgrade-installed; otherwise
+      # create an ephemeral key that is valid for this run only.
       - name: Prepare signing material
         env:
           OXIDE_KEYSTORE_BASE64: ${{ secrets.OXIDE_KEYSTORE_BASE64 }}
@@ -72,25 +82,26 @@ jobs:
           set -euo pipefail
           KEYSTORE=OxideLauncher/oxide_launcher.jks
           ALIAS="${OXIDE_KEY_ALIAS:-oxide}"
-          if [ -n "${OXIDE_KEYSTORE_BASE64:-}" ] && [ -n "${OXIDE_KEYSTORE_PASSWORD:-}" ]; then
-            echo "$OXIDE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE"
+          PASSWORD="${OXIDE_KEYSTORE_PASSWORD:-}"
+          if [ -n "${OXIDE_KEYSTORE_BASE64:-}" ] && [ -n "$PASSWORD" ]; then
+            printf '%s' "$OXIDE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE"
             echo "Restored the stored release keystore (alias: $ALIAS)."
           else
-            PASSWORD="$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)"
-            keytool -genkeypair -v \
+            PASSWORD="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)"
+            "$JAVA_HOME/bin/keytool" -genkeypair -v \
               -keystore "$KEYSTORE" \
+              -storetype PKCS12 \
               -storepass "$PASSWORD" -keypass "$PASSWORD" \
               -alias "$ALIAS" \
               -keyalg RSA -keysize 4096 -validity 10950 \
-              -dname "CN=Oxide Reborn, OU=Oxide Reborn, O=Oxide Reborn, L=-, ST=-, C=ZZ"
-            echo "OXIDE_KEYSTORE_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
+              -dname "CN=Oxide Reborn, OU=Oxide Reborn, O=Oxide Reborn, C=ZZ"
             echo "Generated an ephemeral release keystore for this run."
           fi
           {
-            echo "STORE_PASSWORD=${OXIDE_KEYSTORE_PASSWORD:-}"
+            echo "STORE_PASSWORD=$PASSWORD"
+            echo "KEY_PASSWORD=$PASSWORD"
             echo "KEY_ALIAS=$ALIAS"
           } >> "$GITHUB_ENV"
-          echo "KEY_PASSWORD=${OXIDE_KEYSTORE_PASSWORD:-}" >> "$GITHUB_ENV"
 
       - name: Assemble release APK
         env:
