@@ -83,6 +83,13 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleDebug
 
+      # Exercises R8 and the ProGuard keep rules (which name the renamed JNI classes) on every
+      # push, so a release-only breakage cannot reach a published release.
+      - name: Assemble release APK (R8 check, arm64)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleRelease -Darch=arm64
+
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v7
