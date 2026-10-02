@@ -1,107 +1,119 @@
-# Zalith Launcher 2
-![Downloads](https://img.shields.io/github/downloads/ZalithLauncher/ZalithLauncher2/total)
-[![Sponsor](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors)](https://afdian.com/a/MovTery)
+# Oxide Reborn
 
-[English](README_EN_US.md) | [繁體中文](README_ZH_TW.md)
+![Build](https://github.com/HakaI963/oxide-reborn/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
+![Platform](https://img.shields.io/badge/platform-Android%2026%2B-green.svg)
 
+**Oxide Reborn** is a launcher for **Minecraft: Java Edition** on **Android**. It prepares and runs
+real Minecraft installations on Android devices: version resolution, library and asset
+verification, Java runtime management, native renderer bridging, on-screen and physical input
+handling, and a full instance/multiplayer tooling set.
 
 > [!IMPORTANT]
-> 该项目与 [ZalithLauncher](https://github.com/ZalithLauncher/ZalithLauncher) 属于两个完全不同的项目  
+> **Oxide Reborn is an unofficial, independently maintained build of
+> [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2).** It is not affiliated
+> with, endorsed by, or supported by the original project. The entire source, including every
+> original copyright notice, is preserved under GPL-3.0 — see [`LICENSE`](LICENSE),
+> [`THIRD_PARTY.md`](THIRD_PARTY.md) and [`COMPATIBILITY.md`](COMPATIBILITY.md).
 
-**Zalith Launcher 2** 是一个全新设计、面向 **Android 设备** 的 [Minecraft: Java Edition](https://www.minecraft.net/) 启动器。项目使用 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher/tree/v3_openjdk/app_pojavlauncher/src/main/jni) 作为启动核心，采用 **Jetpack Compose** 与 **Material Design 3** 构建现代化 UI 体验。  
-我们目前正在搭建自己的官方网站 [zalithlauncher.cn](https://zalithlauncher.cn)  
-此外，我们已注意到有第三方使用“Zalith Launcher”名称搭建了一个看似官方的网站。请注意：**该网站并非我们创建**，其通过冒用名义并植入广告牟利。我们对此类行为**不参与、不认可、不信任**。  
-请务必提高警惕，**谨防个人隐私信息泄露**！
+## What it does
 
+* **Versions** — vanilla, Fabric / Quilt / Legacy Fabric, Forge / NeoForge / Cleanroom, OptiFine,
+  and modpacks from CurseForge, Modrinth, MultiMC and MCBBS.
+* **Instances** — per-version RAM, JVM arguments, game arguments, renderer, graphics API, Vulkan
+  driver, Java runtime, isolation, custom info, and complete control layouts.
+* **Runtimes** — bundled OpenJDK 8 / 17 / 21 / 25 packs per ABI, plus external runtime import and
+  automatic version picking.
+* **Renderers** — Krypton Wrapper (NG-GL4ES), GL4ES, Kopper Zink, VirGL, Freedreno (Adreno),
+  Panfrost (Mali) and downloadable renderer / driver / native plugins.
+* **Input** — touch controls with an in-app editor, physical keyboard and mouse, gamepads
+  (including SDL direct input), joysticks, gyroscope, and the in-game hotbar.
+* **Accounts** — offline accounts, Microsoft accounts, and third-party Yggdrasil servers, with
+  skin and cape management.
+* **Content** — mods, modpacks, resource packs, shaders, worlds and saves, with browsing,
+  search, favourites, downloads and progress reporting.
+* **Files** — a separate file manager process with archive extraction, compression, a trash
+  system, a text/hex editor and bulk operations.
+* **Extras** — per-version log viewer, crash log sharing, festival effects, themes, and a
+  Minecraft server list with in-app status.
 
-## 🌐 语言与翻译支持
+## Building
 
-我们正在使用 Weblate 平台翻译 Zalith Launcher 2，欢迎您前往我们的 [Weblate 项目](https://hosted.weblate.org/projects/zalithlauncher2) 参与翻译！  
-感谢每一位语言贡献者的支持，让 Zalith Launcher 2 更加多语、更加全球化！
+GitHub Actions is the authoritative build environment. Local builds are supported but optional.
 
-
-
-
-## 📦 构建方式（开发者）
-
-> 以下内容适用于希望参与开发或自行构建应用的用户。
-
-### 环境要求
-
-* Android Studio Bumblebee 以上
-* Android SDK：
-    * **最低 API**：26
-    * **目标 API**：35
-* JDK 11
-
-### 构建步骤
+| Requirement | Version |
+|---|---|
+| JDK | 21 |
+| Gradle | 9.5.0 (wrapper) |
+| Android Gradle Plugin | 9.3.0 |
+| Kotlin | 2.4.20 |
+| compileSdk | Android 37 (minor API level 2) |
+| minSdk / targetSdk | 26 / 34 |
+| NDK | 25.2.9519653 (ndk-build, `src/main/jni/Android.mk`) |
 
 ```bash
-git clone git@github.com:ZalithLauncher/ZalithLauncher2.git
-# 使用 Android Studio 打开项目并进行构建
+git clone https://github.com/HakaI963/oxide-reborn.git
+cd oxide-reborn
+
+# unit tests + lint + debug APK
+./gradlew testDebugUnitTest lintDebug assembleDebug
+
+# release APK for a single ABI (all | arm | arm64 | x86 | x86_64)
+./gradlew assembleRelease -Darch=arm64
 ```
 
+Release signing material is **not** committed. CI materialises `OxideLauncher/oxide_launcher.jks`
+before Gradle configures; a local release build without a keystore produces an unsigned APK.
+Locally you may instead put `STORE_PASSWORD`, `KEY_PASSWORD` and `KEY_ALIAS` in the environment, or
+write them into git-ignored `.store_password.txt`, `.key_password.txt` and `.key_alias.txt` files.
 
+Branding lives in [`OxideLauncher/gradle.properties`](OxideLauncher/gradle.properties):
+`launcher_app_name` (the Android label), `launcher_name` (internal identifier), `launcher_short_name`
+(user agent and clipboard labels) and `url_home`.
 
+## Continuous integration
 
-## 📜 License
+| Workflow | Trigger | What it does |
+|---|---|---|
+| [`ci.yml`](.github/workflows/ci.yml) | push to `main`, pull request, manual | installs the Android SDK and NDK, runs unit tests, Android Lint, and assembles a debug APK |
+| [`release.yml`](.github/workflows/release.yml) | published release | builds signed release APKs for `all`, `arm`, `arm64`, `x86`, `x86_64` and attaches them to the release |
 
-本项目代码遵循 **[GPL-3.0 license](LICENSE)** 开源协议。
+Optional repository secrets: `OXIDE_KEYSTORE_BASE64`, `OXIDE_KEYSTORE_PASSWORD`,
+`OXIDE_KEY_ALIAS`, `OAUTH_CLIENT_ID`, `CURSEFORGE_API_KEY`. Without a keystore secret, CI creates an
+ephemeral one for that run, which is enough to produce installable APKs but cannot upgrade-install
+over a previously released build.
 
-### 附加条款 (依据 GPLv3 开源协议第七条)  
+## Self-update
 
-1. 当你分发该程序的修改版本时，你必须以合理方式修改该程序的名称或版本号，以示其与原始版本不同。(依据 [GPLv3, 7(c)](https://github.com/ZalithLauncher/ZalithLauncher2/blob/969827b/LICENSE#L372-L374))
-   - 修改版本 **不得在名称中包含原程序名称 “ZalithLauncher” 或其缩写 “ZL”，也不得使用与官方名称相近、可能导致混淆的名称**。
-   - 所有修改版本 **必须在程序启动页面或主界面中以明显方式标注其为“非官方修改版”**。
-   - 该程序的应用名称可在 [gradle.properties](./ZalithLauncher/gradle.properties) 中修改。
+The launcher checks this repository for a newer release once per hour at most and once every five
+seconds at most when you ask for it manually. It never installs anything by itself; it offers the
+per-ABI APK for download. The release metadata is the `update/latest_version_md.json` file in this
+repository and uses the same schema as upstream.
 
-2. 你不得移除该程序所显示的版权声明。(依据 [GPLv3, 7(b)](https://github.com/ZalithLauncher/ZalithLauncher2/blob/969827b/LICENSE#L368-L370))
+## License and provenance
 
-## 引用开源项目
+Oxide Reborn is licensed under the **GNU General Public License v3.0**. Because it is a modified
+version, GPLv3 §7 applies:
 
-本软件使用以下开源库:
+1. The program has been renamed and re-versioned so it cannot be confused with the original. The
+   splash screen and the About screen both state that this is an unofficial modified build.
+2. The copyright notices shown by the program have not been removed — every upstream source file
+   still carries its original header.
 
-| Library                               | Copyright                                                                                                     | License              | Official Link                                                                     |
-|---------------------------------------|---------------------------------------------------------------------------------------------------------------|----------------------|-----------------------------------------------------------------------------------|
-| androidx-appcompat                    | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/jetpack/androidx/releases/appcompat)         |
-| androidx-constraintlayout-compose     | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/develop/ui/compose/layouts/constraintlayout) |
-| androidx-webkit                       | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/jetpack/androidx/releases/webkit)            |
-| ANGLE                                 | Copyright 2018 The ANGLE Project Authors                                                                      | BSD 3-Clause License | [链接↗](http://angleproject.org/)                                                  |
-| Apache Commons Codec                  | -                                                                                                             | Apache 2.0           | [链接↗](https://commons.apache.org/proper/commons-codec)                           |
-| Apache Commons Compress               | -                                                                                                             | Apache 2.0           | [链接↗](https://commons.apache.org/proper/commons-compress)                        |
-| Apache Commons IO                     | -                                                                                                             | Apache 2.0           | [链接↗](https://commons.apache.org/proper/commons-io)                              |
-| ByteHook                              | Copyright © 2020-2024 ByteDance, Inc.                                                                         | MIT License          | [链接↗](https://github.com/bytedance/bhook)                                        |
-| BuildKeys                             | Copyright © 2026 MovTery                                                                                      | Aoache 2.0           | [链接↗](https://github.com/MovTery/BuildKeys)                                      |
-| Coil Compose                          | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |
-| Coil Gifs                             | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |
-| Coil SVG                              | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |
-| Fishnet                               | Copyright © 2025 Kyant                                                                                        | Apache 2.0           | [链接↗](https://github.com/Kyant0/Fishnet)                                         |
-| gl4es_extra_extra                     | Copyright © 2016-2018 Sebastien Chevalier; Copyright (c) 2013-2016 Ryan Hileman                               | MIT License          | [链接↗](https://github.com/PojavLauncherTeam/gl4es_extra_extra)                    |
-| Gson                                  | Copyright © 2008 Google Inc.                                                                                  | Apache 2.0           | [链接↗](https://github.com/google/gson)                                            |
-| kotlinx.coroutines                    | Copyright © 2000-2020 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://github.com/Kotlin/kotlinx.coroutines)                              |
-| ktor-client-content-negotiation       | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| ktor-client-core                      | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| ktor-client-okhttp                    | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| ktor-http                             | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| ktor-serialization-kotlinx-json       | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| LWJGL - Lightweight Java Game Library | Copyright © 2012-present Lightweight Java Game Library All rights reserved.                                   | BSD 3-Clause License | [链接↗](https://github.com/LWJGL/lwjgl3)                                           |
-| material-color-utilities              | Copyright 2021 Google LLC                                                                                     | Apache 2.0           | [链接↗](https://github.com/material-foundation/material-color-utilities)           |
-| Maven Artifact                        | Copyright © The Apache Software Foundation                                                                    | Apache 2.0           | [链接↗](https://github.com/apache/maven/tree/maven-3.9.9/maven-artifact)           |
-| Media3                                | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/jetpack/androidx/releases/media3)            |
-| Mesa                                  | Copyright © The Mesa Authors                                                                                  | MIT License          | [链接↗](https://mesa3d.org/)                                                       |
-| MMKV                                  | Copyright © 2018 THL A29 Limited, a Tencent company.                                                          | BSD 3-Clause License | [链接↗](https://github.com/Tencent/MMKV)                                           |
-| Navigation 3                          | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/jetpack/androidx/releases/navigation3)       |
-| NG-GL4ES                              | Copyright © 2016-2018 Sebastien Chevalier; Copyright © 2013-2016 Ryan Hileman; Copyright (c) 2025-2026 BZLZHH | MIT License          | [链接↗](https://github.com/BZLZHH/NG-GL4ES)                                        |
-| OkHttp                                | Copyright © 2019 Square, Inc.                                                                                 | Apache 2.0           | [链接↗](https://github.com/square/okhttp)                                          |
-| Okio                                  | Copyright © 2013 Square, Inc.                                                                                 | Apache 2.0           | [链接↗](https://square.github.io/okio/)                                            |
-| OpenNBT                               | Copyright © 2013-2021 Steveice10.                                                                             | MIT License          | [链接↗](https://github.com/GeyserMC/OpenNBT)                                       |
-| Process Phoenix                       | Copyright © 2015 Jake Wharton                                                                                 | Apache 2.0           | [链接↗](https://github.com/JakeWharton/ProcessPhoenix)                             |
-| proxy-client-android                  | -                                                                                                             | LGPL-3.0 License     | [链接↗](https://github.com/TouchController/TouchController)                        |
-| Reorderable                           | Copyright © 2023 Calvin Liang                                                                                 | Apache 2.0           | [链接↗](https://github.com/Calvin-LL/Reorderable)                                  |
-| sdl2-compat                           | Copyright (C) 2026 Sam Lantinga <slouken@libsdl.org>                                                          | Zlib License         | [链接↗](https://github.com/libsdl-org/sdl2-compat)                                 |
-| SDL3                                  | Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>                                                     | Zlib License         | [链接↗](https://github.com/libsdl-org/SDL)                                         |
-| skinview3d                            | Copyright © 2014-2018 Kent Rasmussen; Copyright © 2017-2022 Haowei Wen, Sean Boult and contributors           | MIT License          | [链接↗](https://github.com/bs-community/skinview3d)                                |
-| sora-editor                           | Copyright (C) 2020-2026  Rosemoe                                                                              | LGPL-2.1 License     | [链接↗](https://github.com/Rosemoe/sora-editor)                                    |
-| StringFog                             | Copyright © 2016-2023, Megatron King                                                                          | Apache 2.0           | [链接↗](https://github.com/MegatronKing/StringFog)                                 |
-| tm4e (TextMate for Eclipse)           | Copyright © Eclipse Foundation                                                                                | EPL-2.0 License      | [链接↗](https://github.com/eclipse-tm4e/tm4e)                                      |
-| XZ for Java                           | Copyright © The XZ for Java authors and contributors                                                          | 0BSD License         | [链接↗](https://tukaani.org/xz/java.html)                                          |
+The full upstream attribution, the third-party component inventory and the list of modifications
+are in [`THIRD_PARTY.md`](THIRD_PARTY.md). The identifiers that intentionally keep upstream naming
+because they are native ABI, external API or third-party contracts are listed, with reasons, in
+[`COMPATIBILITY.md`](COMPATIBILITY.md).
+
+## Credits
+
+* Original project: [ZalithLauncher/ZalithLauncher2](https://github.com/ZalithLauncher/ZalithLauncher2)
+  and [MovTery](https://github.com/MovTery) — copyright (C) 2025 MovTery and contributors.
+* Launch backend: [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher).
+* [Fold Craft Launcher](https://github.com/FCL-Team/FoldCraftLauncher),
+  [HMCL](https://github.com/HuangJunJie2017/HMCL),
+  [Plain Craft Launcher 2](https://github.com/Meloong-Git/PCL),
+  [Terracotta](https://github.com/burningtnt/Terracotta).
+* [LWJGL](https://www.lwjgl.org/), [SDL](https://www.libsdl.org/),
+  [MCMod](https://www.mcmod.cn/), and the many libraries listed in
+  [`THIRD_PARTY.md`](THIRD_PARTY.md).

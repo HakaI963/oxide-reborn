@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.movtery.cardgrid"
+    namespace = "dev.oxide.cardgrid"
     compileSdk = 37
 
     defaultConfig {

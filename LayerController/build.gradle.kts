@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.movtery.layer_controller"
+    namespace = "dev.oxide.layercontroller"
     compileSdk = 37
 
     defaultConfig {

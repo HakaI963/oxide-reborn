@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.movtery.guide"
+    namespace = "dev.oxide.guide"
     compileSdk = 37
 
     defaultConfig {

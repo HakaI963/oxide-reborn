@@ -1,0 +1,17 @@
+{
+  "code": 100000,
+  "version": "1.0.0",
+  "created_at": "2026-10-02",
+  "cloud_drives": [],
+  "files": [],
+  "default_body": {
+    "language": "en",
+    "markdown": "First Oxide Reborn release.\n\nOxide Reborn is an unofficial, independently maintained build of Zalith Launcher 2 (GPL-3.0).\n\nHighlights:\n\n- Rebranded product identity: **Oxide Reborn** (`dev.oxide.launcher`).\n- Rebuilt GitHub Actions pipeline: unit tests, Android Lint, debug APK and per-ABI release APKs.\n- All Kotlin/Java package roots, JNI symbols and ProGuard keep rules migrated in lockstep.\n- Renderer plugin ecosystem compatibility preserved (both `oxideRendererPlugin` and the legacy `zalithRendererPlugin` keys).\n- Update channel now served from this repository, with a CDN fallback.\n\nKnown limitations:\n\n- See [COMPATIBILITY.md](https://github.com/HakaI963/oxide-reborn/blob/main/COMPATIBILITY.md) for identifiers that intentionally keep upstream naming.\n- This build has been verified by compilation, unit tests and packaging only. It has not been validated on physical hardware by the project maintainers."
+  },
+  "bodies": [
+    {
+      "language": "en",
+      "markdown": "First Oxide Reborn release. See the default changelog."
+    }
+  ]
+}

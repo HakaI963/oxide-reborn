@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.movtery.colorpicker"
+    namespace = "dev.oxide.colorpicker"
     compileSdk = 37
 
     defaultConfig {

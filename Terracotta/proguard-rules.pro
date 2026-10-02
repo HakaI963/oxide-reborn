@@ -1,17 +1,17 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
--keep class net.burningtnt.terracotta.TerracottaAndroidAPI {
+-keep class dev.oxide.terracotta.TerracottaAndroidAPI {
     native <methods>;
     private static int onVpnServiceStateChanged(...);
 }
 
--keep class net.burningtnt.terracotta.TerracottaAndroidAPI$Metadata {
+-keep class dev.oxide.terracotta.TerracottaAndroidAPI$Metadata {
     *;
 }
--keep interface net.burningtnt.terracotta.TerracottaAndroidAPI$VpnServiceCallback {
+-keep interface dev.oxide.terracotta.TerracottaAndroidAPI$VpnServiceCallback {
     *;
 }
--keep interface net.burningtnt.terracotta.TerracottaAndroidAPI$VpnServiceRequest {
+-keep interface dev.oxide.terracotta.TerracottaAndroidAPI$VpnServiceRequest {
     *;
 }

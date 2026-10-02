@@ -5,14 +5,21 @@
 /local.properties
 .DS_Store
 /build
+**/build/
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+
+# Oxide Reborn signing material — never committed, materialised by CI or generated locally
+*.jks
+*.keystore
 .oauth_client_id.txt
 .store_password.txt
 .key_password.txt
+.key_alias.txt
 .curseforge_api.txt
+
 LWJGL/build/
 LWJGL/*/build/
 

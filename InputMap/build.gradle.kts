@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.movtery.inputmap"
+    namespace = "dev.oxide.inputmap"
     compileSdk {
         version = release(37)
     }
