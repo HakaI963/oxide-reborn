@@ -911,9 +911,10 @@ private fun OxideInstanceFolderSection(
     onOpenFolder: (File) -> Unit,
     onManage: () -> Unit,
 ) {
-    val context = LocalContext.current
+    // stringResource rather than context.getString: the latter is not configuration-aware
+    // and would keep serving the old value after a locale or density change.
     val countText = listing?.let { probed ->
-        context.getString(R.string.oxide_ins_content_count, probed.total)
+        stringResource(R.string.oxide_ins_content_count, probed.total)
     }
     val extra = (listing?.total ?: 0) - (listing?.names?.size ?: 0)
 
@@ -968,7 +969,7 @@ private fun OxideInstanceFolderSection(
                 listing.names.forEach { name -> OxideInstanceFileRow(name) }
                 if (extra > 0) {
                     Text(
-                        text = context.getString(R.string.oxide_ins_content_more, extra),
+                        text = stringResource(R.string.oxide_ins_content_more, extra),
                         color = Oxide.FgFaint,
                         fontSize = Oxide.Type.MicroLabel.fontSize,
                         lineHeight = Oxide.Type.MicroLabel.lineHeight,
