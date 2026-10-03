@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -145,36 +146,71 @@ class InstanceRowHeightTest {
 /**
  * 网格列数
  *
- * [OxideMetrics.gridColumns] 是既有实现，这里只钉住实例页真正依赖的性质：
- * 列数必须落在 metrics 自己声明的区间内，并且在任何宽度下都不小于一列，
- * 因此小屏不会被压成零列、大屏也不会排出比设计上限更多的列。
+ * 每一条断言都从 [OxideMetrics.gridColumns] 与**实测内容宽度**出发：内容宽度就是
+ * 实例页喂给它的那个值（整屏 − 侧栏 − 左右留白），因此这里没有任何一个列数是写死的，
+ * 也没有一个探针宽度是凭空填的——探针的步长就是 `cardMinWidth + cardGap`，
+ * 而那正是 `gridColumns` 拿来比较的量。
+ *
+ * 钉住的性质：小屏不会被排成零列；大屏也不会排得比参考稿的
+ * `.instancesGrid`（>900px 三列、≤900px 两列）更多；卡片不会被压得比
+ * [OxideMetrics.cardMinWidth] 还窄；窗口拉宽时列数只增不减；
+ * 界面放大时内容区本身变窄，列数因此只减不增。
  */
 class InstanceGridColumnsTest {
 
-    /** 从窄到宽，覆盖分屏窄条到 4K，横向的每个整数档位都取样 */
-    private val tiers = listOf(
+    /** 从分屏窄条到 4K，逐档取样 */
+    private val widths = listOf(
         320, 480, 560, 640, 720, 800, 900, 960, 1024, 1120,
         1180, 1280, 1366, 1600, 1920, 2560, 3440,
-    ).map { widthDp -> oxideMetricsFor(widthDp, heightDp = 480) }
+    )
 
-    private fun columnsAt(metrics: OxideMetrics, contentWidthDp: Float): Int =
-        metrics.gridColumns(contentWidthDp.dp)
+    private fun metricsAt(
+        widthDp: Int,
+        guiScalePercent: Int = OxideGuiScaleDefaultPercent,
+    ): OxideMetrics = oxideMetricsFor(widthDp, heightDp = 480, guiScalePercent = guiScalePercent)
 
-    /** 这么窄的话连一张最小卡片都放不下，应该只剩一列 */
-    private val tooNarrow = listOf(0f, 1f, 40f, 120f, 200f)
+    /**
+     * 实例网格真正拿到手的宽度
+     *
+     * 侧栏与左右留白都要先扣掉：[OxideMetrics.gridColumns] 的约定就是传进来的
+     * 宽度已经不含留白，漏扣就会凭空多出一列。
+     */
+    private fun instanceContentWidth(metrics: OxideMetrics, widthDp: Int): Dp =
+        widthDp.dp - metrics.sidebarWidth - metrics.pagePaddingH * 2
 
-    private fun OxideMetrics.minWidthFor(columns: Int): Float =
-        cardMinWidth.value * columns + cardGap.value * (columns - 1)
+    /** 这一档在自己的屏幕上真正会排出的列数 */
+    private fun columnsOnItsOwnScreen(
+        widthDp: Int,
+        guiScalePercent: Int = OxideGuiScaleDefaultPercent,
+    ): Int {
+        val metrics = metricsAt(widthDp, guiScalePercent)
+        return metrics.gridColumns(instanceContentWidth(metrics, widthDp))
+    }
+
+    /**
+     * 探针宽度：从 0 一直排到装满三列所需的宽度，全部由 metrics 自己推出来
+     *
+     * 前几档比一张最小卡片还窄（分屏窄条的情形），后面几档则一定排得出三列，
+     * 因此 0 → 1 → 2 → 3 这几处变化都被跨过去了。
+     */
+    private fun OxideMetrics.probeWidths(): List<Dp> =
+        (0..PROBE_STEPS).map { step -> (cardMinWidth + cardGap) * step * 3 / PROBE_STEPS }
+
+    /** n 列至少要这么宽才排得下 n 张最小卡片 */
+    private fun OxideMetrics.minWidthFor(columns: Int): Dp =
+        cardMinWidth * columns + cardGap * (columns - 1)
 
     @Test
     fun columnsNeverDropBelowOne() {
         // 小屏横屏、分屏切出来的窄条：内容区可能比一张卡片还窄，
         // 这时必须退成一列，而不是零列把网格弄空
-        tiers.forEach { metrics ->
-            tooNarrow.forEach { width ->
+        widths.forEach { widthDp ->
+            val metrics = metricsAt(widthDp)
+            metrics.probeWidths().forEach { probe ->
                 assertTrue(
-                    "${metrics.widthClass} rendered ${columnsAt(metrics, width)} columns at ${width}dp",
-                    columnsAt(metrics, width) >= metrics.minCardColumns,
+                    "${metrics.widthClass} rendered ${metrics.gridColumns(probe)} columns " +
+                        "at ${probe.value}dp",
+                    metrics.gridColumns(probe) >= metrics.minCardColumns,
                 )
             }
         }
@@ -182,11 +218,13 @@ class InstanceGridColumnsTest {
 
     @Test
     fun columnsNeverExceedTheDeclaredCeiling() {
-        tiers.forEach { metrics ->
-            listOf(320f, 600f, 900f, 1200f, 2000f, 4000f).forEach { width ->
+        widths.forEach { widthDp ->
+            val metrics = metricsAt(widthDp)
+            // 宽到装不下为止时也必须停在声明的上限，而不是无限往下排
+            (metrics.probeWidths() + listOf(metrics.cardMinWidth * 100)).forEach { probe ->
                 assertTrue(
-                    "${metrics.widthClass} exceeded ${metrics.maxCardColumns} columns at ${width}dp",
-                    columnsAt(metrics, width) <= metrics.maxCardColumns,
+                    "${metrics.widthClass} exceeded ${metrics.maxCardColumns} columns at ${probe.value}dp",
+                    metrics.gridColumns(probe) <= metrics.maxCardColumns,
                 )
             }
         }
@@ -196,15 +234,16 @@ class InstanceGridColumnsTest {
     fun columnsNeverOverSubscribeTheAvailableWidth() {
         // 卡片宽度不得小于 metrics 自己声明的最小值，否则卡片内容会被压掉。
         // 唯一可以例外的情况是"再少一列连最小卡片也放不下"，也就是只能挤成一列。
-        tiers.forEach { metrics ->
-            listOf(260f, 500f, 700f, 950f, 1300f, 1900f).forEach { width ->
-                val columns = columnsAt(metrics, width)
-                if (metrics.minWidthFor(columns) <= width) return@forEach
+        widths.forEach { widthDp ->
+            val metrics = metricsAt(widthDp)
+            metrics.probeWidths().forEach { probe ->
+                val columns = metrics.gridColumns(probe)
+                if (metrics.minWidthFor(columns) <= probe) return@forEach
 
                 val fewer = columns - 1
                 assertTrue(
-                    "${metrics.widthClass} over-subscribed ${width}dp with $columns columns",
-                    fewer < metrics.minCardColumns || metrics.minWidthFor(fewer) > width,
+                    "${metrics.widthClass} over-subscribed ${probe.value}dp with $columns columns",
+                    fewer < metrics.minCardColumns || metrics.minWidthFor(fewer) > probe,
                 )
             }
         }
@@ -213,12 +252,13 @@ class InstanceGridColumnsTest {
     @Test
     fun wideningNeverLosesAColumn() {
         // 窗口被拉宽时列数只能增加或不变，绝不能倒退
-        tiers.forEach { metrics ->
+        widths.forEach { widthDp ->
+            val metrics = metricsAt(widthDp)
             var previous = 0
-            listOf(0f, 200f, 400f, 700f, 1000f, 1400f, 2000f).forEach { width ->
-                val columns = columnsAt(metrics, width)
+            metrics.probeWidths().forEach { probe ->
+                val columns = metrics.gridColumns(probe)
                 assertTrue(
-                    "${metrics.widthClass} lost a column when widening to ${width}dp",
+                    "${metrics.widthClass} lost a column when widening to ${probe.value}dp",
                     columns >= previous,
                 )
                 previous = columns
@@ -227,28 +267,88 @@ class InstanceGridColumnsTest {
     }
 
     @Test
+    fun everyTierFitsAtLeastOneCardInItsOwnWidth() {
+        // 各自的宽度扣掉侧栏与左右留白之后，至少要放得下一列
+        widths.forEach { widthDp ->
+            val metrics = metricsAt(widthDp)
+            val content = instanceContentWidth(metrics, widthDp)
+            val columns = metrics.gridColumns(content)
+            assertTrue(
+                "$widthDp must render at least one card, got $columns (content=${content.value}dp)",
+                columns >= 1,
+            )
+        }
+    }
+
+    @Test
     fun aLargeTabletGetsMoreColumnsThanASmallPhone() {
-        // 同样按实测宽度算，大屏就该比小屏多一列，否则布局没有跟着窗口变
-        val phone = oxideMetricsFor(560, 480)
-        val tablet = oxideMetricsFor(1280, 800)
+        // 同样按各自的实测内容宽度算：大屏就该比小屏多一列，否则布局没有跟着窗口变。
+        // 560dp 那一档实测内容宽度 373dp，排得下一列；1280dp 那一档 1042dp，排得下三列。
+        assertEquals(1, columnsOnItsOwnScreen(560))
+        assertEquals(3, columnsOnItsOwnScreen(1280))
         assertTrue(
             "a tablet must fit more columns than a phone",
-            tablet.gridColumns(1180.dp) > phone.gridColumns(380.dp),
+            columnsOnItsOwnScreen(1280) > columnsOnItsOwnScreen(560),
         )
     }
 
     @Test
-    fun everyTierFitsAtLeastOneCardInItsOwnWidth() {
-        // 各自的宽度扣掉侧栏与页面留白后，至少要放得下一列
-        listOf(560, 900, 1120, 1280, 1920).forEach { widthDp ->
-            val metrics = oxideMetricsFor(widthDp, 480)
-            val content = (widthDp - metrics.sidebarWidth.value.toInt()) -
-                metrics.pagePaddingH.value.toInt()
-            val columns = metrics.gridColumns(content.dp)
-            assertTrue(
-                "$widthDp must render at least one card, got $columns",
-                columns >= 1,
+    fun theSharedCeilingIsThreeAboveTheCompactBand() {
+        // 参考稿 `.instancesGrid{grid-template-columns:repeat(3,minmax(0,1fr))}`，
+        // 且 ≤900px 那条媒体查询把它收成两列；因此共享上限在三档里是 3，只有紧凑档是 2。
+        widths.filter { it > OxideBreakpoints.CompactMax }.forEach { widthDp ->
+            val metrics = metricsAt(widthDp)
+            assertEquals("$widthDp 的共享上限必须是 3", 3, metrics.maxCardColumns)
+            assertEquals(
+                "宽到装不下为止时必须顶到共享上限 3",
+                3,
+                metrics.gridColumns(metrics.cardMinWidth * 100),
             )
         }
+    }
+
+    @Test
+    fun theCompactBandFollowsTheReferencesTwoColumns() {
+        widths.filter { it <= OxideBreakpoints.CompactMax }.forEach { widthDp ->
+            val metrics = metricsAt(widthDp)
+            assertEquals("$widthDp 的共享上限必须是 2", 2, metrics.maxCardColumns)
+            assertEquals(
+                "紧凑档最多两列",
+                2,
+                metrics.gridColumns(metrics.cardMinWidth * 100),
+            )
+        }
+    }
+
+    @Test
+    fun theDiscoverPagesOwnCeilingStaysOutOfTheSharedFunction() {
+        // 发现页的结果网格恒为参考稿的 `repeat(2,minmax(0,1fr))`，但那两列是发现页
+        // 自己夹的：同一个宽度喂给共享函数必须仍然给得出三列（实例网格要三列）。
+        val metrics = metricsAt(1920)
+        val wide = metrics.cardMinWidth * 6
+        assertEquals(3, metrics.gridColumns(wide))
+        assertEquals(2, discoverResultColumns(metrics, wide))
+    }
+
+    @Test
+    fun aBiggerGuiScaleNeverGainsAColumn() {
+        // 放大界面时卡片最小宽度、侧栏与留白一起乘系数，而整屏的 dp 数不变，
+        // 内容区因此变窄：同一块屏幕只可能落到更少的列数。
+        widths.forEach { widthDp ->
+            val columns = OxideGuiScaleSteps.map { scale -> columnsOnItsOwnScreen(widthDp, scale) }
+            assertTrue(
+                "界面放大后列数只减不增：$widthDp -> $columns",
+                columns.zipWithNext().all { (smaller, bigger) -> bigger <= smaller },
+            )
+        }
+        // 1120dp 这一档实测：100% 时内容区 914dp 排三列；150% 时侧栏与留白一起变大，
+        // 内容区只剩 811dp，于是掉到两列。
+        assertEquals(3, columnsOnItsOwnScreen(1120, OxideGuiScaleDefaultPercent))
+        assertEquals(2, columnsOnItsOwnScreen(1120, OxideGuiScaleMaxPercent))
+    }
+
+    private companion object {
+        /** 探针档数：步长是 0.3 张卡片，够跨过 0 → 1 → 2 → 3 每一处列数变化 */
+        const val PROBE_STEPS = 30
     }
 }

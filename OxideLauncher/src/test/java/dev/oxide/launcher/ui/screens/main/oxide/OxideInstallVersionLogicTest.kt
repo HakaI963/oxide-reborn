@@ -191,14 +191,11 @@ class OxideInstallVersionLogicTest {
     // ---- 版本名 -----------------------------------------------------------
 
     /**
-     * 列表里真实的 OptiFine 条目
+     * 列表里一条 OptiFine
      *
-     * [OptiFineVersion.displayName] 是解析之后的样子：`OptiFine_1.12.2_HD_U_C1`
-     * 去掉 `OptiFine ` 与 `HD U ` 之后就是 [OPTIFINE_DISPLAY]，
-     * 所以 [OptiFineVersion.realVersion]（`removePrefix(inherit).trim()`）正好是 `C1`。
+     * `displayName` 传解析之后的真实样子（见 [OPTIFINE_DISPLAY]），
+     * 所以 [OptiFineVersion.realVersion] 才等于我们期望的那一段版本号。
      */
-    private const val OPTIFINE_DISPLAY = "1.12.2 C1"
-
     private fun optifine(displayName: String, forgeRequirement: String?): OptiFineVersion =
         OptiFineVersion(
             displayName = displayName,
@@ -400,5 +397,15 @@ class OxideInstallVersionLogicTest {
     fun loadersAndInstallOpenUpOnceAVersionIsChosen() {
         assertTrue(oxideInstallStepReachable(OxideInstallStep.Loader, "1.20.1"))
         assertTrue(oxideInstallStepReachable(OxideInstallStep.Install, "1.20.1"))
+    }
+
+    private companion object {
+        /**
+         * OptiFine 列表里真实的显示名
+         *
+         * 解析时 `OptiFine_1.12.2_HD_U_C1` 已经去掉 `OptiFine ` 与 `HD U `，
+         * 所以 `displayName` 是 `1.12.2 C1`，`realVersion` 正好是 `C1`。
+         */
+        const val OPTIFINE_DISPLAY = "1.12.2 C1"
     }
 }
