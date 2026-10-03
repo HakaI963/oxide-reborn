@@ -9,13 +9,6 @@ real Minecraft installations on Android devices: version resolution, library and
 verification, Java runtime management, native renderer bridging, on-screen and physical input
 handling, and a full instance/multiplayer tooling set.
 
-> [!IMPORTANT]
-> **Oxide Launcher is an unofficial, independently maintained build of
-> [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2).** It is not affiliated
-> with, endorsed by, or supported by the original project. The entire source, including every
-> original copyright notice, is preserved under GPL-3.0 — see [`LICENSE`](LICENSE),
-> [`THIRD_PARTY.md`](THIRD_PARTY.md) and [`COMPATIBILITY.md`](COMPATIBILITY.md).
-
 ## What it does
 
 * **Versions** — vanilla, Fabric / Quilt / Legacy Fabric, Forge / NeoForge / Cleanroom, OptiFine,
@@ -92,23 +85,3 @@ The launcher checks this repository for a newer release once per hour at most an
 seconds at most when you ask for it manually. It never installs anything by itself; it offers the
 per-ABI APK for download. The release metadata is the `update/latest_version_md.json` file in this
 repository and uses the same schema as upstream.
-
-## License and provenance
-
-Oxide Launcher is licensed under the **GNU General Public License v3.0**. Because it is a modified
-version, GPLv3 §7 applies:
-
-1. The program has been renamed and re-versioned so it cannot be confused with the original. The
-   splash screen and the About screen both state that this is an unofficial modified build.
-2. The copyright notices shown by the program have not been removed — every upstream source file
-   still carries its original header.
-3. The account and authentication behaviour is adapted from
-   [Star1xr/ZalithLauncher2Plus](https://github.com/Star1xr/ZalithLauncher2Plus) (GPL-3.0,
-   Copyright © 2026 Star1xr). The About screen credits it, the adapted files carry a dual-upstream
-   header, and [`THIRD_PARTY.md`](THIRD_PARTY.md) lists every commit that was adapted together with
-   each deliberate deviation.
-
-The full upstream attribution, the third-party component inventory and the list of modifications
-are in [`THIRD_PARTY.md`](THIRD_PARTY.md). The identifiers that intentionally keep upstream naming
-because they are native ABI, external API or third-party contracts are listed, with reasons, in
-[`COMPATIBILITY.md`](COMPATIBILITY.md).
