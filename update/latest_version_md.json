@@ -1,48 +1,48 @@
 {
-  "code": 100000,
-  "version": "1.0.0",
-  "created_at": "2026-10-02",
+  "code": 100100,
+  "version": "1.1.0",
+  "created_at": "2026-10-03",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.0.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.0.0/OxideLauncher-1.0.0.apk",
+      "file_name": "OxideLauncher-1.1.0.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.0.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.0.0/OxideLauncher-1.0.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.1.0-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.0.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.0.0/OxideLauncher-1.0.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.1.0-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.0.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.0.0/OxideLauncher-1.0.0-x86.apk",
+      "file_name": "OxideLauncher-1.1.0-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.0.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.0.0/OxideLauncher-1.0.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.1.0-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Launcher 1.0.0\n\nFirst release of **Oxide Launcher**, an independently maintained Android launcher for Minecraft: Java Edition, derived from Zalith Launcher 2 (GPL-3.0).\n\n- Rebranded product identity: **Oxide Launcher** (`dev.oxide.launcher`).\n- Rebuilt GitHub Actions pipeline: unit tests, Android Lint, debug APK and per-ABI release APKs.\n- All Kotlin/Java package roots, JNI symbols and ProGuard keep rules migrated in lockstep.\n- Renderer plugin ecosystem compatibility preserved (`oxideRendererPlugin` and the legacy `zalithRendererPlugin`).\n- Update channel now served from this repository, with a CDN fallback.\n\nKnown limitations: this build was verified by CI only (compilation, unit tests, lint, R8, packaging, signing) and has not been validated on physical hardware by the project maintainers. 1674 lint findings inherited from the upstream baseline are recorded in `lint-baseline.xml` and reported as a CI artifact.\n\nIdentifiers that intentionally keep upstream naming are listed in [COMPATIBILITY.md](https://github.com/HakaI963/oxide-reborn/blob/main/COMPATIBILITY.md)."
+    "markdown": "# Oxide Launcher 1.1.0\n\n**Oxide Launcher** — an independently maintained Android launcher for Minecraft: Java Edition, derived from Zalith Launcher 2 (GPL-3.0).\n\n## Accounts\n\n- **Offline accounts now work everywhere.** Upstream disabled every account outside Greater China unless a Microsoft account existed. That gate is gone, so a local account can be created and used on any device, with no network and no Microsoft login.\n- **Offline and Ely.by accounts can wear a cape.** The local offline Yggdrasil server already served capes but never loaded one; it now does, and it also starts for a cape-only account. Import a 64x32 cape from the account screen.\n- **One-tap Ely.by.** Ely.by's published authlib-injector endpoint can be added as an authentication server directly, and its locally selected cape is served through the local server during launch.\n- **A failed skin download no longer discards a Microsoft login** that already succeeded.\n- **Deleting an account also deletes its cape**, and account lookup by profile id no longer requires an exact account type.\n- **Backup and restore** of accounts, authentication servers and launcher settings. The backup contains no access token, refresh token or third-party password, so every restored account has to sign in again.\n\n## Credential handling\n\n- Session tokens are now redacted **by value** from the game log. Previously only the value after a literal `--accessToken` was hidden, but Minecraft 1.6.4 and older receive the same token as `--session`, and the game log can be uploaded to a public log service.\n- The account database is excluded from cloud backup and device transfer.\n- The offline Yggdrasil server binds to `127.0.0.1` only, so no other app or LAN host can read account names, UUIDs, skins or capes from it.\n- `Account.toString()` no longer prints credentials.\n- Server-controlled error text is redacted and length-limited before it reaches the log or the screen.\n\n## Branding\n\nThe product is now **Oxide Launcher**. `applicationId` / `namespace` stay `dev.oxide.launcher`.\n\n## Provenance\n\nThe account and authentication behaviour is adapted from [Star1xr/ZalithLauncher2Plus](https://github.com/Star1xr/ZalithLauncher2Plus) (GPL-3.0, Copyright © 2026 Star1xr). [THIRD_PARTY.md](https://github.com/HakaI963/oxide-reborn/blob/main/THIRD_PARTY.md) lists every adapted commit and every deliberate deviation; the About screen credits it.\n\nThis build was verified by CI only (compilation, unit tests, lint, R8, packaging, signing) and has not been validated on physical hardware by the project maintainers. 1674 lint findings inherited from the upstream baseline are recorded in `lint-baseline.xml` and reported as a CI artifact."
   },
   "bodies": [
     {
       "language": "en",
-      "markdown": "First Oxide Launcher release. See the default changelog for details."
+      "markdown": "Offline accounts work on every device, offline and Ely.by capes work, session tokens are no longer written to uploadable logs, and the product is now called Oxide Launcher."
     }
   ]
 }
