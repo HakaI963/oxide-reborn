@@ -147,7 +147,7 @@ fun OxideIntro(
                 centerX = currentRootW / 2f,
                 centerY = currentRootH / 2f,
                 destX = currentSlotLeft + currentSlotWidth / 2f,
-                destY = currentSlotTop + (Oxide.BrandSlotHeight * d) / 2f,
+                destY = currentSlotTop + d.toPx(Oxide.BrandSlotHeight.value) / 2f,
                 destScale = destScale,
             )
         }
@@ -207,7 +207,7 @@ fun OxideIntro(
     }
 }
 
-private data class IntroGeometry(val x: Float, val y: Float, val scale: Float)
+internal data class IntroGeometry(val x: Float, val y: Float, val scale: Float)
 
 /**
  * 把时间轴进度换算成"相对中心的位移"与缩放

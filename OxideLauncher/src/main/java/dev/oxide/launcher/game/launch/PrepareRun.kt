@@ -20,6 +20,7 @@ package dev.oxide.launcher.game.launch
 
 import dev.oxide.launcher.game.prepare.PrepareCache
 import dev.oxide.launcher.game.prepare.PrepareDecision
+import dev.oxide.launcher.game.prepare.PreparedStateStore
 import dev.oxide.launcher.game.prepare.TrustedFiles
 import dev.oxide.launcher.game.support.lwjgl3ify.findEnabledLwjgl3ifyVersion
 import dev.oxide.launcher.game.support.lwjgl3ify.patchLwjgl3ifyIfNeeded
