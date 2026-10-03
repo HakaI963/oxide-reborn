@@ -38,6 +38,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.oxide.launcher.context.GlobalContext
@@ -772,9 +773,11 @@ internal val TightLineHeight = LineHeightStyle(
  * 否则任何一份没写 letterSpacing 的样式在读取时都会直接崩掉。
  */
 internal fun oxideScaledTextStyle(base: TextStyle, factor: Float): TextStyle = base.copy(
-    fontSize = if (base.fontSize.isSpecified) base.fontSize * factor else base.fontSize,
-    lineHeight = if (base.lineHeight.isSpecified) base.lineHeight * factor else base.lineHeight,
-    letterSpacing = if (base.letterSpacing.isSpecified) base.letterSpacing * factor else base.letterSpacing,
-    letterWidth = if (base.letterWidth.isSpecified) base.letterWidth * factor else base.letterWidth,
-    letterHeight = if (base.letterHeight.isSpecified) base.letterHeight * factor else base.letterHeight,
+    fontSize = base.fontSize.scaleIfSpecified(factor),
+    lineHeight = base.lineHeight.scaleIfSpecified(factor),
+    letterSpacing = base.letterSpacing.scaleIfSpecified(factor),
 )
+
+/** 未指定的字距不能参与算术，否则抛 IllegalArgumentException */
+private fun TextUnit.scaleIfSpecified(factor: Float): TextUnit =
+    if (this == TextUnit.Unspecified) this else this * factor
