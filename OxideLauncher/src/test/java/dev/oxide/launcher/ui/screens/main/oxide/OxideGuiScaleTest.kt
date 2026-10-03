@@ -125,25 +125,13 @@ class OxideGuiScaleTest {
     fun everythingShrinksBelowOneHundredPercent() {
         val base = oxideMetricsFor(1280, 760, 100)
         val small = oxideMetricsFor(1280, 760, 75)
-        val factor = 0.75f
 
-        assertDp(base.sidebarWidth.value * factor, small.sidebarWidth)
-        assertDp(base.sidebarPaddingH.value * 0.75f, small.sidebarPaddingH)
-        assertDp(base.pagePaddingH.value * 0.75f, small.pagePaddingH)
-        assertDp(base.pagePaddingV.value * 0.75f, small.pagePaddingV)
-        assertDp(base.sectionGap.value * 0.75f, small.sectionGap)
-        assertDp(base.cardGap.value * 0.75f, small.cardGap)
-        assertDp(base.cardMinWidth.value * 0.75f, small.cardMinWidth)
-        assertDp(base.topBarHeight.value * 0.75f, small.topBarHeight)
-        assertDp(base.navItemHeight.value * 0.75f, small.navItemHeight)
-        assertDp(base.navStep.value * 0.75f, small.navStep)
-        assertDp(base.navTravel.value * 0.75f, small.navTravel)
-        assertDp(base.sidebarNavWidth.value * 0.75f, small.sidebarNavWidth)
-        assertDp(base.brandSlotWidth.value * 0.75f, small.brandSlotWidth)
+        assertScaledBy(0.75f, base, small)
         // heroTitleDp 是排版数值而不是 dp，走浮点比较而不是 assertDp
         assertEquals("heroTitleDp", base.heroTitleDp * 0.75f, small.heroTitleDp, 0.001f)
         // 宽度档本身不变：缩放不该顺手把版面推去另一档断点
         assertEquals(base.widthClass, small.widthClass)
+        assertEquals(0.75f, small.guiScale, 0.0001f)
     }
 
     /** 放大：125% 与 150% 都乘对应的系数 */
@@ -153,12 +141,7 @@ class OxideGuiScaleTest {
         for (percent in listOf(125, 150)) {
             val factor = percent / 100f
             val big = oxideMetricsFor(1280, 760, percent)
-            assertDp(base.sidebarWidth.value * factor, big.sidebarWidth)
-            assertDp(base.pagePaddingH.value * factor, big.pagePaddingH)
-            assertDp(base.cardMinWidth.value * factor, big.cardMinWidth)
-            assertDp(base.navItemHeight.value * factor, big.navItemHeight)
-            assertDp(base.navStep.value * factor, big.navStep)
-            assertDp(base.topBarHeight.value * factor, big.topBarHeight)
+            assertScaledBy(factor, base, big)
             assertEquals("heroTitleDp", base.heroTitleDp * factor, big.heroTitleDp, 0.001f)
             assertEquals(factor, big.guiScale, 0.0001f)
         }
@@ -488,6 +471,48 @@ class OxideGuiScaleTest {
     private fun assertDp(expected: Float, actual: Dp) {
         assertEquals("expected ${expected}dp but was ${actual.value}dp", expected, actual.value, 0.01f)
     }
+
+    /**
+     * 逐条核对"每一个跟着界面缩放走的尺寸都乘了同一个系数"
+     *
+     * 尺寸清单只在这里列一次，所以新加一个尺寸时缩小/放大两条测试都会自动带上它；
+     * 分支侧也只改那一处，漏乘的档位立刻会被这两条测试抓住。
+     */
+    private fun assertScaledBy(factor: Float, base: OxideMetrics, scaled: OxideMetrics) {
+        val actual = scaled.scalableDpValues()
+        for ((name, baseValue) in base.scalableDpValues()) {
+            assertEquals(
+                "$name must be ${baseValue}dp * $factor",
+                baseValue * factor,
+                actual.getValue(name),
+                0.01f,
+            )
+        }
+    }
+
+    /**
+     * 跟着界面缩放一起乘系数的那些尺寸
+     *
+     * 不含 [OxideMetrics.widthClass]、[OxideMetrics.density] 与列数上下限：这三个
+     * 量的是**屏幕**，缩放不该动它们。不含 `heroTitleDp`：它是排版数值而不是 dp。
+     */
+    private fun OxideMetrics.scalableDpValues(): Map<String, Float> = mapOf(
+        "sidebarWidth" to sidebarWidth.value,
+        "sidebarPaddingH" to sidebarPaddingH.value,
+        "brandGap" to brandGap.value,
+        "pagePaddingH" to pagePaddingH.value,
+        "pagePaddingV" to pagePaddingV.value,
+        "sectionGap" to sectionGap.value,
+        "cardGap" to cardGap.value,
+        "cardMinWidth" to cardMinWidth.value,
+        "drawerWidth" to drawerWidth.value,
+        "topBarHeight" to topBarHeight.value,
+        "navItemHeight" to navItemHeight.value,
+        "navStep" to navStep.value,
+        "navTravel" to navTravel.value,
+        "sidebarNavWidth" to sidebarNavWidth.value,
+        "brandSlotWidth" to brandSlotWidth.value,
+    )
 
     /**
      * 从当前工作目录往上找源文件

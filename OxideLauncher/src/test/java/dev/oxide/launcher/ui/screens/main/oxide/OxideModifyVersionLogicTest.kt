@@ -395,17 +395,25 @@ class OxideModifyVersionLogicTest {
 
     @Test
     fun everyWayOfRenamingBadlyIsRefused() {
+        // 名字被清空
         assertEquals(
             OxideModNameVerdict.Empty,
-            oxideModNameVerdict("1.21", "1.20.1", conflict = false, filenameInvalid = false),
+            oxideModNameVerdict("", "1.20.1", conflict = false, filenameInvalid = false),
         )
+        // 名字里有非法字符或长度不对，不能当文件夹名
         assertEquals(
             OxideModNameVerdict.Invalid,
             oxideModNameVerdict("1.21", "1.20.1", conflict = false, filenameInvalid = true),
         )
+        // 撞上另一个已存在的实例
         assertEquals(
             OxideModNameVerdict.Conflict,
             oxideModNameVerdict("1.21", "1.20.1", conflict = true, filenameInvalid = false),
+        )
+        // 三条校验都没踩到就必须放行：合法的名字不能被误判成上面任何一种
+        assertEquals(
+            OxideModNameVerdict.Ok,
+            oxideModNameVerdict("1.21", "1.20.1", conflict = false, filenameInvalid = false),
         )
     }
 

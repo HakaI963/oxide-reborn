@@ -110,7 +110,7 @@ class OxideInstallVersionLogicTest {
             3,
             filterOxideVersions(
                 allVersions,
-                OxideVersionFilter(release = false, snapshot = true, id = "   "),
+                OxideVersionFilter(release = true, snapshot = true, id = "   "),
             ).size,
         )
     }
@@ -142,7 +142,8 @@ class OxideInstallVersionLogicTest {
         assertTrue(ModLoader.FABRIC in plan)
         assertTrue(ModLoader.QUILT in plan)
         assertFalse("1.13.2 以上没有 Legacy Fabric", ModLoader.LEGACY_FABRIC in plan)
-        assertFalse("1.20.1 上没有 NeoForge", ModLoader.NEOFORGE in plan)
+        // 1.20.1 已经越过 1.20，NeoForge 在这里必须可选（边界由 neoForgeOnlyAppearsFrom120 钉住）
+        assertTrue("1.20.1 上必须有 NeoForge", ModLoader.NEOFORGE in plan)
     }
 
     @Test
@@ -189,10 +190,19 @@ class OxideInstallVersionLogicTest {
 
     // ---- 版本名 -----------------------------------------------------------
 
+    /**
+     * 列表里真实的 OptiFine 条目
+     *
+     * [OptiFineVersion.displayName] 是解析之后的样子：`OptiFine_1.12.2_HD_U_C1`
+     * 去掉 `OptiFine ` 与 `HD U ` 之后就是 [OPTIFINE_DISPLAY]，
+     * 所以 [OptiFineVersion.realVersion]（`removePrefix(inherit).trim()`）正好是 `C1`。
+     */
+    private const val OPTIFINE_DISPLAY = "1.12.2 C1"
+
     private fun optifine(displayName: String, forgeRequirement: String?): OptiFineVersion =
         OptiFineVersion(
             displayName = displayName,
-            fileName = "OptiFine_$displayName.jar",
+            fileName = "OptiFine_${displayName.replace(' ', '_')}.jar",
             version = displayName,
             inherit = "1.12.2",
             releaseDate = "2020/01/01",
@@ -265,10 +275,10 @@ class OxideInstallVersionLogicTest {
     @Test
     fun optifineAloneKeepsOnlyItsRealVersionPart() {
         assertEquals(
-            "1.12.2 OptiFine HD_U_C1",
+            "1.12.2 OptiFine C1",
             oxideInstallVersionName(
                 gameVersion = "1.12.2",
-                optifine = optifine("1.12.2_HD_U_C1", null),
+                optifine = optifine(OPTIFINE_DISPLAY, null),
                 forge = null,
                 neoforge = null,
                 fabric = null,
@@ -282,10 +292,10 @@ class OxideInstallVersionLogicTest {
     @Test
     fun optifineAndForgeKeepTheOldDashOrder() {
         assertEquals(
-            "1.12.2 Forge 14.23.5.2859-OptiFine HD_U_C1",
+            "1.12.2 Forge 14.23.5.2859-OptiFine C1",
             oxideInstallVersionName(
                 gameVersion = "1.12.2",
-                optifine = optifine("1.12.2_HD_U_C1", "14.23.5.2859"),
+                optifine = optifine(OPTIFINE_DISPLAY, "14.23.5.2859"),
                 forge = forge("14.23.5.2859"),
                 neoforge = null,
                 fabric = null,
@@ -301,8 +311,14 @@ class OxideInstallVersionLogicTest {
     @Test
     fun withoutASelectionNothingIsFilteredAway() {
         val items = listOf(optifine("a", "14.23.5.2859"), optifine("b", null))
-        assertEquals(2, filterOptiFineAgainstForge(items, forge("14.23.5.2859")).size)
+        // 没选 Forge：一条都不能少，哪怕这一条根本没声明需要哪个 Forge
         assertEquals(2, filterOptiFineAgainstForge(items, null).size)
+        // 反过来也一样：没选 OptiFine 时 Forge 列表原样保留
+        val forges = listOf(forge("14.23.5.2859"), forge("14.23.5.2858"))
+        assertEquals(
+            listOf("14.23.5.2859", "14.23.5.2858"),
+            filterForgeAgainstOptiFine(forges, null).map { it.versionName },
+        )
     }
 
     @Test

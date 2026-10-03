@@ -39,8 +39,10 @@ class ReduceInstanceMenuTest {
 
     @Test
     fun toggleClosesTheSameCard() {
-        assertEquals("a", reduceInstanceMenu("a", "a", InstanceMenuAction.Toggle))
-        assertNull(reduceInstanceMenu("a", "a", InstanceMenuAction.Toggle))
+        // 开 → 关两步：Toggle 落在同一个 key 上时一定收起，因此同一个齿轮不能连点两次还开着
+        val opened = reduceInstanceMenu(null, "a", InstanceMenuAction.Toggle)
+        assertEquals("a", opened)
+        assertNull(reduceInstanceMenu(opened, "a", InstanceMenuAction.Toggle))
     }
 
     @Test

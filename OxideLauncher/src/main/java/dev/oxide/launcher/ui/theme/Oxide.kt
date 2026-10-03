@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -271,7 +272,20 @@ private fun systemIsDark(): Boolean =
     (Resources.getSystem().configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
         Configuration.UI_MODE_NIGHT_YES
 
-private val systemDark = mutableStateOf(systemIsDark())
+/**
+ * 系统深浅的初值，组合阶段读它就等于订阅它
+ *
+ * 这里必须 `by lazy`：文件级属性是在 `OxideKt` 的**静态初始化**里求值的，
+ * 而 `systemIsDark()` 走的是 `Resources.getSystem()`——类一加载就去问框架，
+ * 于是这个文件里那些本来不碰 Android 的纯函数（[contrastRatio]、
+ * [relativeLuminance]、[readableAccent]、[oxideScaledTextStyle]）在单测里
+ * 一被调用就炸在类初始化上（`returnDefaultValues` 下 `Resources.getSystem()`
+ * 返回 null，随后 `ExceptionInInitializerError`）。
+ *
+ * 推迟到第一次真正读深浅时再问框架，那时一定已经在组合里（[chrome] 的派生
+ * 计算或 [ProvideOxideChrome] 的副作用），框架可用，结果与原来一致。
+ */
+private val systemDark: MutableState<Boolean> by lazy { mutableStateOf(systemIsDark()) }
 
 /**
  * 用户选的颜色主题给出的强调色

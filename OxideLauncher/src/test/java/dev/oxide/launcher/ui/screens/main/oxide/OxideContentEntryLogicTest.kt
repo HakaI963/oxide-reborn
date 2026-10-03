@@ -173,15 +173,23 @@ class OxideContentEntryLogicTest {
 
     @Test
     fun lastPlayedFallsBackToTheModifiedTime() {
-        // 存档没有 lastPlayed 时必须退回文件时间，否则它会被排到最后而不是正确位置
+        // 存档没有 lastPlayed 时必须退回文件时间，否则它会被排到最后而不是正确位置。
+        // 排序键是 `lastPlayed ?: modifiedAt`：old=5（真实游玩时间）、
+        // mid=50、new=100（都没有 lastPlayed，只能用文件时间），
+        // 升序就是最久没玩的在前 —— 与同一条链路上 FileModified 的升序语义一致。
         val all = listOf(
             entry("new.jar", modifiedAt = 100L),
             entry("old.jar", modifiedAt = 10L, lastPlayed = 5L),
             entry("mid.jar", modifiedAt = 50L),
         )
         assertEquals(
-            listOf("new.jar", "mid.jar", "old.jar"),
+            listOf("old.jar", "mid.jar", "new.jar"),
             names(sortOxideContentEntries(all, OxideContentSort.LastPlayed, true)),
+        )
+        // 降序必须正好是升序的倒过来，最近玩过的排最前
+        assertEquals(
+            listOf("new.jar", "mid.jar", "old.jar"),
+            names(sortOxideContentEntries(all, OxideContentSort.LastPlayed, false)),
         )
     }
 
@@ -232,7 +240,12 @@ class OxideContentEntryLogicTest {
 
     @Test
     fun anUnknownKeyFallsBackToTheFirstAscendingSort() {
-        val next = nextOxideContentSort(OxideContentCategory.Saves, OxideContentSort.Name, true)
+        // 存档只支持 Name / FileName / LastPlayed：拿 FileModified 来轮换才是真正的"未知键"
+        assertFalse(
+            "前提：FileModified 不是存档支持的排序键",
+            OxideContentSort.FileModified in oxideContentSortOptions(OxideContentCategory.Saves),
+        )
+        val next = nextOxideContentSort(OxideContentCategory.Saves, OxideContentSort.FileModified, false)
         assertEquals(oxideContentSortOptions(OxideContentCategory.Saves).first(), next.first)
         assertTrue(next.second)
     }

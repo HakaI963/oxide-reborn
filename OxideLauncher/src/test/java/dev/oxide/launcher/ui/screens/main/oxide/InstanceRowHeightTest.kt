@@ -116,6 +116,9 @@ class InstanceRowHeightTest {
     @Test
     fun threeRowsUseOneFewerGap() {
         // rows-1 个间距，不是 rows 个：少算一个会让整张网格多出一个间距的高度。
+        // 参考稿 `.instancesGrid{gap:9px}` 在 ≤900px 那一档是
+        // `grid-template-rows:repeat(3,minmax(0,1fr))`，因此三行之间只有**两个**间距：
+        // (400 − 2×10) / 3 = 380 / 3 = 126.667。写成 130 相当于只算了一个间距。
         // 这里把下限压到 0，确保走的是平分分支而不是兜底分支。
         val row = instanceRowHeight(
             availableHeightDp = 400f,
@@ -123,7 +126,7 @@ class InstanceRowHeightTest {
             rows = 3,
             minRowHeightDp = 0f,
         )
-        assertEquals(130f, row, 0.01f)
+        assertEquals(126.667f, row, 0.01f)
     }
 
     @Test

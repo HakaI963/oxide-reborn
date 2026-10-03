@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -276,10 +277,13 @@ private fun OxideSidebarNav(
             animationSpec = tween(Oxide.Motion.RailMs),
             label = "oxideRail"
         )
+        // 参考稿的 .navRail 是 position:absolute，自己不占高度。
+        // 这里若让它按 navTravel(164dp) 参与布局，导航列就会变成 164+161=325dp，
+        // 640x340 的小横屏上侧栏需要 20+34+34+325+55+15=483dp，底部区块会被挤出屏幕。
+        // 所以轨道用 matchParentSize 叠在导航项之上，导航项本身才是唯一占高度的东西。
+        Box(modifier = Modifier.fillMaxWidth()) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(metrics.navTravel),
+            modifier = Modifier.matchParentSize(),
         ) {
             Box(
                 modifier = Modifier
@@ -307,6 +311,7 @@ private fun OxideSidebarNav(
                 metrics = metrics,
                 onClick = { onSelect(page) },
             )
+        }
         }
     }
 }

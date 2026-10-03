@@ -210,11 +210,16 @@ fun oxideNavTravel(itemCount: Int, itemHeight: Dp, gap: Dp = Oxide.NavGap): Dp =
     oxideNavStep(itemHeight, gap) * itemCount.coerceAtLeast(0)
 
 /**
- * 侧栏里 logo 的静止缩放
+ * 侧栏里 logo 的静止缩放，也就是参考稿那套落位公式的纯函数版本
  *
- * 参考稿用同一个公式算开场 logo 的落点：把 logo 缩到 `min(槽宽, 122px)`，
- * 再夹在 0.28~0.42 之间。**侧栏里那个常驻 logo 必须用同一个缩放**，
- * 开场动画落在品牌槽之后才不会跳一下。
+ * 参考稿算开场 logo 落点用的是同一套公式：把 logo 缩到 `min(槽宽, 122px)`，
+ * 再夹在 0.28~0.42 之间。**这个值必须和开场动画真正落在的缩放一致**，
+ * 否则 logo 交接那一帧会跳一下。
+ *
+ * 注意侧栏**并不**读这个属性来画常驻 logo：开场动画量的是 logo 的真实宽度，
+ * 算出的 `landingScale` 写进 `OxideBrandSlotState`，侧栏照抄那个值
+ * （见 `OxideBrandSlotLogo`）。这里留着它是因为它是那条公式唯一可单测的写法，
+ * 而 [BrandLogoStartWidthDp] 只有取对值，两边才会落在同一个数上。
  */
 fun oxideBrandLogoScale(slotWidth: Dp): Float {
     val target = minOf(slotWidth.value, Oxide.Motion.BrandSlotMaxWidthDp)
@@ -224,12 +229,19 @@ fun oxideBrandLogoScale(slotWidth: Dp): Float {
 }
 
 /**
- * `OxideLogo` 在原始尺寸下的宽度估计
+ * `OxideLogo` 在原始尺寸下的宽度：图形 37 + 间距 10 + 60sp 字标，实测约 200dp
  *
- * 图形 37 + 间距 10 + 60sp 字标，与开场动画里用的同一个估计值，
- * 两边必须一致，否则落地瞬间的宽度会差一截。
+ * 这个数只是 [oxideBrandLogoScale] 里 `start.width` 的替身——参考稿里浏览器量的是
+ * logo 的真实宽度，本项目开场动画也量（见 `OxideIntro`），所以只有量出来的那个说了算。
+ *
+ * 字标宽度是估的，估错一点就整条公式跟着错：早先把字标当成 250dp，总数成了 297dp，
+ * 比实测高约 48%，于是 `122 / 297 = 0.41` 落在夹紧区间**内部**；而开场动画按实测的
+ * 约 200dp 算，`122 / 200 = 0.61` 会被夹到 [IntroScaleMin, IntroScaleMax] 的上端
+ * 0.42。两边因此差了一截，落地那一帧 logo 会跳一下——`OxideBrandSlot.kt` 里那句
+ * "'图形 37 + 间距 10 + 字标 250dp' 这种估计值能差出四成"说的正是这件事。
+ * 取实测值之后两边都落在 0.42，交接没有尺寸差。
  */
-const val BrandLogoStartWidthDp: Float = 37f + 10f + 250f
+const val BrandLogoStartWidthDp: Float = 37f + 10f + 153f
 
 // ---------------------------------------------------------------------------
 // 界面缩放
@@ -314,7 +326,12 @@ data class OxideMetrics(
     val brandSlotWidth: Dp
         get() = sidebarNavWidth - Oxide.BrandInsetH * guiScale * 2
 
-    /** 侧栏里那个常驻 logo 的静止缩放，必须和开场动画的落点一致 */
+    /**
+     * 参考稿那套落位公式在侧栏这一档给出的静止缩放
+     *
+     * 侧栏常驻 logo 真正用的值是开场动画实测出来的 `OxideBrandSlotState.landingScale`，
+     * 两者必须相等；相等这件事由 [BrandLogoStartWidthDp] 取实测宽度来保证。
+     */
     val brandLogoScale: Float
         get() = oxideBrandLogoScale(brandSlotWidth)
 

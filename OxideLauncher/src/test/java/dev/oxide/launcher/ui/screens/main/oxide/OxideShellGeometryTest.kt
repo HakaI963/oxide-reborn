@@ -139,7 +139,13 @@ class OxideShellGeometryTest {
         assertDp(0f, oxideNavRailOffset(-1, 38.dp))
     }
 
-    /** 轨道高度 = 4 项 + 3 个 3px 间隙 */
+    /**
+     * 行程 = 步进 × 项数 = 41dp × 4
+     *
+     * 参考稿的导航列本身是 `4×38 + 3×3 = 161px`（四项三个间隙），轨道按**步进**算，
+     * 末尾因此多留一个 3dp 间隙：作为轨道这是保守的一边（指示条永远到不了底），
+     * 作为侧栏高度预算也是多留，所以两种读法都不会把底部块挤出去。
+     */
     @Test
     fun navTravelCoversEveryItem() {
         assertDp(164f, oxideNavTravel(4, 38.dp))
@@ -152,24 +158,38 @@ class OxideShellGeometryTest {
     /**
      * 静止缩放必须和开场动画完全一致，否则 logo 落地时会跳一截。
      *
-     * 公式与参考稿一致：目标宽度 = min(槽宽, 122px)，缩放夹在 0.28~0.42。
+     * 参考稿的公式是 `clamp(min(槽宽, 122px) / start.width, .28, .42)`，其中
+     * `start.width` 是 logo 自然尺寸下的**实测**宽度——本项目开场动画量的就是它
+     * （见 `OxideIntro`），量出来约 200dp，于是 122/200 = 0.61 一定越过上端，
+     * 落位缩放恒为 [Oxide.Motion.IntroScaleMax]。那两个夹紧边界正是为此存在的。
+     *
+     * 82dp 那一档故意取在夹紧区间**内部**（82/200 = 0.41）：只有它能证明除法与
+     * `min(槽宽, 122px)` 那两步真的在算，而不是被 `coerceIn` 顺手抹平。
      */
     @Test
     fun brandLogoScaleMatchesTheIntroDestination() {
-        val expected = 122f / BrandLogoStartWidthDp
-        assertEquals(expected, oxideBrandLogoScale(145.dp), 0.0001f)
-        assertEquals(expected, oxideBrandLogoScale(122.dp), 0.0001f)
+        // 122 / 200 = 0.61 → 夹到上端
+        assertEquals(Oxide.Motion.IntroScaleMax, oxideBrandLogoScale(145.dp), 0.0001f)
+        assertEquals(Oxide.Motion.IntroScaleMax, oxideBrandLogoScale(122.dp), 0.0001f)
         // 再宽的槽也被 122px 封顶
-        assertEquals(expected, oxideBrandLogoScale(400.dp), 0.0001f)
+        assertEquals(Oxide.Motion.IntroScaleMax, oxideBrandLogoScale(400.dp), 0.0001f)
+        // 落在区间内部的一档：既没过上端，也没撞到 122px 的上限
+        assertEquals(0.41f, oxideBrandLogoScale(82.dp), 0.0001f)
         // 特别窄的槽不会缩到 0.28 以下
         assertEquals(Oxide.Motion.IntroScaleMin, oxideBrandLogoScale(40.dp), 0.0001f)
         assertEquals(Oxide.Motion.IntroScaleMin, oxideBrandLogoScale(0.dp), 0.0001f)
 
-        // 每一档侧栏都能给出合法缩放
+        // 每一档侧栏都落在同一个缩放上：品牌槽宽 112 / 131 / 145dp 全部越过上端。
+        // 顺带钉住下限——槽宽只要不小于 122 * 0.28 ≈ 34dp 就还没撞到下端。
         for (width in intArrayOf(480, 640, 800, 901, 1121, 1281, 2560)) {
-            val scale = oxideMetricsFor(width, 700).brandLogoScale
-            assertTrue("width=$width scale=$scale", scale >= Oxide.Motion.IntroScaleMin)
-            assertTrue("width=$width scale=$scale", scale <= Oxide.Motion.IntroScaleMax)
+            val metrics = oxideMetricsFor(width, 700)
+            assertTrue("width=$width slot=${metrics.brandSlotWidth}", metrics.brandSlotWidth > 34.dp)
+            assertEquals(
+                "width=$width slot=${metrics.brandSlotWidth}",
+                Oxide.Motion.IntroScaleMax,
+                metrics.brandLogoScale,
+                0.0001f,
+            )
         }
     }
 
@@ -187,9 +207,10 @@ class OxideShellGeometryTest {
         assertDp(38f, m.navItemHeight)
         assertDp(41f, m.navStep)
         assertEquals(2, m.maxCardColumns)
-        // 参考稿没有缩字号这一档，宽度不够时改的是列数
+        // 参考稿没有缩字号这一档，宽度不够时改的是列数：density 恒为 1，
+        // 所以正文那样的字号原样通过 scaled()，不多也不少。
         assertEquals(1f, m.density, 0.0001f)
-        assertEquals(8f, m.scaled(Oxide.Type.Body.fontSize.value), 0.0001f)
+        assertEquals(REFERENCE_BODY_PX * m.density, m.scaled(REFERENCE_BODY_PX), 0.0001f)
         assertEquals(29f, m.heroTitleDp, 0.0001f)
         // 640 宽 → 内容区 453，两列而不是一个撑满的大卡片
         assertEquals(2, m.gridColumns(453.dp))
@@ -291,5 +312,17 @@ class OxideShellGeometryTest {
 
     private fun assertDp(expected: Float, actual: Dp) {
         assertEquals("expected ${expected}dp but was ${actual.value}dp", expected, actual.value, 0.01f)
+    }
+
+    private companion object {
+        /**
+         * 参考稿的正文 8px，**未缩放**的那一份
+         *
+         * 不能去读 `Oxide.Type.Body`：那是乘过用户界面缩放的 getter，在这里读会把
+         * `AllSettings`（连带 MMKV）拖进一个纯函数单测，而且 `scaled()` 的契约本来就
+         * 是"只乘 density、不再乘一次界面缩放"——拿一个已经缩放过的字号去验它，
+         * 验的是错的东西。
+         */
+        const val REFERENCE_BODY_PX = 8f
     }
 }
