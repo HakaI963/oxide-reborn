@@ -68,6 +68,22 @@ suspend fun <T> downloadAndParseJson(
     }
 
     if (targetFile.exists()) {
+        if (expectedSHA == null) {
+            /*
+             * 没有声明哈希时无法验证内容，但也不能因此每次启动都删掉重下：
+             * 加载器（Fabric/Forge/NeoForge）的清单通常不带 assetIndex，
+             * 上游会合成一个 sha1 为 null 的索引，于是这里原本每次启动都会
+             * 完整读一遍、算一次 SHA-1、删掉、再联网重下。
+             * 既然无法校验，就直接复用磁盘上那份：解析失败仍然会走重下，
+             * 真正被破坏的文件不可能通过下面的解析。
+             */
+            return runCatching {
+                targetFile.readText().parseTo(classOfT)
+            }.getOrElse {
+                Logger.warning(TAG, "Failed to parse existing JSON, re-downloading...")
+                downloadAndParse()
+            }
+        }
         if (compareSHA1(targetFile, expectedSHA)) {
             return runCatching {
                 targetFile.readText().parseTo(classOfT)

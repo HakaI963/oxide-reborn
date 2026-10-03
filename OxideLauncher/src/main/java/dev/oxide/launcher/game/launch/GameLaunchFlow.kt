@@ -19,6 +19,7 @@
 package dev.oxide.launcher.game.launch
 
 import android.content.Context
+import android.os.SystemClock
 import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.coroutine.TaskFlowExecutor
@@ -42,6 +43,7 @@ import dev.oxide.launcher.game.version.installed.VersionInfoParser
 import dev.oxide.launcher.ui.activities.runGame
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.utils.COMPACT_GSON
+import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.network.isNetworkAvailable
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import kotlinx.coroutines.CancellationException
@@ -143,6 +145,14 @@ class GameLaunchFlow(scope: CoroutineScope) {
             version.offlineAccountLogin = true
         }
 
+        // 启动链路的第一个时间戳。:game 进程会再打一次，两条日志合起来就能把
+        // "准备阶段" 和 "Minecraft 自己的启动" 区分开。
+        Logger.info(
+            TAG,
+            "LAUNCH T0: version=${version.getVersionName()} integritySkip=${version.skipGameIntegrityCheck()} " +
+                    "isolated=${version.isIsolation()} network=$hasNetwork"
+        )
+
         // 准备状态在模组扫描阶段判定，在文件校验阶段使用，最后统一写回
         val prepare = PrepareRun(version)
 
@@ -177,13 +187,33 @@ class GameLaunchFlow(scope: CoroutineScope) {
                 title = androidText(R.string.launch_check_mods),
                 dispatcher = Dispatchers.IO
             ) { task ->
+                val tScan = SystemClock.elapsedRealtime()
                 val patchedManifest = prepare.scanModsAndPatch()
-                val manifest = patchedManifest ?: VersionInfoParser(version).setInheriting().build()
-                // 这份字符串会跨进程传递，缩进只会平白放大体积
-                val manifestString = COMPACT_GSON.toJson(manifest)
+                val tScanDone = SystemClock.elapsedRealtime()
+
+                // 命中准备状态时，版本清单与模组都没有变化，合并清单可以直接复用：
+                // 它是这些输入的纯函数，重新算一遍只是白白多两次解析和一次序列化。
+                val cached = prepare.cachedLaunchManifest
+                val manifestString: String
+                if (cached != null && patchedManifest == null) {
+                    manifestString = cached
+                } else {
+                    val manifest = patchedManifest ?: VersionInfoParser(version).setInheriting().build()
+                    // 这份字符串会跨进程传递，缩进只会平白放大体积
+                    manifestString = COMPACT_GSON.toJson(manifest)
+                    prepare.storeManifest(manifestString)
+                }
+                val tManifest = SystemClock.elapsedRealtime()
 
                 version.launchManifest = manifestString
-                prepare.onManifestBuilt(manifest)
+                prepare.onManifestBuilt()
+
+                Logger.info(
+                    TAG,
+                    "PREPARE phase: scanMods=${tScanDone - tScan}ms " +
+                            "manifest=${if (cached != null && patchedManifest == null) "cached" else "built"}/" +
+                            "${tManifest - tScanDone}ms chars=${manifestString.length}"
+                )
 
                 // 如果打了补丁，此处需要重新检索一下依赖库并下载
                 patchedManifest?.let {
@@ -197,7 +227,7 @@ class GameLaunchFlow(scope: CoroutineScope) {
 
                 // 没有文件校验这一步时，准备到模组扫描为止就结束了
                 if (version.skipGameIntegrityCheck()) {
-                    prepare.recordPrepared(emptyList())
+                    prepare.recordPrepared(emptyList(), manifestString)
                 }
             }
 
@@ -265,7 +295,9 @@ class GameLaunchFlow(scope: CoroutineScope) {
             gameHome = version.getGameHome(),
             mode = DownloadMode.VERIFY_AND_REPAIR,
             trustedFiles = prepare.trustedFiles,
-            onPrepared = { verified -> prepare.recordPrepared(verified) },
+            onPrepared = { verified ->
+                prepare.recordPrepared(verified, version.launchManifest.orEmpty())
+            },
             onError = { message ->
                 submitError(
                     ErrorViewModel.ThrowableMessage(

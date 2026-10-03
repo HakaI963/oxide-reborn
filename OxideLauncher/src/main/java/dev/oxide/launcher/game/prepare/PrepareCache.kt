@@ -78,6 +78,8 @@ object PrepareCache {
 
     private fun filesFile(version: Version) = File(stateDir(version), PreparedStateStore.FILES_FILE)
 
+    private fun manifestFile(version: Version) = File(stateDir(version), PreparedStateStore.MANIFEST_FILE)
+
     private fun lockFile(version: Version) = File(stateDir(version), PreparedStateStore.LOCK_FILE)
 
     /** 当前生效的下载源名称，换源会改变文件内容，必须计入指纹 */
@@ -134,6 +136,11 @@ object PrepareCache {
 
         // 两份文件必须描述同一批文件，否则说明它们不是同一次准备留下的
         if (state.verifiedFileCount != trusted.size) {
+            Logger.warning(
+                TAG,
+                "PREPARE CACHE COUNT MISMATCH: recorded=${state.verifiedFileCount} parsed=${trusted.size}; " +
+                        "treating the prepared state as unusable"
+            )
             return PrepareDecision.Miss(PrepareInvalidateReason.UNREADABLE)
         }
 
@@ -153,7 +160,8 @@ object PrepareCache {
         modsDir: File,
         touchControllerMod: Boolean,
         lwjgl3ifyVersion: String?,
-        verifiedFiles: List<File>
+        verifiedFiles: List<File>,
+        launchManifest: String
     ) {
         withInstanceLock(version) {
             val dir = stateDir(version)
@@ -170,6 +178,11 @@ object PrepareCache {
                 return@withInstanceLock
             }
 
+            // DownloadTask 的目标路径可能重复：继承自原版的版本会为父版本再排一遍同一批
+            // 资源对象。逐文件列表用 Map 解析时会按路径去重，所以计数必须用同一口径，
+            // 否则两者永远对不上，缓存每次都会判定为不可用。
+            val distinctVerified = verifiedFiles.distinctBy { it.absolutePath }
+
             val state = PreparedState(
                 schemaVersion = PREPARED_STATE_SCHEMA_VERSION,
                 preparationVersion = PREPARATION_VERSION,
@@ -184,18 +197,23 @@ object PrepareCache {
                 mods = ModStamp.list(modsDir),
                 touchControllerMod = touchControllerMod,
                 lwjgl3ifyVersion = lwjgl3ifyVersion,
-                verifiedFileCount = verifiedFiles.size
+                verifiedFileCount = distinctVerified.size
             )
 
             runCatching {
                 // 先写逐文件列表，最后写状态文件：
                 // 只有两者都在时下一次启动才可能命中，任何一步失败都只是下次多做一次准备。
-                PreparedStateStore.writeAtomically(filesFile(version), TrustedFiles.render(verifiedFiles))
+                PreparedStateStore.writeAtomically(
+                    filesFile(version),
+                    TrustedFiles.render(distinctVerified)
+                )
                 PreparedStateStore.writeAtomically(stateFile(version), GSON.toJson(state))
+                // 最后才写清单：只有状态文件与文件列表才决定命中，清单只是省一次构建的附带产物
+                PreparedStateStore.writeAtomically(manifestFile(version), launchManifest)
             }.onSuccess {
                 Logger.info(
                     TAG,
-                    "PREPARE CACHE REBUILT: ${verifiedFiles.size} verified file(s), " +
+                    "PREPARE CACHE REBUILT: ${distinctVerified.size} verified file(s), " +
                             "mods=${state.mods.size}, lwjgl3ify=${lwjgl3ifyVersion ?: "none"}"
                 )
             }.onFailure { e ->
@@ -209,6 +227,7 @@ object PrepareCache {
     fun invalidate(version: Version) {
         runCatching { stateFile(version).delete() }
         runCatching { filesFile(version).delete() }
+        runCatching { manifestFile(version).delete() }
         Logger.info(TAG, "PREPARE CACHE INVALIDATED")
     }
 

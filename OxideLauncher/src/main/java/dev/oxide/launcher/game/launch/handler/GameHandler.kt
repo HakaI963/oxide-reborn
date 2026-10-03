@@ -19,6 +19,7 @@
 package dev.oxide.launcher.game.launch.handler
 
 import android.app.Activity
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.Surface
 import androidx.compose.runtime.Composable
@@ -52,10 +53,13 @@ import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
 import dev.oxide.launcher.viewmodel.GamepadViewModel
 import kotlinx.coroutines.CoroutineScope
+import dev.oxide.launcher.utils.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.libsdl.app.SDLActivity
 import org.lwjgl.glfw.CallbackBridge
+
+private const val TAG = "GameHandler"
 
 class GameHandler(
     val activity: Activity,
@@ -74,6 +78,9 @@ class GameHandler(
 ) {
     private val version = config.version
     private val account = config.account
+
+    /** 本游戏进程的起始时刻，用于算出"按下播放到第一帧"的真实耗时 */
+    private val launchT0 = SystemClock.elapsedRealtime()
 
     private val _inputArea = MutableStateFlow<IntRect?>(null)
     override val inputArea = _inputArea.asStateFlow()
@@ -148,6 +155,9 @@ class GameHandler(
     override fun onGraphicOutput() {
         if (!isGameRendering) {
             isGameRendering = true
+            //游戏进程自己的第一个时间戳，配合启动器进程里的 "LAUNCH T0" 就能在同一次设备测试里
+            //把"启动器准备阶段"和"JVM 与 Minecraft 自己的启动"分开算
+            Logger.info(TAG, "GAME PROCESS first frame after ${SystemClock.elapsedRealtime() - launchT0}ms")
             showGameInfo = false
             //游戏已经开始渲染，如果日志状态为渲染前显示，则在这里关闭日志
             if (logState == LogState.SHOW_BEFORE_LOADING) {

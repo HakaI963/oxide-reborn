@@ -100,6 +100,7 @@ object PreparedStateStore {
 
     const val STATE_FILE = "prepare_state.json"
     const val FILES_FILE = "prepare_files.txt"
+    const val MANIFEST_FILE = "prepare_manifest.json"
     const val LOCK_FILE = "prepare.lock"
 
     private const val TEMP_SUFFIX = ".tmp"

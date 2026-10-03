@@ -29,6 +29,7 @@ import dev.oxide.launcher.game.version.mod.AllModReader
 import dev.oxide.launcher.game.version.mod.isEnabled
 import dev.oxide.launcher.game.versioninfo.models.GameManifest
 import dev.oxide.launcher.utils.logging.Logger
+import com.google.gson.JsonParser
 import java.io.File
 
 private const val TAG = "PrepareRun"
@@ -53,10 +54,19 @@ class PrepareRun(
     var trustedFiles: TrustedFiles? = null
         private set
 
-    private var touchControllerMod = false
+    private var touchControllerMod: Boolean? = null
     private var lwjgl3ifyVersion: String? = null
     private var parentVersionJsonPath: String? = null
     private var evaluated = false
+
+    /**
+     * 上一次准备时算出的合并清单
+     *
+     * 它是版本 JSON、父版本 JSON 与模组状态的纯函数。命中准备状态缓存时这些输入都没变，
+     * 于是可以直接复用，省掉一次清单构建与一次序列化。
+     */
+    var cachedLaunchManifest: String? = null
+        private set
 
     /**
      * 扫描模组并在需要时打补丁
@@ -73,7 +83,8 @@ class PrepareRun(
                 lwjgl3ifyVersion = decision.state.lwjgl3ifyVersion
                 parentVersionJsonPath = decision.state.parentVersionJsonPath
                 trustedFiles = decision.trusted
-                if (touchControllerMod) version.enableTouchProxy = true
+                cachedLaunchManifest = readCachedManifest()
+                if (touchControllerMod == true) version.enableTouchProxy = true
 
                 Logger.info(
                     TAG,
@@ -88,8 +99,9 @@ class PrepareRun(
                 Logger.info(TAG, "PREPARE CACHE MISS: ${decision.reason.logReason}")
                 val mods = AllModReader(modsDir).readAllLocals()
 
-                touchControllerMod = mods.any { it.id == "touchcontroller" && it.file.isEnabled() }
-                if (touchControllerMod) version.enableTouchProxy = true
+                val touchController = mods.any { it.id == "touchcontroller" && it.file.isEnabled() }
+                touchControllerMod = touchController
+                if (touchController) version.enableTouchProxy = true
 
                 lwjgl3ifyVersion = findEnabledLwjgl3ifyVersion(mods)
                 patchLwjgl3ifyIfNeeded(version, mods)
@@ -97,9 +109,15 @@ class PrepareRun(
         }
     }
 
-    /** 清单构建完成后，父版本清单的路径才能确定 */
-    fun onManifestBuilt(manifest: GameManifest) {
-        val parent = manifest.inheritsFrom
+    /**
+     * 清单构建完成后确定父版本清单的路径
+     *
+     * 必须从**原始**版本 JSON 里读 inheritsFrom：合并后的清单继承的是原版清单对象，
+     * 它的 inheritsFrom 恒为 null，那样父版本清单就完全落在指纹之外，
+     * 改动原版清单将无法让缓存失效。
+     */
+    fun onManifestBuilt() {
+        val parent = readInheritsFrom()
         parentVersionJsonPath = if (parent.isNullOrBlank()) {
             null
         } else {
@@ -107,19 +125,60 @@ class PrepareRun(
         }
     }
 
-    /** 准备完全成功后记录状态；只有走到这里才会写，失败与取消都不会留下有效状态 */
-    fun recordPrepared(verifiedFiles: List<File>) {
+    private fun readInheritsFrom(): String? = runCatching {
+        val raw = File(version.getVersionPath(), "${version.getVersionName()}.json")
+        if (!raw.isFile) return null
+        JsonParser.parseString(raw.readText())
+            .asJsonObject
+            .get("inheritsFrom")
+            ?.takeIf { it.isJsonPrimitive }
+            ?.asString
+    }.getOrElse { e ->
+        Logger.warning(TAG, "Cannot read inheritsFrom from the version JSON", e)
+        null
+    }
+
+    /** 准备完全成功后记录状态；只有走到这里才会写，失败或取消都不会留下有效状态 */
+    fun recordPrepared(verifiedFiles: List<File>, launchManifest: String) {
         if (!evaluated) {
             Logger.warning(TAG, "Preparation finished without being evaluated, not recording the prepared state")
             return
         }
+        val touchController = touchControllerMod ?: false
         PrepareCache.record(
             version = version,
             parentVersionJsonPath = parentVersionJsonPath,
             modsDir = modsDir,
-            touchControllerMod = touchControllerMod,
+            touchControllerMod = touchController,
             lwjgl3ifyVersion = lwjgl3ifyVersion,
-            verifiedFiles = verifiedFiles
+            verifiedFiles = verifiedFiles,
+            launchManifest = launchManifest
         )
+    }
+
+    /** 记录本次算出的合并清单，供下一次命中时直接复用 */
+    fun storeManifest(text: String) {
+        writeCachedManifest(text)
+    }
+
+    private fun cachedManifestFile() =
+        File(PrepareCache.stateDir(version), PreparedStateStore.MANIFEST_FILE)
+
+    private fun readCachedManifest(): String? = runCatching {
+        cachedManifestFile().takeIf { it.isFile && it.length() in 1..MAX_CACHED_MANIFEST_BYTES }
+            ?.readText()
+    }.getOrNull()
+
+    private fun writeCachedManifest(text: String) {
+        if (text.length > MAX_CACHED_MANIFEST_BYTES) {
+            Logger.info(TAG, "The merged manifest is too large to cache, rebuilding it every launch")
+            return
+        }
+        runCatching { PreparedStateStore.writeAtomically(cachedManifestFile(), text) }
+    }
+
+    private companion object {
+        /** 合并清单的合理上限，防止异常大的清单被写进缓存 */
+        const val MAX_CACHED_MANIFEST_BYTES = 8L * 1024 * 1024
     }
 }

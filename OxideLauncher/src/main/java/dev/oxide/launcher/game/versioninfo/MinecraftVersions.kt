@@ -42,6 +42,9 @@ private const val TAG = "MinecraftVersions"
 object MinecraftVersions {
     private var manifest: VersionManifest? = null
 
+    /** APK 内补充版本表的解析结果，进程内只解析一次 */
+    private var unlistVersions: List<VersionManifest.Version>? = null
+
     private val _allVersions = MutableStateFlow<List<MinecraftVersion>>(emptyList())
     val allVersions = _allVersions.asStateFlow()
 
@@ -73,7 +76,8 @@ object MinecraftVersions {
         return withContext(Dispatchers.IO) {
             val localManifestFile = PathManager.FILE_MINECRAFT_VERSIONS
             val isOutdated = !localManifestFile.exists() || !localManifestFile.isFile ||
-                    //一天更新一次版本信息列表
+                    //版本信息列表每天更新一次；这条网络请求就发生在启动的关键路径上，
+                    //所以宁可让"新版本出现在选择器里"晚一天，也不要在按下播放时卡住
                     localManifestFile.lastModified() + TimeUnit.DAYS.toMillis(1) < System.currentTimeMillis()
 
             val newManifest = if (force || isOutdated) {
@@ -90,7 +94,13 @@ object MinecraftVersions {
             }
 
             val newManifest0 = newManifest ?: throw IllegalStateException("Version manifest is null after all attempts")
-            mergeUnlistVersions(newManifest0) ?: newManifest0
+            unlistVersions?.let { cachedUnlist ->
+                // APK 内的补充版本表随应用分发，不会变化，没必要每次冷启动都重新解析并排序
+                val merged = newManifest0.versions.toMutableList()
+                merged.addAll(cachedUnlist)
+                merged.sortWith { a, b -> b.releaseTime.compareTo(a.releaseTime) }
+                newManifest0.copy(versions = merged.toList())
+            } ?: (mergeUnlistVersions(newManifest0) ?: newManifest0)
         }.also { newManifest ->
             manifest = newManifest
         }
@@ -117,14 +127,15 @@ object MinecraftVersions {
         currentManifest: VersionManifest
     ): VersionManifest? {
         return withContext(Dispatchers.IO) {
-            MinecraftVersions::class.java.getResourceAsStream("/assets/game/unlist_versions.json")?.use { input ->
-                input.readString()
-            }?.let { unlistVersionJson ->
-                GSON.fromJson<List<VersionManifest.Version>>(
-                    unlistVersionJson,
-                    object : TypeToken<List<VersionManifest.Version>>() {}.type
-                )
-            }?.let { unlistVersions ->
+            (unlistVersions ?: MinecraftVersions::class.java
+                .getResourceAsStream("/assets/game/unlist_versions.json")?.use { input -> input.readString() }
+                ?.let { unlistVersionJson ->
+                    GSON.fromJson<List<VersionManifest.Version>>(
+                        unlistVersionJson,
+                        object : TypeToken<List<VersionManifest.Version>>() {}.type
+                    )
+                }?.also { unlistVersions = it })
+                ?.let { unlistVersions ->
                 val versions = currentManifest.versions.toMutableList()
                 versions.addAll(unlistVersions)
                 versions.sortWith { version, other ->

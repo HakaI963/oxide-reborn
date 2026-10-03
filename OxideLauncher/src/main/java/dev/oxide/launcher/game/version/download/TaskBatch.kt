@@ -32,8 +32,15 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "TaskBatch"
 
-/** 本地已存在文件校验的并发度 */
-private const val LOCAL_VERIFY_PARALLELISM = 4
+/**
+ * 本地已存在文件校验的并发度
+ *
+ * 命中准备状态缓存之后，这里剩下的全部工作就是 stat，所以瓶颈完全在 I/O 上。
+ * 默认的游戏目录在外部存储上，经由 FUSE，每次 stat 都要一次往返，因此并发度直接决定耗时。
+ * 上限取 8：再多也只会让 FUSE 守护进程排队，不会更快。
+ */
+private val LOCAL_VERIFY_PARALLELISM =
+    minOf(8, maxOf(4, Runtime.getRuntime().availableProcessors()))
 
 /**
  * 把一批 [DownloadTask] 交给下载引擎执行的统一入口：
