@@ -1803,8 +1803,9 @@ private fun OxideModInstanceStep(
 
     val iconLauncher = rememberLauncherForActivityResult(
         contract = MediaPickerContract(allowImages = true, allowVideos = false, allowMultiple = false),
-    ) { uri ->
-        uri?.let { picked -> iconViewModel.import(context, picked, iconFile) }
+    ) { uris ->
+        // The picker always hands back a list, even with allowMultiple = false.
+        uris.firstOrNull()?.let { picked -> iconViewModel.import(context, picked, iconFile) }
     }
 
     Column(
