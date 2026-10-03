@@ -27,5 +27,6 @@ class Converters {
 
     @TypeConverter
     fun toSkinModelType(value: String): SkinModelType =
-        enumValueOf(value)
+        // 数据库里出现未知值时不能让整个账号列表读取失败
+        runCatching { SkinModelType.valueOf(value) }.getOrDefault(SkinModelType.NONE)
 }

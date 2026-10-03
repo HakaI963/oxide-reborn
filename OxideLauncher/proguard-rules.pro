@@ -53,6 +53,10 @@
 -keep class dev.oxide.launcher.game.input.CriticalNativeTest {
     *;
 }
+// input_bridge_v3.c 中有 Java_dev_oxide_launcher_game_sdl_SdlBridge_* 符号
+-keep class dev.oxide.launcher.game.sdl.SdlBridge {
+    *;
+}
 
 # Libraries
 -keep class com.github.steveice10.opennbt.** { *; }

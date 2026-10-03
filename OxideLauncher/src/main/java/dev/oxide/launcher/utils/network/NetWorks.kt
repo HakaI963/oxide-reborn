@@ -21,6 +21,8 @@ package dev.oxide.launcher.utils.network
 import dev.oxide.launcher.path.GLOBAL_CLIENT
 import dev.oxide.launcher.path.GLOBAL_JSON
 import dev.oxide.launcher.utils.logging.Logger
+import dev.oxide.launcher.utils.logging.redactedMessage
+import dev.oxide.launcher.utils.logging.redactSensitive
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.request.forms.submitForm
@@ -123,11 +125,11 @@ suspend fun <T> withRetry(
             return block()
         } catch (e: CancellationException) {
             //协程被取消时不重试，直接抛出
-            Logger.debug(TAG, "$logTag: Cancelled: ${e.message}")
+            Logger.debug(TAG, "$logTag: Cancelled: ${e.redactedMessage()}")
             throw e
         } catch (e: Exception) {
             // 部分异常（如 UnresolvedAddressException）message 为 null，需要输出异常类型以便诊断
-            Logger.debug(TAG, "$logTag: Attempt ${retryCount + 1} failed: ${e::class.simpleName}: ${e.message}")
+            Logger.debug(TAG, "$logTag: Attempt ${retryCount + 1} failed: ${e.redactedMessage()}")
             lastError = e
             if (canRetry(e)) {
                 delay(currentDelay.milliseconds)

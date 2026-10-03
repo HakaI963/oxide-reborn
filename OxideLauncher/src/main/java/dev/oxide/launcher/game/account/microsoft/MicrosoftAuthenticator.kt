@@ -47,6 +47,8 @@ import dev.oxide.launcher.game.account.yggdrasil.getPlayerProfile
 import dev.oxide.launcher.game.account.yggdrasil.getSkinModel
 import dev.oxide.launcher.path.GLOBAL_CLIENT
 import dev.oxide.launcher.utils.logging.Logger
+import dev.oxide.launcher.utils.logging.redactedMessage
+import dev.oxide.launcher.utils.logging.redactSensitive
 import dev.oxide.launcher.utils.network.httpPostJson
 import dev.oxide.launcher.utils.network.safeBodyAsJson
 import dev.oxide.launcher.utils.network.submitForm
@@ -167,6 +169,7 @@ suspend fun getTokenResponse(
                     Logger.debug(TAG, "Slowing down polling to ${pollingInterval}ms")
                 }
                 else -> {
+                    // 不直接打印异常：Ktor 的异常 message 里带有令牌端点的响应体
                     Logger.error(TAG, "Token endpoint rejected the polling request: error = $error", e)
                     throw e
                 }
@@ -184,7 +187,10 @@ suspend fun getTokenResponse(
                 Logger.error(TAG, "Polling failed $consecutiveFailures time(s) in a row, giving up", e)
                 throw e
             }
-            Logger.warning(TAG, "Polling failed, will retry in ${pollingInterval}ms: ${e::class.simpleName}: ${e.message}")
+            Logger.warning(
+                TAG,
+                "Polling failed, will retry in ${pollingInterval}ms: ${e.redactedMessage()}"
+            )
         }
 
         if (checkIsReallyCancelled()) {
@@ -373,7 +379,8 @@ private suspend fun authenticateXSTS(
                 else -> {
                     Logger.error(
                         TAG,
-                        "XSTS authentication failed: status = ${e.response.status}, XErr = $xErr, message = ${errorBody?.get("Message").text()}"
+                        "XSTS authentication failed: status = ${e.response.status}, XErr = $xErr, " +
+                                "message = ${redactSensitive(errorBody?.get("Message")?.text())}"
                     )
                     throw e
                 }

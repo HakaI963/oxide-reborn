@@ -82,7 +82,9 @@ class OfflineYggdrasilServer(
     private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
 
     fun start() {
-        server = embeddedServer(CIO, port = port) {
+        // 必须只监听回环地址：不指定 host 时 Ktor CIO 默认绑定 0.0.0.0，
+        // 那样同一台设备上的其它应用或同一局域网都可以匿名读取账号名、UUID、皮肤与披风。
+        server = embeddedServer(CIO, host = "127.0.0.1", port = port) {
             install(ContentNegotiation) {
                 json(Json {
                     prettyPrint = true

@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older that API 31
+   Backup rules.
+
+   The launcher database holds Microsoft access tokens, the renewable Microsoft refresh token
+   and the plaintext password of any third-party (authlib-injector) account. Those must never
+   leave the device through cloud backup or device transfer, so they are excluded explicitly
+   instead of relying on the platform default, which would include them.
+
+   Note: this file is ignored on devices older than API 31.
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude
+        domain="database"
+        path="launcher_data.db" />
+    <exclude
+        domain="file"
+        path="settings.json" />
 </full-backup-content>

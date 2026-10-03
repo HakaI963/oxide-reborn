@@ -268,8 +268,9 @@ object AccountsManager {
     fun deleteAccount(account: Account) {
         scope.launch {
             accountDao.deleteAccount(account)
-            val skinFile = account.getSkinFile()
-            FileUtils.deleteQuietly(skinFile)
+            //皮肤与披风都要删除，否则账号目录里会残留该账号的贴图文件
+            FileUtils.deleteQuietly(account.getSkinFile())
+            FileUtils.deleteQuietly(account.getCapeFile())
             suspendReloadAccounts()
         }
     }

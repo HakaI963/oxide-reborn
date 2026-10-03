@@ -61,6 +61,15 @@ data class Account(
     var accountType: String? = null,
     var skinModelType: SkinModelType = SkinModelType.NONE
 ): Parcelable {
+    /**
+     * 刻意覆盖 data class 自动生成的 toString()：
+     * 账号对象持有微软访问令牌、刷新令牌与第三方账号密码，
+     * 一旦被日志、异常信息或崩溃报告插值就会直接泄密。
+     */
+    override fun toString(): String =
+        "Account(uniqueUUID=$uniqueUUID, username='$username', profileId='$profileId', " +
+                "accountType=$accountType, otherBaseUrl=$otherBaseUrl)"
+
     val hasSkinFile: Boolean
         get() = getSkinFile().exists()
 

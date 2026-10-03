@@ -119,10 +119,12 @@ import dev.oxide.launcher.game.account.AccountType
 import dev.oxide.launcher.game.account.AccountsManager
 import dev.oxide.launcher.game.account.accountErrorText
 import dev.oxide.launcher.game.account.accountUUID
+import dev.oxide.launcher.game.account.auth_server.ELY_BY_AUTH_SERVER_URL
 import dev.oxide.launcher.game.account.auth_server.data.AuthServer
 import dev.oxide.launcher.game.account.auth_server.models.AuthResult
 import dev.oxide.launcher.game.account.getAccountTypeName
 import dev.oxide.launcher.game.account.getUUIDFromUserName
+import dev.oxide.launcher.game.account.isElyByAccount
 import dev.oxide.launcher.game.account.isLocalAccount
 import dev.oxide.launcher.game.account.isMicrosoftAccount
 import dev.oxide.launcher.game.account.isSkinChangeAllowed
@@ -396,6 +398,18 @@ fun AccountItem(
     }
 }
 
+/**
+ * Ely.by（authlib-injector）认证服务器
+ *
+ * 该地址由 Ely.by 官方文档公开提供，用于让第三方启动器一键添加该服务器：
+ * https://docs.ely.by/en/authlib-injector.html
+ */
+val ELY_BY_AUTH_SERVER = AuthServer(
+    baseUrl = ELY_BY_AUTH_SERVER_URL,
+    serverName = "Ely.by",
+    register = "https://account.ely.by/register"
+)
+
 @Composable
 fun LoginMenuDialog(
     onDismissRequest: () -> Unit,
@@ -482,6 +496,19 @@ fun LoginMenuDialog(
                                     showArrow = true,
                                     onClick = {
                                         onAddAuthServer()
+                                        onDismissRequest()
+                                    }
+                                )
+                            }
+
+                            //Ely.by 公开提供 authlib-injector 端点，可以一键添加
+                            item {
+                                InfoLayoutTextItem(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    title = stringResource(R.string.account_add_server_quick_ely_by),
+                                    showArrow = true,
+                                    onClick = {
+                                        onAuthServerLogin(ELY_BY_AUTH_SERVER)
                                         onDismissRequest()
                                     }
                                 )
@@ -1291,7 +1318,8 @@ fun ChangeSkinDialog(
     onResetSkin: () -> Unit,
     onApplySkin: (File, SkinModelType) -> Unit,
     onApplyCape: (PlayerProfile.Cape) -> Unit,
-    onFetchCapes: () -> Unit
+    onFetchCapes: () -> Unit,
+    onImportLocalCape: (Uri) -> Unit = {}
 ) {
     val context = LocalContext.current
     val playerSkin = remember { PlayerSkin(context) }
@@ -1326,6 +1354,11 @@ fun ChangeSkinDialog(
     val skinPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             uri?.let(onSkinPicked)
+        }
+
+    val localCapePicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            uri?.let(onImportLocalCape)
         }
 
     /**
@@ -1542,6 +1575,27 @@ fun ChangeSkinDialog(
                                         showCapeSelector = true
                                     },
                                     enabled = !isFetchingCapes
+                                )
+                            }
+
+                            //本地离线 Yggdrasil 服务器同样能提供披风，
+                            //所以本地账号与 Ely.by 账号可以直接导入 64x32 的披风文件
+                            if (!account.isMicrosoftAccount() &&
+                                (account.isLocalAccount() || account.isElyByAccount())
+                            ) {
+                                InfoLayoutTextItem(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    title = stringResource(R.string.account_change_cape_import),
+                                    icon = {
+                                        Icon(
+                                            modifier = Modifier.size(22.dp),
+                                            painter = painterResource(R.drawable.ic_upload),
+                                            contentDescription = null
+                                        )
+                                    },
+                                    onClick = {
+                                        localCapePicker.launch(arrayOf("image/png"))
+                                    }
                                 )
                             }
 

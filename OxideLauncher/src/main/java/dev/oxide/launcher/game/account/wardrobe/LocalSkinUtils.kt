@@ -81,6 +81,18 @@ fun getLocalUUIDWithSkinModel(userName: String, skinModelType: SkinModelType): S
 /**
  * 检查皮肤像素合法性，Minecraft仅支持使用64x64或64x32像素的皮肤
  */
+/**
+ * 检查披风像素合法性，Minecraft 披风标准为 64x32 像素
+ */
+suspend fun validateCapeFile(capeFile: File): Boolean {
+    return withContext(Dispatchers.IO) {
+        val options = BitmapFactory.Options()
+        options.inJustDecodeBounds = true
+        BitmapFactory.decodeFile(capeFile.absolutePath, options)
+        options.outWidth == 64 && options.outHeight == 32
+    }
+}
+
 suspend fun validateSkinFile(skinFile: File): Boolean {
     return withContext(Dispatchers.IO) {
         val options = BitmapFactory.Options()

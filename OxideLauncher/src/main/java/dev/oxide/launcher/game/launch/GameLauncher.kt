@@ -82,6 +82,8 @@ class GameLauncher(
 ) : Launcher(onExit, openPath) {
     private lateinit var gameManifest: GameManifest
     private var jnaDir: File? = null
+    override val redactedAccount: Account get() = usingAccount
+
     private val offlineServer = OfflineYggdrasilServer(0)
 
     private val version = config.version

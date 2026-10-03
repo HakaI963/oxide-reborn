@@ -45,6 +45,7 @@ import dev.oxide.launcher.game.account.wardrobe.SkinModelType
 import dev.oxide.launcher.game.account.wardrobe.capeLocalRes
 import dev.oxide.launcher.game.account.wardrobe.getLocalUUIDWithSkinModel
 import dev.oxide.launcher.game.account.wardrobe.isSlimModel
+import dev.oxide.launcher.game.account.wardrobe.validateCapeFile
 import dev.oxide.launcher.game.account.wardrobe.validateSkinFile
 import dev.oxide.launcher.game.account.yggdrasil.PlayerProfile
 import dev.oxide.launcher.game.account.yggdrasil.cacheAllCapes
@@ -109,6 +110,9 @@ sealed interface AccountManageIntent {
     data class UpdatePendingCapeData(val capeState: ChangeCape) :
         AccountManageIntent
     data class OnSkinPicked(val uri: Uri) : AccountManageIntent
+
+    /** 为使用本地离线 Yggdrasil 服务器的账号导入本地披风文件 */
+    data class ImportLocalCape(val account: Account, val uri: Uri) : AccountManageIntent
     data object ResetAccountSkinDialogState : AccountManageIntent
 
 
@@ -341,6 +345,7 @@ class AccountManageViewModel @AssistedInject constructor(
             }
 
             is AccountManageIntent.OnSkinPicked -> onSkinPicked(intent)
+            is AccountManageIntent.ImportLocalCape -> importLocalCape(intent.account, intent.uri)
             is AccountManageIntent.ResetAccountSkinDialogState -> {
                 _accountSkinDialogState.update { AccountSkinDialogState() }
             }
@@ -415,6 +420,46 @@ class AccountManageViewModel @AssistedInject constructor(
 
             _accountSkinDialogState.update {
                 it.copy(importingSkin = false)
+            }
+        }
+    }
+
+    /**
+     * 导入本地披风文件
+     *
+     * 本地离线账号与 Ely.by 账号的披风保存在本地，游戏内通过本地离线 Yggdrasil 服务器提供，
+     * 因此这里只校验 Minecraft 规定的 64x32 尺寸后写入账号的披风文件。
+     */
+    private fun importLocalCape(account: Account, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cacheFile = File(
+                PathManager.DIR_IMAGE_CACHE,
+                "cape_pick_${UUID.randomUUID()}"
+            )
+
+            runCatching {
+                context.copyLocalFile(uri, cacheFile)
+                validateCapeFile(cacheFile)
+            }.onSuccess { isValid ->
+                if (!isValid) {
+                    emitError(
+                        androidText(R.string.generic_warning),
+                        androidText(R.string.account_change_cape_invalid)
+                    )
+                } else {
+                    val target = account.getCapeFile()
+                    target.parentFile?.mkdirs()
+                    cacheFile.copyTo(target, overwrite = true)
+                    FileUtils.deleteQuietly(cacheFile)
+                    AccountsManager.refreshWardrobe()
+                    emitToast(androidText(R.string.account_change_cape_imported))
+                }
+            }.onFailure { th ->
+                FileUtils.deleteQuietly(cacheFile)
+                emitError(
+                    androidText(R.string.account_change_cape_failed_to_import),
+                    androidText(th.getMessageOrToString())
+                )
             }
         }
     }

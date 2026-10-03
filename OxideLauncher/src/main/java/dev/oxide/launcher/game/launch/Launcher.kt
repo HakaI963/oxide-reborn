@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.game.launch
 
+import dev.oxide.launcher.game.account.Account
 import android.content.Context
 import android.os.Build
 import android.os.LocaleList
@@ -64,6 +65,26 @@ abstract class Launcher(
     val onExit: (code: Int, isSignal: Boolean) -> Unit,
     val openPath: (folder: File) -> Unit
 ) {
+    /** 当前启动使用的账号，仅用于日志脱敏；不使用账号的子类返回 null */
+    protected open val redactedAccount: Account? = null
+
+    /**
+     * 需要在日志中隐藏的敏感参数值，按需计算（账号在对象构造完成后才可用）
+     *
+     * 游戏日志（latest_game.log）可以通过「分享日志」上传到第三方公开平台，
+     * 因此这里必须按“值”而不是按“参数名”来脱敏：不同版本（尤其是 1.6.4 及更早，
+     * 使用 `--session`）甚至第三方模组组装的清单都可能使用不同的占位符名称。
+     */
+    private fun redactedArgValues(): Set<String> = buildSet {
+        val account = redactedAccount ?: return@buildSet
+        add(account.accessToken)
+        add(account.refreshToken)
+        add(account.clientToken)
+        account.xUid?.let { add(it) }
+        //认证服务器地址可以识别用户所属服务器（Nide8 还包含通行证 ID）
+        account.otherBaseUrl?.let { add(it) }
+    }.filterTo(LinkedHashSet()) { it.isNotEmpty() && it.length >= 8 }
+
     lateinit var runtime: Runtime
         protected set
 
@@ -186,6 +207,7 @@ abstract class Launcher(
         args.add(0, "$runtimeHome/bin/java")
 
         LoggerBridge.appendTitle("JVM Args")
+        val redactedValues = redactedArgValues()
         val iterator = args.iterator()
         while (iterator.hasNext()) {
             val arg = iterator.next()
@@ -195,7 +217,10 @@ abstract class Launcher(
                 LoggerBridge.appendInfo("********************")
                 continue
             }
-            LoggerBridge.appendInfo(arg)
+            //即使参数名不是 --accessToken，只要其值命中敏感集合也一律隐藏
+            LoggerBridge.appendInfo(
+                if (arg in redactedValues) "********************" else arg
+            )
         }
 
         OxideBridge.setupExitMethod(context.applicationContext)

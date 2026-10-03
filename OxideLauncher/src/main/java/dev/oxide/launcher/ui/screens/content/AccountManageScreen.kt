@@ -763,6 +763,9 @@ private fun AccountSkinOperation(
                 },
                 onApplyCape = { cape ->
                     actions.onIntent(AccountManageIntent.ApplyMicrosoftCape(account, cape))
+                },
+                onImportLocalCape = { uri ->
+                    actions.onIntent(AccountManageIntent.ImportLocalCape(account, uri))
                 }
             )
         }

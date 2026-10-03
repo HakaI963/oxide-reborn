@@ -47,6 +47,7 @@ import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.screens.content.elements.MicrosoftLoginOperation
 import dev.oxide.launcher.utils.copyText
 import dev.oxide.launcher.utils.logging.Logger
+import dev.oxide.launcher.utils.logging.redactSensitive
 import dev.oxide.launcher.utils.network.toLocal
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import io.ktor.client.plugins.HttpRequestTimeoutException
@@ -84,12 +85,21 @@ fun Account?.isNoLoginRequired(): Boolean {
 }
 
 /**
+ * 比较两个认证服务器地址，忽略末尾斜杠
+ *
+ * 认证服务器地址在 [tryGetFullServerUrl] 中会被规范化成带结尾斜杠的形式，
+ * 而内置的 [ELY_BY_AUTH_SERVER_URL] 常量不带斜杠，直接比较永远不相等。
+ */
+private fun sameBaseUrl(a: String?, b: String): Boolean =
+    a?.trimEnd('/') == b.trimEnd('/')
+
+/**
  * 是否为 Ely.by（authlib-injector）账号
  *
  * Ely.by 账号的披风保存在本地，游戏内通过本地离线服务器注入，因此需要单独识别。
  */
 fun Account.isElyByAccount(): Boolean {
-    return isAuthServerAccount() && otherBaseUrl == ELY_BY_AUTH_SERVER_URL
+    return isAuthServerAccount() && sameBaseUrl(otherBaseUrl, ELY_BY_AUTH_SERVER_URL)
 }
 
 fun Account.isSkinChangeAllowed(): Boolean {
@@ -286,6 +296,8 @@ suspend fun Account.refreshMicrosoft(
         this.username = newAcc.username
         this.refreshToken = newAcc.refreshToken
         this.xUid = newAcc.xUid
+        //必须一起更新过期时间，否则每次启动都会被判定为令牌已过期而反复刷新
+        this.expiresAt = newAcc.expiresAt
     }
 }
 
@@ -325,11 +337,15 @@ fun accountErrorText(th: Throwable): AndroidStringText = when (th) {
     is UnknownHostException, is UnresolvedAddressException -> androidText(R.string.error_network_unreachable)
     is ConnectException -> androidText(R.string.error_connection_failed)
     is KtorResponseException -> th.toLocal()
-    is ResponseException -> androidText(th.responseMessage)
+    // 认证服务器返回的内容由服务端控制：脱敏并限制长度后再展示
+    is ResponseException -> androidText(redactSensitive(th.responseMessage, maxLength = 160))
     else -> {
         Logger.error(TAG, "An unknown exception was caught!", th)
         androidText(
-            th.localizedMessage ?: th.message ?: th::class.qualifiedName ?: "Unknown error"
+            redactSensitive(
+                th.localizedMessage ?: th.message ?: th::class.qualifiedName ?: "Unknown error",
+                maxLength = 160
+            )
         )
     }
 }
