@@ -140,8 +140,11 @@ class OfflineAccountTest {
     @Test
     fun dashlessAndDashedFormsDescribeTheSameAccount() {
         val dashed = "00000000-0000-4000-a000-000000000001"
-        // accountUUID(String) parses a bare 32-character id, accountUUID(UUID) renders it back
-        assertEquals(dashed, accountUUID(accountUUID(dashed.replace("-", ""))))
-        assertEquals(dashed.replace("-", ""), accountUUID(accountUUID(dashed.replace("-", ""))))
+        val dashless = dashed.replace("-", "")
+
+        // accountUUID(String) parses the bare 32-character form, accountUUID(UUID) renders it back
+        val uuid = accountUUID(dashless)
+        assertEquals(dashed, uuid.toString())
+        assertEquals(dashless, accountUUID(uuid))
     }
 }
