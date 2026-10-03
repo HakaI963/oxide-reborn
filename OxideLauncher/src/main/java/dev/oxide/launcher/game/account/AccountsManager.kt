@@ -25,10 +25,8 @@ import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.database.AppDatabase
 import dev.oxide.launcher.game.account.auth_server.data.AuthServer
 import dev.oxide.launcher.game.account.auth_server.data.AuthServerDao
-import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.androidText
-import dev.oxide.launcher.utils.isInGreaterChina
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.network.isNetworkAvailable
 import kotlinx.coroutines.CoroutineScope
@@ -38,7 +36,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.apache.commons.io.FileUtils
-import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -63,9 +60,6 @@ object AccountsManager {
     private val _refreshWardrobe = MutableStateFlow(false)
     /** 控制刷新所有账号衣橱 */
     val refreshWardrobe = _refreshWardrobe.asStateFlow()
-
-    private val _isOffline = MutableStateFlow(false)
-    val isOffline = _isOffline
 
     //本次启动器会话内已通过服务端校验的账号
     private val sessionValidatedAccounts: MutableSet<String> = ConcurrentHashMap.newKeySet()
@@ -234,21 +228,14 @@ object AccountsManager {
     }
 
     /**
-     * 刷新当前账号，同时刷新非中国大陆地区的正版状态
+     * 刷新当前账号
+     *
+     * 上游曾在这里按地区判定“非正版状态”，一旦命中就把当前账号置空，导致非中国大陆地区、
+     * 且没有微软账号的用户完全无法使用离线/本地账号。Oxide Launcher 不做这种限制：离线账号
+     * 与第三方认证账号都是合法可用的账号类型，不应按地区或是否拥有微软账号被禁用。
      */
     private fun refreshCurrentAccountState() {
-        val currentAccount = getCurrentAccount()
-        val isOffline = checkLimit()
-        _currentAccountFlow.update {
-            //若处于非正版状态，不允许使用账号
-            if (isOffline) null else currentAccount
-        }
-        _isOffline.update { isOffline }
-    }
-
-    private fun checkLimit(): Boolean {
-        val circumventLimit = File(PathManager.DIR_FILES_EXTERNAL, "circumventLimit")
-        return !circumventLimit.exists() && !isInGreaterChina() && !hasMicrosoftAccount()
+        _currentAccountFlow.update { getCurrentAccount() }
     }
 
     /**
@@ -310,19 +297,19 @@ object AccountsManager {
         }
     }
 
-    /**
-     * 是否已登录过微软账号
-     */
-    fun hasMicrosoftAccount(): Boolean = _accounts.any { it.isMicrosoftAccount() }
 
     /**
      * 通过账号的profileId读取账号
+     */
+    /**
+     * 通过账号的 profileId 读取账号
+     * @param accountType 为 null 时不限制账号类型
      */
     fun loadFromProfileID(
         profileId: String,
         accountType: String? = null
     ): Account? =
-        _accounts.find { it.profileId == profileId && it.accountType == accountType }
+        _accounts.find { it.profileId == profileId && (accountType == null || it.accountType == accountType) }
 
     /**
      * 账号是否存在

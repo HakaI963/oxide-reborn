@@ -27,6 +27,7 @@ import dev.oxide.launcher.context.COPY_LABEL_DEVICE_CODE
 import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.game.account.auth_server.AuthServerHelper
+import dev.oxide.launcher.game.account.auth_server.ELY_BY_AUTH_SERVER_URL
 import dev.oxide.launcher.game.account.auth_server.ResponseException
 import dev.oxide.launcher.game.account.auth_server.data.AuthServer
 import dev.oxide.launcher.game.account.auth_server.getAuthServeInfo
@@ -82,8 +83,17 @@ fun Account?.isNoLoginRequired(): Boolean {
     return this == null || isLocalAccount()
 }
 
+/**
+ * 是否为 Ely.by（authlib-injector）账号
+ *
+ * Ely.by 账号的披风保存在本地，游戏内通过本地离线服务器注入，因此需要单独识别。
+ */
+fun Account.isElyByAccount(): Boolean {
+    return isAuthServerAccount() && otherBaseUrl == ELY_BY_AUTH_SERVER_URL
+}
+
 fun Account.isSkinChangeAllowed(): Boolean {
-    return isMicrosoftAccount() || isLocalAccount()
+    return isMicrosoftAccount() || isLocalAccount() || isElyByAccount()
 }
 
 fun Account.accountTypePriority(): Int {
@@ -151,7 +161,11 @@ fun microsoftLogin(
                 updateMessage = task::updateMessage,
             )
             task.updateMessage(androidText(R.string.account_logging_in_saving))
-            account.downloadYggdrasil()
+            // The login already succeeded at this point, so a failing skin/cape download must not
+            // throw away the account that was just authenticated.
+            runCatching { account.downloadYggdrasil() }.onFailure { e ->
+                Logger.warning(TAG, "Logged in, but the skin or cape could not be downloaded", e)
+            }
             AccountsManager.saveAccount(account)
             AccountsManager.markSessionValidated(account)
             Logger.info(TAG, "Microsoft account login successful: ${account.username}")

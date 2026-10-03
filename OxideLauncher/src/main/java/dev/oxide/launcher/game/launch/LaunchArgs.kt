@@ -24,6 +24,7 @@ import dev.oxide.launcher.BuildKeys
 import dev.oxide.launcher.bridge.LoggerBridge
 import dev.oxide.launcher.game.account.Account
 import dev.oxide.launcher.game.account.isAuthServerAccount
+import dev.oxide.launcher.game.account.isElyByAccount
 import dev.oxide.launcher.game.account.isLocalAccount
 import dev.oxide.launcher.game.account.offline.OfflineYggdrasilServer
 import dev.oxide.launcher.game.multirt.Runtime
@@ -184,8 +185,8 @@ class LaunchArgs(
         val argsList: MutableList<String> = ArrayList()
 
         if (account.isLocalAccount()) {
-            if (account.hasSkinFile) {
-                //该离线账号拥有本地皮肤，启用离线yggdrasil服务器
+            if (account.hasSkinFile || account.getCapeFile().exists()) {
+                //该离线账号拥有本地皮肤或披风，启用离线yggdrasil服务器
                 offlineServer.start()
                 offlineServer.addCharacter(account)
                 offlineServer.getPort()?.let { port ->
@@ -207,6 +208,23 @@ class LaunchArgs(
             if (account.otherBaseUrl!!.contains("auth.mc-user.com")) {
                 argsList.add("-javaagent:${LibPath.NIDE_8_AUTH.absolutePath}=${account.otherBaseUrl!!.replace("https://auth.mc-user.com:233/", "")}")
                 argsList.add("-Dnide8auth.client=true")
+            } else if (account.isElyByAccount() && account.hasSkinFile && account.getCapeFile().exists()) {
+                // Ely.by does not serve the locally selected cape, so serve it ourselves and point
+                // the authlib-injector at the local server for this session only.
+                offlineServer.start()
+                offlineServer.addCharacter(account)
+                offlineServer.getPort()?.let { port ->
+                    val msg = "Using offline Yggdrasil server with an Ely.by cape on port $port"
+                    LoggerBridge.append(msg)
+                    Logger.info(TAG, msg)
+                    argsList.add("-javaagent:${LibPath.AUTHLIB_INJECTOR.absolutePath}=http://localhost:$port")
+                    argsList.add("-Dauthlibinjector.side=client")
+                } ?: run {
+                    val msg = "Failed to start the offline Yggdrasil server for the Ely.by cape"
+                    LoggerBridge.append(msg)
+                    Logger.warning(TAG, msg)
+                    offlineServer.stop()
+                }
             } else {
                 argsList.add("-javaagent:${LibPath.AUTHLIB_INJECTOR.absolutePath}=${account.otherBaseUrl}")
                 argsList.add("-Dauthlibinjector.side=client")

@@ -445,25 +445,6 @@ fun isChineseLocale(locale: Locale): Boolean {
     )
 }
 
-fun isInGreaterChina(): Boolean {
-    return isChinaTimeZone() && Locale.getDefault().language == "zh"
-}
-
-/**
- * 判断当前时区是否属于中国
- */
-private fun isChinaTimeZone(): Boolean {
-    return when (TimeZone.getDefault().id) {
-        "Asia/Shanghai",
-        "Asia/Chongqing",//历史遗留
-        "Asia/Hong_Kong",
-        "Asia/Macao",
-        "Asia/Taipei",
-        "Asia/Urumqi" -> true
-        else -> false
-    }
-}
-
 fun printLauncherInfo(
     println: (String) -> Unit
 ) {
