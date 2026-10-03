@@ -53,7 +53,14 @@ const val URL_PROJECT: String = "https://github.com/HakaI963/oxide-reborn"
 const val URL_PROJECT_INFO: String = "https://api.github.com/repos/HakaI963/oxide-reborn/contents/update"
 const val URL_COMMUNITY: String = "https://github.com/HakaI963/oxide-reborn/graphs/contributors"
 const val URL_WEBLATE: String = "https://github.com/HakaI963/oxide-reborn"
-const val URL_SUPPORT: String = "https://ifdian.net/a/MovTery"
+/**
+ * "支持本项目"入口
+ *
+ * 以前指向上游作者的捐赠页，那属于旧产品的创作者展示，与 Oxide 无关。
+ * 现在指向 Oxide 自己的仓库：游戏结束后的那个入口仍然有用，但点进去
+ * 看到的是本项目而不是别人。
+ */
+const val URL_SUPPORT: String = URL_PROJECT
 const val URL_EASYTIER: String = "https://easytier.cn/"
 /** 账号/认证行为所改编自的项目，仅用于满足 GPLv3 的署名要求 */
 const val URL_PLUS: String = "https://github.com/Star1xr/ZalithLauncher2Plus"
