@@ -791,13 +791,13 @@ private class OxideModAddonsViewModel(
     /** 与当前选择冲突的那些加载器 */
     fun blockedLoaders(): Set<ModLoader> = buildSet {
         val addon = currentAddon
-        if (addon.incompatibleWithOptiFine.isNotEmpty()) add(ModLoader.OPTIFINE)
-        if (addon.incompatibleWithForge.isNotEmpty()) add(ModLoader.FORGE)
-        if (addon.incompatibleWithNeoForge.isNotEmpty()) add(ModLoader.NEOFORGE)
-        if (addon.incompatibleWithFabric.isNotEmpty()) add(ModLoader.FABRIC)
-        if (addon.incompatibleWithLegacyFabric.isNotEmpty()) add(ModLoader.LEGACY_FABRIC)
-        if (addon.incompatibleWithQuilt.isNotEmpty()) add(ModLoader.QUILT)
-        if (addon.incompatibleWithCleanroom.isNotEmpty()) add(ModLoader.CLEANROOM)
+        if (addon.incompatibleWithOptiFine.value.isNotEmpty()) add(ModLoader.OPTIFINE)
+        if (addon.incompatibleWithForge.value.isNotEmpty()) add(ModLoader.FORGE)
+        if (addon.incompatibleWithNeoForge.value.isNotEmpty()) add(ModLoader.NEOFORGE)
+        if (addon.incompatibleWithFabric.value.isNotEmpty()) add(ModLoader.FABRIC)
+        if (addon.incompatibleWithLegacyFabric.value.isNotEmpty()) add(ModLoader.LEGACY_FABRIC)
+        if (addon.incompatibleWithQuilt.value.isNotEmpty()) add(ModLoader.QUILT)
+        if (addon.incompatibleWithCleanroom.value.isNotEmpty()) add(ModLoader.CLEANROOM)
     }
 
     /** 这一项当前的加载状态 */
@@ -1610,13 +1610,13 @@ private fun modSlotStatus(
 @Composable
 private fun incompatibleNames(addon: CurrentAddon, slot: OxideAddonSlot): String {
     val names: Set<ModLoader> = when (slot.loader) {
-        ModLoader.OPTIFINE -> addon.incompatibleWithOptiFine
-        ModLoader.FORGE -> addon.incompatibleWithForge
-        ModLoader.NEOFORGE -> addon.incompatibleWithNeoForge
-        ModLoader.FABRIC -> addon.incompatibleWithFabric
-        ModLoader.LEGACY_FABRIC -> addon.incompatibleWithLegacyFabric
-        ModLoader.QUILT -> addon.incompatibleWithQuilt
-        ModLoader.CLEANROOM -> addon.incompatibleWithCleanroom
+        ModLoader.OPTIFINE -> addon.incompatibleWithOptiFine.value
+        ModLoader.FORGE -> addon.incompatibleWithForge.value
+        ModLoader.NEOFORGE -> addon.incompatibleWithNeoForge.value
+        ModLoader.FABRIC -> addon.incompatibleWithFabric.value
+        ModLoader.LEGACY_FABRIC -> addon.incompatibleWithLegacyFabric.value
+        ModLoader.QUILT -> addon.incompatibleWithQuilt.value
+        ModLoader.CLEANROOM -> addon.incompatibleWithCleanroom.value
         else -> emptySet()
     }
     return names.joinToString(", ") { loader -> loader.displayName }

@@ -63,6 +63,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.times
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -756,7 +757,8 @@ fun OxideExportPage(
                 onDismiss = { confirmFolder = false },
             )
         } else {
-            when (operation) {
+            // operation 是委托属性，不能被智能转换：先绑到局部变量上再 when
+            when (val currentOperation = operation) {
                 is OxideExportOperation.Finished -> OxideSecConfirmBar(
                     metrics = metrics,
                     modifier = Modifier.padding(
@@ -781,7 +783,7 @@ fun OxideExportPage(
                     title = stringResource(R.string.versions_export_task_error_title),
                     detail = stringResource(
                         R.string.versions_export_task_error_message,
-                    ) + "\n" + exportErrorDetail(operation.throwable),
+                    ) + "\n" + exportErrorDetail(currentOperation.throwable),
                     dismissText = stringResource(R.string.generic_confirm),
                     onDismiss = { viewModel.updateOperation(OxideExportOperation.None) },
                 )

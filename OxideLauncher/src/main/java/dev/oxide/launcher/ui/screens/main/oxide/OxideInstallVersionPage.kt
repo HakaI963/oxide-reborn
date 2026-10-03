@@ -130,6 +130,7 @@ import dev.oxide.launcher.utils.getTimeAgo
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.network.isUsingMobileData
 import dev.oxide.launcher.utils.network.toLocal
+import dev.oxide.launcher.viewmodel.sendKeepScreen
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.ResponseException
 import kotlinx.coroutines.Dispatchers
@@ -659,18 +660,22 @@ private class OxideInstallAddonsViewModel : ViewModel() {
     }
 
     /** 与当前选择冲突的加载器 */
-    fun blockedLoaders(): Set<ModLoader> = buildSet {
+    fun blockedLoaders(): Set<ModLoader> {
         val addon = currentAddon
-        if (addon.incompatibleWithOptiFine.isNotEmpty()) add(ModLoader.OPTIFINE)
-        if (addon.incompatibleWithForge.isNotEmpty()) add(ModLoader.FORGE)
-        if (addon.incompatibleWithNeoForge.isNotEmpty()) add(ModLoader.NEOFORGE)
-        if (addon.incompatibleWithFabric.isNotEmpty()) add(ModLoader.FABRIC)
-        if (addon.incompatibleWithFabricAPI.isNotEmpty()) add(ModLoader.FABRIC_API)
-        if (addon.incompatibleWithLegacyFabric.isNotEmpty()) add(ModLoader.LEGACY_FABRIC)
-        if (addon.incompatibleWithLegacyFabricAPI.isNotEmpty()) add(ModLoader.LEGACY_FABRIC_API)
-        if (addon.incompatibleWithQuilt.isNotEmpty()) add(ModLoader.QUILT)
-        if (addon.incompatibleWithQuiltAPI.isNotEmpty()) add(ModLoader.QUILT_API)
-        if (addon.incompatibleWithCleanroom.isNotEmpty()) add(ModLoader.CLEANROOM)
+        return buildSet {
+            if (addon.incompatibleWithOptiFine.value.isNotEmpty()) add(ModLoader.OPTIFINE)
+            if (addon.incompatibleWithForge.value.isNotEmpty()) add(ModLoader.FORGE)
+            if (addon.incompatibleWithNeoForge.value.isNotEmpty()) add(ModLoader.NEOFORGE)
+            if (addon.incompatibleWithFabric.value.isNotEmpty()) add(ModLoader.FABRIC)
+            if (addon.incompatibleWithFabricAPI.value.isNotEmpty()) add(ModLoader.FABRIC_API)
+            if (addon.incompatibleWithLegacyFabric.value.isNotEmpty()) add(ModLoader.LEGACY_FABRIC)
+            if (addon.incompatibleWithLegacyFabricAPI.value.isNotEmpty()) {
+                add(ModLoader.LEGACY_FABRIC_API)
+            }
+            if (addon.incompatibleWithQuilt.value.isNotEmpty()) add(ModLoader.QUILT)
+            if (addon.incompatibleWithQuiltAPI.value.isNotEmpty()) add(ModLoader.QUILT_API)
+            if (addon.incompatibleWithCleanroom.value.isNotEmpty()) add(ModLoader.CLEANROOM)
+        }
     }
 
     /** 这一项当前的加载状态 */
@@ -1532,16 +1537,16 @@ private fun OxideInstallSlotRow(
 @Composable
 private fun incompatibleNames(addon: CurrentAddon, slot: OxideAddonSlot): String {
     val names: Set<ModLoader> = when (slot.loader) {
-        ModLoader.OPTIFINE -> addon.incompatibleWithOptiFine
-        ModLoader.FORGE -> addon.incompatibleWithForge
-        ModLoader.NEOFORGE -> addon.incompatibleWithNeoForge
-        ModLoader.FABRIC -> addon.incompatibleWithFabric
-        ModLoader.FABRIC_API -> addon.incompatibleWithFabricAPI
-        ModLoader.LEGACY_FABRIC -> addon.incompatibleWithLegacyFabric
-        ModLoader.LEGACY_FABRIC_API -> addon.incompatibleWithLegacyFabricAPI
-        ModLoader.QUILT -> addon.incompatibleWithQuilt
-        ModLoader.QUILT_API -> addon.incompatibleWithQuiltAPI
-        ModLoader.CLEANROOM -> addon.incompatibleWithCleanroom
+        ModLoader.OPTIFINE -> addon.incompatibleWithOptiFine.value
+        ModLoader.FORGE -> addon.incompatibleWithForge.value
+        ModLoader.NEOFORGE -> addon.incompatibleWithNeoForge.value
+        ModLoader.FABRIC -> addon.incompatibleWithFabric.value
+        ModLoader.FABRIC_API -> addon.incompatibleWithFabricAPI.value
+        ModLoader.LEGACY_FABRIC -> addon.incompatibleWithLegacyFabric.value
+        ModLoader.LEGACY_FABRIC_API -> addon.incompatibleWithLegacyFabricAPI.value
+        ModLoader.QUILT -> addon.incompatibleWithQuilt.value
+        ModLoader.QUILT_API -> addon.incompatibleWithQuiltAPI.value
+        ModLoader.CLEANROOM -> addon.incompatibleWithCleanroom.value
         else -> emptySet()
     }
     return names.joinToString(", ") { it.displayName }
@@ -2133,7 +2138,8 @@ private fun OxideTaskRow(
     task: TitledTask,
     stages: SnapshotStateMap<String, TaskStage>,
 ) {
-    val title = remember(task) { resolveAndroidString(task.title).text }
+    // resolveAndroidString 本身是 @Composable，不能放进 remember 的计算块里
+    val title = resolveAndroidString(task.title).text
     val stage = stages[task.task.id] ?: TaskStage.PREPARING
     val progress by task.task.progress.collectAsStateWithLifecycle()
     val message by task.task.message.collectAsStateWithLifecycle()

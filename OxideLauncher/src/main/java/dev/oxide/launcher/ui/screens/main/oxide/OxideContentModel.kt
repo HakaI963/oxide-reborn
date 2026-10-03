@@ -171,11 +171,17 @@ fun sortOxideContentEntries(
     sort: OxideContentSort,
     ascending: Boolean,
 ): List<OxideContentEntry> {
+    // 类型参数必须写出来：`compareBy` 只在后面那个 lambda 里用到元素类型，
+    // 而 when 分支不提供期望类型，Kotlin 无从推断 `it` 是哪一行
     val comparator = when (sort) {
-        OxideContentSort.Name -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.displayName }
-        OxideContentSort.FileName -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.fileName }
-        OxideContentSort.FileModified -> compareBy { it.modifiedAt }
-        OxideContentSort.LastPlayed -> compareBy { it.lastPlayed ?: it.modifiedAt }
+        OxideContentSort.Name ->
+            compareBy<OxideContentEntry, String>(String.CASE_INSENSITIVE_ORDER) { it.displayName }
+
+        OxideContentSort.FileName ->
+            compareBy<OxideContentEntry, String>(String.CASE_INSENSITIVE_ORDER) { it.fileName }
+
+        OxideContentSort.FileModified -> compareBy<OxideContentEntry> { it.modifiedAt }
+        OxideContentSort.LastPlayed -> compareBy<OxideContentEntry> { it.lastPlayed ?: it.modifiedAt }
     }
     return entries.sortedWith(if (ascending) comparator else comparator.reversed())
 }
