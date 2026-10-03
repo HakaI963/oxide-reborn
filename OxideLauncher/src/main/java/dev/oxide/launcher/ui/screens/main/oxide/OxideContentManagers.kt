@@ -1488,6 +1488,7 @@ private fun SaveData.toContentEntry(minecraftVersion: String): OxideContentEntry
             add(formatDate(lastPlayedStamp))
         }.joinToString(" · "),
         // 极限模式没有 gameMode，所以它单独一个标记，界面上另起一行给出
+        badge = null,
         badgeRes = gameMode?.nameRes,
         enabled = true,
         selectable = true,
