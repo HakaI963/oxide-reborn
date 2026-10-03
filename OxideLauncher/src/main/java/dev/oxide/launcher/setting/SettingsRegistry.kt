@@ -40,6 +40,11 @@ abstract class SettingsRegistry {
 
     fun reloadAll() = refreshableList.forEach { it.init() }
 
+    /**
+     * 全部设置单元，用于备份/恢复（见 SettingsTransferUtils）
+     */
+    val allSettings: List<AbstractSettingUnit<*>> get() = refreshableList.toList()
+
     protected fun boolSetting(key: String, def: Boolean) =
         BooleanSettingUnit(key, def).also { refreshableList.add(it) }
 

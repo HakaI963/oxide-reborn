@@ -18,7 +18,10 @@
 
 package dev.oxide.launcher.ui.screens.content
 
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -97,7 +100,6 @@ import dev.oxide.launcher.ui.screens.content.elements.OtherServerLoginDialog
 import dev.oxide.launcher.ui.screens.content.elements.ServerOperation
 import dev.oxide.launcher.utils.animation.swapAnimateDpAsState
 import dev.oxide.launcher.utils.copyText
-import dev.oxide.launcher.utils.string.getMessageOrToString
 import dev.oxide.launcher.viewmodel.AccountManageEffect
 import dev.oxide.launcher.viewmodel.AccountManageIntent
 import dev.oxide.launcher.viewmodel.AccountManageViewModel
@@ -105,6 +107,9 @@ import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
 import dev.oxide.launcher.viewmodel.LocalBackgroundViewModel
 import dev.oxide.launcher.viewmodel.ScreenBackStackViewModel
+import dev.oxide.launcher.utils.settings.SettingsExport
+import dev.oxide.launcher.utils.settings.SettingsTransferUtils
+import dev.oxide.launcher.utils.string.getMessageOrToString
 
 /**
  * 封装账号界面 UI 交互的回调函数
@@ -237,6 +242,10 @@ private fun AccountManageContent(
                 .padding(all = 12.dp)
                 .weight(3f),
             currentAccount = profileUiState.currentAccount,
+            pendingBackup = operationUiState.pendingBackup,
+            onBackupConsumed = {
+                actions.onIntent(AccountManageIntent.BackupPrepared)
+            },
             actions = actions
         )
 
@@ -271,8 +280,47 @@ private fun ActionsLayout(
     isVisible: Boolean,
     modifier: Modifier = Modifier,
     currentAccount: Account?,
+    pendingBackup: SettingsExport?,
+    onBackupConsumed: () -> Unit,
     actions: AccountActions
 ) {
+    val context = LocalContext.current
+    //备份与恢复：只写入账号身份信息与设置，不包含任何凭证
+    var pendingExport by remember { mutableStateOf<SettingsExport?>(null) }
+    var showExportWarning by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val export = pendingExport
+        pendingExport = null
+        if (uri == null || export == null) return@rememberLauncherForActivityResult
+        val ok = runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(SettingsTransferUtils.encode(export).toByteArray(Charsets.UTF_8))
+            } ?: error("Could not open $uri for writing")
+        }.isSuccess
+        actions.onIntent(
+            if (ok) AccountManageIntent.BackupFinished(true)
+            else AccountManageIntent.BackupFinished(false)
+        )
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val text = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                input.readBytes().toString(Charsets.UTF_8)
+            }
+        }.getOrNull()
+        actions.onIntent(
+            if (text != null) AccountManageIntent.ImportBackup(text)
+            else AccountManageIntent.BackupFinished(false)
+        )
+    }
+
     val xOffset by swapAnimateDpAsState(
         targetValue = (-40).dp,
         swapIn = isVisible,
@@ -299,10 +347,55 @@ private fun ActionsLayout(
             modelType = currentAccount?.skinModelType
         )
 
+        //备份 / 恢复账号与设置
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            ScalingActionButton(
+                modifier = Modifier.weight(1f),
+                onClick = { showExportWarning = true }
+            ) {
+                MarqueeText(text = stringResource(R.string.settings_export_accounts))
+            }
+            ScalingActionButton(
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                }
+            ) {
+                MarqueeText(text = stringResource(R.string.settings_import_accounts))
+            }
+        }
+
+        if (showExportWarning) {
+            SimpleAlertDialog(
+                title = stringResource(R.string.settings_export_accounts),
+                description = stringResource(R.string.settings_export_accounts_warning),
+                confirmText = stringResource(R.string.generic_confirm),
+                dismissText = stringResource(R.string.generic_cancel),
+                onConfirm = {
+                    showExportWarning = false
+                    actions.onIntent(AccountManageIntent.PrepareBackup)
+                },
+                onDismiss = { showExportWarning = false }
+            )
+        }
+
+        LaunchedEffect(pendingBackup) {
+            val export = pendingBackup ?: return@LaunchedEffect
+            pendingExport = export
+            onBackupConsumed()
+            exportLauncher.launch(SettingsTransferUtils.BACKUP_FILE_NAME)
+        }
+
         //添加账号
         ScalingActionButton(
             modifier = Modifier
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .padding(top = 6.dp),
             onClick = {
                 actions.onIntent(AccountManageIntent.UpdateLoginMenuOp(LoginMenuOperation.Login))
             }

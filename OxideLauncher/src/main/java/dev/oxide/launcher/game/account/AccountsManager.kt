@@ -26,6 +26,9 @@ import dev.oxide.launcher.database.AppDatabase
 import dev.oxide.launcher.game.account.auth_server.data.AuthServer
 import dev.oxide.launcher.game.account.auth_server.data.AuthServerDao
 import dev.oxide.launcher.setting.AllSettings
+import dev.oxide.launcher.utils.settings.SettingsExport
+import dev.oxide.launcher.utils.settings.SettingsTransferUtils.toAccount
+import dev.oxide.launcher.utils.settings.SettingsTransferUtils.toAuthServer
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.network.isNetworkAvailable
@@ -111,6 +114,43 @@ object AccountsManager {
         refreshCurrentAccountState()
 
         Logger.info(TAG, "Loaded ${_accounts.size} accounts")
+    }
+
+    /**
+     * 导入备份中的账号与认证服务器
+     *
+     * 备份里没有凭证，因此导入的账号一律处于「需要重新登录」状态：
+     * 微软账号会在启动前触发重新授权，第三方账号会在令牌被拒绝时要求重新输入密码。
+     * 同名账号（uniqueUUID 相同）会被覆盖而不是产生重复项。
+     *
+     * @return 实际写入的账号与认证服务器数量
+     */
+    suspend fun importFromBackup(export: SettingsExport): Pair<Int, Int> = runCatching {
+        var accountCount = 0
+        for (backup in export.accounts) {
+            val account = backup.toAccount()
+            // 不覆盖已有的、已经登录过的账号，避免用户丢失当前令牌
+            if (accountDao.getAccount(account.uniqueUUID) != null) continue
+            accountDao.saveAccount(account)
+            accountCount++
+        }
+
+        var serverCount = 0
+        for (backup in export.authServers) {
+            if (isAuthServerExists(backup.baseUrl)) continue
+            authServerDao.saveServer(backup.toAuthServer())
+            serverCount++
+        }
+
+        suspendReloadAccounts()
+        reloadAuthServers()
+        refreshWardrobe()
+
+        Logger.info(TAG, "Imported $accountCount account(s) and $serverCount auth server(s) from a backup")
+        accountCount to serverCount
+    }.getOrElse { e ->
+        Logger.error(TAG, "Failed to import the backup", e)
+        0 to 0
     }
 
     /**

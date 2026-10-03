@@ -66,7 +66,10 @@ import dev.oxide.launcher.ui.screens.content.elements.LoginMenuOperation
 import dev.oxide.launcher.ui.screens.content.elements.MicrosoftLoginOperation
 import dev.oxide.launcher.ui.screens.content.elements.OtherLoginOperation
 import dev.oxide.launcher.ui.screens.content.elements.ServerOperation
+import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.network.toLocal
+import dev.oxide.launcher.utils.settings.SettingsExport
+import dev.oxide.launcher.utils.settings.SettingsTransferUtils
 import dev.oxide.launcher.utils.string.getMessageOrToString
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -113,6 +116,18 @@ sealed interface AccountManageIntent {
 
     /** 为使用本地离线 Yggdrasil 服务器的账号导入本地披风文件 */
     data class ImportLocalCape(val account: Account, val uri: Uri) : AccountManageIntent
+
+    /** 准备导出账号与设置（用户已确认备份内容不含凭证） */
+    data object PrepareBackup : AccountManageIntent
+
+    /** 导出对象已交给界面，等待系统文件选择器返回目标位置 */
+    data object BackupPrepared : AccountManageIntent
+
+    /** 备份/恢复流程结束，[ok] 表示是否成功 */
+    data class BackupFinished(val ok: Boolean) : AccountManageIntent
+
+    /** 读取并导入用户选择的备份文件内容 */
+    data class ImportBackup(val content: String) : AccountManageIntent
     data object ResetAccountSkinDialogState : AccountManageIntent
 
 
@@ -306,7 +321,9 @@ class AccountManageViewModel @AssistedInject constructor(
         val serverOp: ServerOperation = ServerOperation.None,
         val accountOp: AccountOperation = AccountOperation.None,
         val accountSkinOp: AccountSkinOperation = AccountSkinOperation.None,
-        val accountSkinDialogState: AccountSkinDialogState = AccountSkinDialogState()
+        val accountSkinDialogState: AccountSkinDialogState = AccountSkinDialogState(),
+        /** 待写入系统文件选择器目标位置的备份对象 */
+        val pendingBackup: SettingsExport? = null
     )
 
     /**
@@ -346,6 +363,20 @@ class AccountManageViewModel @AssistedInject constructor(
 
             is AccountManageIntent.OnSkinPicked -> onSkinPicked(intent)
             is AccountManageIntent.ImportLocalCape -> importLocalCape(intent.account, intent.uri)
+            is AccountManageIntent.PrepareBackup -> prepareBackup()
+            is AccountManageIntent.BackupPrepared ->
+                _operationUiState.update { it.copy(pendingBackup = null) }
+
+            is AccountManageIntent.BackupFinished -> {
+                emitToast(
+                    androidText(
+                        if (intent.ok) R.string.settings_export_success
+                        else R.string.settings_export_failed
+                    )
+                )
+            }
+
+            is AccountManageIntent.ImportBackup -> importBackup(intent.content)
             is AccountManageIntent.ResetAccountSkinDialogState -> {
                 _accountSkinDialogState.update { AccountSkinDialogState() }
             }
@@ -421,6 +452,47 @@ class AccountManageViewModel @AssistedInject constructor(
             _accountSkinDialogState.update {
                 it.copy(importingSkin = false)
             }
+        }
+    }
+
+    /** 准备导出：只包含账号身份信息与设置，凭证一律不写入 */
+    private fun prepareBackup() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                SettingsTransferUtils.buildExport(
+                    accounts = AccountsManager.accountsFlow.value,
+                    authServers = AccountsManager.authServersFlow.value
+                )
+            }.onSuccess { export ->
+                _operationUiState.update { it.copy(pendingBackup = export) }
+            }.onFailure { th ->
+                Logger.error(TAG, "Failed to build the backup", th)
+                emitToast(androidText(R.string.settings_export_failed))
+            }
+        }
+    }
+
+    /** 读取用户选择的备份文件并导入 */
+    private fun importBackup(content: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val export = runCatching { SettingsTransferUtils.decode(content) }
+                .onFailure { Logger.error(TAG, "Failed to parse the backup", it) }
+                .getOrNull()
+            if (export == null) {
+                emitToast(androidText(R.string.settings_import_failed))
+                return@launch
+            }
+
+            val (accounts, servers) = AccountsManager.importFromBackup(export)
+            val settings = SettingsTransferUtils.restoreSettings(export.settings)
+
+            Logger.info(TAG, "Restored $settings setting(s) from a backup")
+            emitToast(
+                androidText(
+                    if (accounts + servers + settings > 0) R.string.settings_import_success
+                    else R.string.settings_import_failed
+                )
+            )
         }
     }
 
