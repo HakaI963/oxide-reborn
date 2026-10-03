@@ -28,12 +28,9 @@ import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseF
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeVersion
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeVersions
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.isApproved
-import dev.oxide.launcher.path.GLOBAL_CLIENT
 import dev.oxide.launcher.utils.file.MurmurHash2Incremental
-import dev.oxide.launcher.utils.network.decodeJson
 import dev.oxide.launcher.utils.network.httpGetJson
 import dev.oxide.launcher.utils.network.httpPostJson
-import io.ktor.client.request.get
 import io.ktor.http.Parameters
 import io.ktor.server.plugins.NotFoundException
 import kotlinx.coroutines.Dispatchers
