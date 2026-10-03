@@ -66,11 +66,6 @@ class OxideMetricsProbeTest {
     }
 
     @Test
-    fun `probe 08 sidebar fixed height`() {
-        println("PROBE sidebarFixedHeight=" + oxideSidebarFixedHeight(34f.dp))
-    }
-
-    @Test
     fun `probe 09 brand logo scale`() {
         println("PROBE brandLogoScale=" + oxideBrandLogoScale(112.dp))
     }
