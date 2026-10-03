@@ -26,6 +26,7 @@ import dev.oxide.launcher.game.download.assets.platform.curseforge.models.isAppr
 import dev.oxide.launcher.game.download.assets.platform.searchRankWithChineseBias
 import dev.oxide.launcher.game.download.assets.utils.getTranslations
 import dev.oxide.launcher.ui.screens.content.download.assets.elements.AssetsPage
+import dev.oxide.launcher.ui.screens.content.download.assets.elements.AssetsPaging
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -33,32 +34,72 @@ import kotlinx.serialization.Serializable
 class CurseForgeSearchResult(
     /**
      * 响应数据
+     *
+     * 设为可见（而非 private）是为了让解析结果可以被单元测试直接断言
      */
     @SerialName("data")
-    private val data: Array<CurseForgeData>,
+    val data: Array<CurseForgeData>,
 
     /**
      * 响应分页信息
+     *
+     * 设为可见（而非 private）是为了让页码运算可以被单元测试直接断言
      */
     @SerialName("pagination")
-    private val pagination: CurseForgePagination
+    val pagination: CurseForgePagination
 ): PlatformSearchResult {
     override fun getAssetsPage(classes: PlatformClasses): AssetsPage {
         val mcmodData = data.mapNotNull { data0 ->
             if (!data0.isApproved()) return@mapNotNull null
             data0 to classes.getTranslations().getModBySlugId(data0.slug)
         }
-        val pageSize = pagination.pageSize
-        val isLastPage = pagination.resultCount < pageSize ||
-                (pagination.index + pagination.resultCount) >= pagination.totalCount
 
         return AssetsPage(
-            pageNumber = pagination.index / pageSize + 1,
+            pageNumber = pageNumber(),
             pageIndex = pagination.index,
-            totalPage = ((pagination.totalCount + pageSize - 1) / pageSize).toInt(),
-            isLastPage = isLastPage,
+            totalPage = totalPage(),
+            isLastPage = isLastPage(),
             data = mcmodData
         )
+    }
+
+    /**
+     * 可见的项目列表：只保留服务端标记为公开的项目
+     *
+     * 单独抽出来是为了能离线断言"未过审的项目不会出现在列表里"，
+     * 不必为了这一点把整个搜索页拉进单元测试。
+     */
+    fun approvedData(): Array<CurseForgeData> = data.filter { it.isApproved() }.toTypedArray()
+
+    /** 当前页码，从 1 开始 */
+    fun pageNumber(): Int {
+        val pageSize = AssetsPaging.pageSize(pagination.pageSize)
+        return pagination.index / pageSize + 1
+    }
+
+    /**
+     * 是否为最后一页
+     *
+     * 服务端把 totalCount 封顶在 10000，所以最后一页由"取不满一页"或
+     * "已到达封顶总数"任一条件判定，两者都来自同一份响应，不会互相矛盾。
+     */
+    fun isLastPage(): Boolean = AssetsPaging.isLastPage(
+        index = pagination.index,
+        pageSize = pagination.pageSize,
+        resultCount = pagination.resultCount,
+        totalCount = pagination.totalCount
+    )
+
+    /**
+     * 总页数
+     *
+     * 服务端把 totalCount 封顶在 10000，所以这里算出的总页数就是可翻页的上限，
+     * 与 [isLastPage] 用的是同一个来源，翻到最后一页就会停下。
+     */
+    fun totalPage(): Int {
+        val pageSize = AssetsPaging.pageSize(pagination.pageSize)
+        val count = pagination.totalCount.coerceAtLeast(0L)
+        return ((count + pageSize - 1) / pageSize).toInt()
     }
 
     override fun processChineseSearchResults(

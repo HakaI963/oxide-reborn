@@ -67,6 +67,17 @@ suspend fun HttpResponse.safeBodyAsText(): String {
     }
 }
 
+/**
+ * 把响应体解析为指定类型，使用与 [GLOBAL_JSON] 相同的配置
+ *
+ * 平台在参数非法时返回的 400 响应体是 RFC7807 错误对象，不是平台自己的 JSON。
+ * 用同一份配置解析，这种响应会以可识别的异常暴露出来，
+ * 而不会被静默地当成"成功但结果为空"。
+ */
+@OptIn(ExperimentalSerializationApi::class)
+suspend inline fun <reified T> HttpResponse.decodeJson(): T =
+    GLOBAL_JSON.decodeFromString(bodyAsText())
+
 suspend inline fun <reified T> submitForm(
     url: String,
     parameters: Parameters,

@@ -50,12 +50,26 @@ data class CurseForgeSearchRequest(
     /** 模组加载器过滤 */
     val modLoader: CurseForgeModLoader? = null,
 
-    /** 要跳过的结果页数（用于分页） */
+    /**
+     * 要跳过的结果数量（用于分页），取值 [0, CurseForgePaging.MAX_INDEX)
+     *
+     * 越界时按 [CurseForgePaging.index] 收敛，因为服务端会直接返回 400
+     */
     val index: Int = 0,
 
-    /** 要返回的结果页数，最大值为 50 */
+    /**
+     * 要返回的结果条数，取值 [CurseForgePaging.MIN_PAGE_SIZE]..[CurseForgePaging.MAX_PAGE_SIZE]
+     *
+     * 服务端校验这个区间，越界返回 400，因此真正发出去的参数是 [effectivePageSize]
+     */
     val pageSize: Int = 20,
 ) {
+    /** 实际发往服务端的单页条数 */
+    val effectivePageSize: Int get() = CurseForgePaging.pageSize(pageSize)
+
+    /** 实际发往服务端的起始索引，保证 `index + pageSize` 不越过服务端上限 */
+    val effectiveIndex: Int get() = CurseForgePaging.index(index, effectivePageSize)
+
     /**
      * 转换为 GET 参数
      */
@@ -69,10 +83,12 @@ data class CurseForgeSearchRequest(
         ) { name, value ->
             append(name, value)
         }
-        searchFilter?.let {
+        // 空关键词不下发：服务端把 searchFilter= 与不传该参数当成两种不同的查询，
+        // 带上空值会让"浏览列表"变成一次无意义的过滤
+        searchFilter?.trim()?.takeIf { it.isNotEmpty() }?.let {
             append("searchFilter", it)
         }
-        gameVersion?.let {
+        gameVersion?.takeIf { it.isNotBlank() }?.let {
             append("gameVersion", it)
         }
         modLoader?.let {
@@ -80,8 +96,8 @@ data class CurseForgeSearchRequest(
         }
         append("sortField", sortField.curseforge)
         append("sortOrder", sortOrder)
-        append("index", index.toString())
-        append("pageSize", pageSize.toString())
+        append("index", effectiveIndex.toString())
+        append("pageSize", effectivePageSize.toString())
     }
 
     /**

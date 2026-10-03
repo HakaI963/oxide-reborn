@@ -79,6 +79,10 @@ suspend fun <E: AbstractPlatformSearcher, T> mirroredPlatformSearcher(
             }
             return block(searcher)
         } catch (e: Exception) {
+            //协程被取消时不能当成"这个源失败"继续试下一个源，
+            //否则一次已经放弃的搜索还会把剩下的源全部请求一遍
+            if (e is CancellationException) throw e
+
             Log.w("PlatformSearcher", "Failed to perform the operation on source: {${searcher.source}}", e)
             lastException = e
 
@@ -183,13 +187,21 @@ suspend fun searchAssets(
                 }
                 lastResult = r
                 if (r.getAssetsPage(platformClasses).data.isNotEmpty()) break
+            } catch (e: CancellationException) {
+                //用户已经离开或发起了新的搜索，不能把取消当成"这个关键词没结果"继续试下一个
+                throw e
             } catch (e: Exception) {
                 //当前关键词搜索失败，记录异常并继续尝试下一个
                 lastException = e
             }
         }
 
-        val result = lastResult ?: throw lastException ?: IOException("Failed to search for all queries")
+        val result = lastResult
+
+        if (result == null) {
+            //所有关键词都失败了：这必须以错误状态呈现，不能退化成"没有找到"
+            throw lastException ?: IOException("Failed to search for all queries")
+        }
 
         onSuccess(
             if (containsChinese) result.processChineseSearchResults(searchFilter.searchName, platformClasses)

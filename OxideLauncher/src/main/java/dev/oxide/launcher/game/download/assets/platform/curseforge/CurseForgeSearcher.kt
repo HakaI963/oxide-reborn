@@ -28,9 +28,13 @@ import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseF
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeVersion
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeVersions
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.isApproved
+import dev.oxide.launcher.game.version.mod.CURSEFORGE_FINGERPRINT_SKIP_BYTES
+import dev.oxide.launcher.path.GLOBAL_CLIENT
 import dev.oxide.launcher.utils.file.MurmurHash2Incremental
+import dev.oxide.launcher.utils.network.decodeJson
 import dev.oxide.launcher.utils.network.httpGetJson
 import dev.oxide.launcher.utils.network.httpPostJson
+import io.ktor.client.request.get
 import io.ktor.http.Parameters
 import io.ktor.server.plugins.NotFoundException
 import kotlinx.coroutines.Dispatchers
@@ -55,18 +59,25 @@ class CurseForgeSearcher(
         searchFilter: PlatformSearchFilter,
         platformClasses: PlatformClasses
     ): CurseForgeSearchResult {
-        return httpGetJson(
-            url = "$api/mods/search",
-            parameters = searchFilter.toCurseForgeRequest(
+        val response = GLOBAL_CLIENT.get(
+            CurseForgeEndpoints.search(api)
+        ) {
+            searchFilter.toCurseForgeRequest(
                 query = query,
                 platformClasses = platformClasses
-            ).toParameters()
-        )
+            ).toParameters().forEach { name, values ->
+                url.parameters.appendAll(name, values)
+            }
+        }
+        // 走 decodeJson 而不是 body<T>()：服务端在分页参数越界时返回 400，
+        // 响应体是 RFC7807 错误对象而不是平台 JSON。这种情况必须以异常冒出去，
+        // 不能被当成"搜索成功但没有结果"。
+        return response.decodeJson()
     }
 
     override suspend fun getProject(projectID: String): CurseForgeProject {
         val project = httpGetJson<CurseForgeProject>(
-            url = "$api/mods/$projectID"
+            url = CurseForgeEndpoints.project(api, projectID)
         )
         if (!project.isApproved()) throw NotFoundException("The project {$projectID} is not in a publicly available state.")
         return project
@@ -80,24 +91,27 @@ class CurseForgeSearcher(
         fileID: String,
     ): CurseForgeVersion {
         return httpGetJson(
-            url = "$api/mods/$projectID/files/$fileID"
+            url = CurseForgeEndpoints.projectFile(api, projectID, fileID)
         )
     }
 
     /**
      * 在 CurseForge 平台根据分页获取项目的版本列表
+     *
+     * 分页参数经 [CurseForgePaging] 收敛：服务端对 index/pageSize 有硬校验，
+     * 越界返回 400，而该接口的 400 响应体是空的，只能表现为"加载失败"。
      * @param index 开始处
      * @param pageSize 每页请求数量
      */
     suspend fun getVersions(
         projectID: String,
         index: Int = 0,
-        pageSize: Int = 100
+        pageSize: Int = CurseForgePaging.MAX_PAGE_SIZE
     ): CurseForgeVersions = httpGetJson(
-        url = "$api/mods/$projectID/files",
+        url = CurseForgeEndpoints.projectFiles(api, projectID),
         parameters = Parameters.build {
-            append("index", index.toString())
-            append("pageSize", pageSize.toString())
+            append("index", CurseForgePaging.index(index, pageSize).toString())
+            append("pageSize", CurseForgePaging.pageSize(pageSize).toString())
         }
     )
 
@@ -106,7 +120,7 @@ class CurseForgeSearcher(
         pageCallback: (chunk: Int, page: Int) -> Unit
     ): List<CurseForgeFile> {
         return getAllVersions(
-            pageSize = 50,
+            pageSize = CurseForgePaging.MAX_PAGE_SIZE,
             chunkSize = 20,
             maxConcurrent = 10,
             pageCallback = pageCallback,
@@ -131,14 +145,8 @@ class CurseForgeSearcher(
         file: File,
         sha1: String
     ): CurseForgeFile? {
-        val hash = MurmurHash2Incremental.computeHash(file, byteToSkip = listOf(0x9, 0xa, 0xd, 0x20))
-        return httpPostJson<CurseForgeFingerprintsMatches>(
-            url = "$api/fingerprints",
-            body = mapOf("fingerprints" to listOf(hash))
-        ).data.exactMatches
-            ?.takeIf { it.isNotEmpty() }
-            ?.firstOrNull()
-            ?.file
+        val hash = MurmurHash2Incremental.computeHash(file, byteToSkip = CURSEFORGE_FINGERPRINT_SKIP_BYTES)
+        return getFilesByFingerprints(listOf(hash)).values.firstOrNull()
     }
 
     /**
@@ -150,22 +158,42 @@ class CurseForgeSearcher(
     ): Map<Long, CurseForgeFile> {
         if (fingerprints.isEmpty()) return emptyMap()
         val matches = httpPostJson<CurseForgeFingerprintsMatches>(
-            url = "$api/fingerprints",
+            url = CurseForgeEndpoints.fingerprints(api),
             body = CurseForgeFingerprintsRequest(fingerprints = fingerprints)
         )
-        return matches.data.exactMatches.orEmpty()
-            .associate { it.file.fileFingerprint to it.file }
+        return parseExactFingerprintMatches(matches)
     }
 }
+
+/**
+ * 从指纹匹配响应里取出精确命中的文件
+ * @return 键为文件指纹，值为匹配到的文件，未命中的指纹不在结果中
+ */
+fun parseExactFingerprintMatches(matches: CurseForgeFingerprintsMatches): Map<Long, CurseForgeFile> =
+    matches.data.exactMatches.orEmpty()
+        .associate { it.file.fileFingerprint to it.file }
 
 /**
  * 批量获取文件指纹匹配的请求体
  */
 @Serializable
-private data class CurseForgeFingerprintsRequest(
+data class CurseForgeFingerprintsRequest(
     @SerialName("fingerprints")
     val fingerprints: List<Long>
 )
+
+/**
+ * 服务端允许的最大页码（从 0 开始），超过它的页一律不能请求。
+ *
+ * 服务端的索引上限是硬校验，越界返回 400，而该接口的 400 响应体是空的，
+ * 线上只能表现为"版本列表加载失败"，日志里也看不出是分页越界。
+ * 翻页必须在这里停住，绝不能把越界索引发出去。
+ */
+fun maxVersionPageIndex(pageSize: Int): Int {
+    val size = CurseForgePaging.pageSize(pageSize)
+    // 最大的合法起始索引，再折算回页码
+    return CurseForgePaging.index(CurseForgePaging.MAX_INDEX, size) / size
+}
 
 /**
  * 持续分页获取项目的所有版本文件，直到全部加载完成
@@ -178,7 +206,7 @@ private data class CurseForgeFingerprintsRequest(
  * @param processVersions 加工返回数据，同时需要返回当前结果实际的页面大小
  */
 private suspend fun <E, T> getAllVersions(
-    pageSize: Int = 100,
+    pageSize: Int = CurseForgePaging.MAX_PAGE_SIZE,
     chunkSize: Int = 10,
     maxConcurrent: Int = 5,
     pageCallback: (chunk: Int, page: Int) -> Unit = { _ , _ -> },
@@ -197,10 +225,22 @@ private suspend fun <E, T> getAllVersions(
 
         val semaphore = Semaphore(maxConcurrent)
 
+        //任何一页都不能越过服务端上限，越界一律视为已到末尾
+        val lastPageIndex = maxVersionPageIndex(pageSize)
+
         while (!reachedEnd) {
-            //创建当前区间的任务列表
-            val jobs = (0 until chunkSize).map { offset ->
-                val pageIndex = startPage + offset
+            //创建当前区间的任务列表，越界的页根本不发请求
+            val pageIndexes = (0 until chunkSize)
+                .map { startPage + it }
+                .takeWhile { it <= lastPageIndex }
+
+            //区间内所有页都越界，说明已经翻到能翻的最后一页
+            if (pageIndexes.isEmpty()) {
+                reachedEnd = true
+                break
+            }
+
+            val jobs = pageIndexes.map { pageIndex ->
                 val index = pageIndex * pageSize
 
                 async {
