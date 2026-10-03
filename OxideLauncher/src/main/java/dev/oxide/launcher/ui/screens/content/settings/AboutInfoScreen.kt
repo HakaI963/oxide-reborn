@@ -66,7 +66,6 @@ import dev.oxide.launcher.path.URL_COMMUNITY
 import dev.oxide.launcher.path.URL_MCMOD
 import dev.oxide.launcher.path.URL_PLUS
 import dev.oxide.launcher.path.URL_PROJECT
-import dev.oxide.launcher.path.URL_SUPPORT
 import dev.oxide.launcher.path.URL_WEBLATE
 import dev.oxide.launcher.ui.base.BaseScreen
 import dev.oxide.launcher.ui.components.AnimatedLazyColumn
@@ -140,14 +139,14 @@ fun AboutInfoScreen(
                         )
 
                         ButtonIconItem(
-                            icon = painterResource(R.drawable.img_avatar_movtery),
-                            title = stringResource(R.string.about_launcher_author_movtery_title),
-                            text = stringResource(R.string.about_launcher_author_movtery_text, BuildKeys.LAUNCHER_NAME),
+                            icon = painterResource(R.drawable.ic_oxide_mark),
+                            title = stringResource(R.string.about_launcher_project_title),
+                            text = stringResource(R.string.about_launcher_project_text, BuildKeys.LAUNCHER_NAME),
                             button = {
                                 Button(
-                                    onClick = { openLink(URL_SUPPORT) }
+                                    onClick = { openLink(URL_PROJECT) }
                                 ) {
-                                    Text(text = stringResource(R.string.about_sponsor))
+                                    Text(text = stringResource(R.string.about_launcher_project_link))
                                 }
                             }
                         )

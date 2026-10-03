@@ -18,6 +18,11 @@
 
 package dev.oxide.launcher.ui.screens.main
 
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Offset
+import dev.oxide.launcher.ui.theme.Oxide
+import dev.oxide.launcher.ui.components.LocalOxideBrandSlot
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -163,6 +168,9 @@ fun MainScreen(
         backgroundColor().copy(alpha = launcherBackgroundOpacity)
     } else backgroundColor()
 
+    // 开场动画的落点由左侧品牌槽实测上报
+    val brandSlot = LocalOxideBrandSlot.current
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = backgroundColor,
@@ -287,6 +295,23 @@ private fun <E: TitledNavKey> TopBar(
                 ) {
                     Row(modifier = Modifier.fillMaxHeight()) {
                         Spacer(Modifier.width(12.dp))
+
+                        // 开场动画里那一个 logo 的落点：这里只上报几何，不额外渲染第二份 logo
+                        Box(
+                            modifier = Modifier
+                                .width(Oxide.SidebarWidth - 24.dp)
+                                .height(Oxide.BrandSlotHeight)
+                                .onGloballyPositioned { coords ->
+                                    val size = coords.size
+                                    brandSlot.report(
+                                        center = Offset(
+                                            coords.positionInRoot().x + size.width / 2f,
+                                            coords.positionInRoot().y + size.height / 2f
+                                        ),
+                                        widthPx = size.width.toFloat()
+                                    )
+                                }
+                        )
 
                         IconButton(
                             modifier = Modifier.fillMaxHeight(),
