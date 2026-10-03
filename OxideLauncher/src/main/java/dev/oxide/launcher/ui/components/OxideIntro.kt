@@ -177,7 +177,7 @@ fun OxideIntro(
                     .fillMaxSize()
                     .graphicsLayer {
                         translationX = currentRootW / 2f - lineWidth / 2f
-                        translationY = currentRootH / 2f + with(d) { Oxide.MarkSize.toPx() / 2f } + 11f * d
+                        translationY = currentRootH / 2f + with(d) { Oxide.MarkSize.toPx() / 2f + 11.dp.toPx() }
                     },
                 contentAlignment = Alignment.TopStart
             ) {
