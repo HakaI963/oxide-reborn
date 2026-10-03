@@ -203,7 +203,8 @@ class OxideExportLogicTest {
     @Test
     fun nameCleaningStripsIllegalPathCharacters() {
         assertEquals("MyPack", oxideExportSanitizeName("My/Pack"))
-        assertEquals("abc", oxideExportSanitizeName("a\\b\"c?d*e<f>g|h"))
+        // Only the illegal characters are dropped, so d, f, g and h survive alongside a, b, c.
+        assertEquals("abcdefgh", oxideExportSanitizeName("a\\b\"c?d*e<f>g|h"))
         assertEquals("ab c", oxideExportSanitizeName("ab\nc"))
     }
 

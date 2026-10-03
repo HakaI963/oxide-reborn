@@ -344,7 +344,9 @@ class OxideContentEntryLogicTest {
     @Test
     fun renamingStripsTheExtension() {
         assertEquals(
-            "Complementary",
+            // Shaders seed the rename from fileName, so only the extension goes; the rest of the
+            // name is kept verbatim.
+            "Complementary-Reimagined",
             oxideRenameInitial(
                 OxideContentCategory.Shaders,
                 entry("Complementary-Reimagined.zip"),
