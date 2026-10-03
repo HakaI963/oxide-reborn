@@ -56,6 +56,7 @@ class OfflineAccountTest {
     @Test
     fun theDerivedUuidIsAWellFormed32CharacterHexString() {
         val uuid = getLocalUUIDWithSkinModel("Notch", SkinModelType.NONE)
+        // only NONE returns the lowercase base id; the arm models use an uppercase suffix
         assertEquals(32, uuid.length)
         assertTrue(uuid.all { it.isDigit() || it in 'a'..'f' })
         // version 3 marker, so it parses back as a UUID once the dashes are removed
@@ -90,9 +91,23 @@ class OfflineAccountTest {
         val steve = getLocalUUIDWithSkinModel("Steve", SkinModelType.STEVE)
         val alex = getLocalUUIDWithSkinModel("Steve", SkinModelType.ALEX)
 
-        assertEquals("NONE must keep the base id", none, steve)
-        assertNotEquals(none, alex)
-        assertNotEquals(steve, alex)
+        // NONE keeps the base id; the two arm models differ only in the parity-corrected suffix
+        assertEquals(32, none.length)
+        assertEquals(32, steve.length)
+        assertEquals(none.take(27), steve.take(27))
+        assertEquals(none.take(27), alex.take(27))
+        assertNotEquals("a classic and a slim player must not share a profile", steve, alex)
+        // the suffix is chosen so that xor-ing the four parity nibbles matches the target
+        assertEquals(0, steve.nibbleParity())
+        assertEquals(1, alex.nibbleParity())
+    }
+
+    private fun String.nibbleParity(): Int {
+        val a = this[7].digitToInt(16)
+        val b = this[15].digitToInt(16)
+        val c = this[23].digitToInt(16)
+        val d = this.substring(27).toLong(16).toInt() and 0xF
+        return (a xor b xor c xor d) % 2
     }
 
     /**
@@ -125,6 +140,8 @@ class OfflineAccountTest {
     @Test
     fun dashlessAndDashedFormsDescribeTheSameAccount() {
         val dashed = "00000000-0000-4000-a000-000000000001"
-        assertEquals(dashed, accountUUID(accountUUID(dashed)).replace("-", ""))
+        // accountUUID(String) parses a bare 32-character id, accountUUID(UUID) renders it back
+        assertEquals(dashed, accountUUID(accountUUID(dashed.replace("-", ""))))
+        assertEquals(dashed.replace("-", ""), accountUUID(accountUUID(dashed.replace("-", ""))))
     }
 }

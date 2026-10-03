@@ -39,7 +39,7 @@ private val KEY_VALUE_PATTERN: Regex =
 
 /** `--key value`，只替换取值部分 */
 private val FLAG_PATTERN: Regex =
-    Regex("(?i)(--(?:--" + SENSITIVE_KEYS + ")[=\\s]+)" + VALUE)
+    Regex("(?i)(--(?:" + SENSITIVE_KEYS + ")[=\\s]+)" + VALUE)
 
 /** `Authorization: Bearer <token>` 形式的取值 */
 private val BEARER_PATTERN: Regex = Regex("(?i)(bearer\\s+)[A-Za-z0-9._~+/=-]+")
@@ -59,9 +59,11 @@ private val CONTROL_CHARS_PATTERN: Regex = Regex("[\\u0000-\\u0008\\u000B\\u000C
 fun redactSensitive(raw: String?, maxLength: Int = 200): String {
     if (raw.isNullOrEmpty()) return ""
 
+    // 顺序很重要：先处理 `Authorization: Bearer <token>`，否则 key=value 规则会先把 Bearer
+    // 当成取值替换掉，导致真正的令牌留在文本里。
     var text = FLAG_PATTERN.replace(raw, "$1$REDACTED")
-    text = KEY_VALUE_PATTERN.replace(text, "$1$REDACTED")
     text = BEARER_PATTERN.replace(text, "$1$REDACTED")
+    text = KEY_VALUE_PATTERN.replace(text, "$1$REDACTED")
     text = CONTROL_CHARS_PATTERN.replace(text, "")
 
     return if (text.length > maxLength) text.take(maxLength) + "…" else text
