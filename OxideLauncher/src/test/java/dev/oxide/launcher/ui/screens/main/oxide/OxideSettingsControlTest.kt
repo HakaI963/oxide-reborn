@@ -80,7 +80,9 @@ class OxideSettingsControlTest {
         // 是否真的变了才落盘，绕过它直接 save 会漏掉刷新版本列表那一步
         val writtenElsewhere = setOf("currentGamePathId")
         val written = calls.map { it.first }.toSet() + writtenElsewhere
-        val onlyRead = settings.filter { it !in written }
+        // settings is a Sequence, which has no isEmpty(); materialise it - the failure message
+        // below needs the values anyway.
+        val onlyRead = settings.filter { it !in written }.toList()
         assertTrue(
             "these settings are read but never written here, so the row would be inert: " +
                 onlyRead.joinToString(),
