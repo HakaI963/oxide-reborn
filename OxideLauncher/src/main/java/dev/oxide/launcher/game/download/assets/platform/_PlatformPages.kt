@@ -9,8 +9,8 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
@@ -18,7 +18,7 @@
 
 package dev.oxide.launcher.game.download.assets.platform
 
-import dev.oxide.launcher.ui.screens.content.download.assets.elements.AssetsPaging
+import dev.oxide.launcher.ui.screens.content.download.assets.elements.AssetsPage
 
 fun previousPage(
     pageNumber: Int,
@@ -34,7 +34,7 @@ fun previousPage(
         onSuccess(previousPage)
     } else {
         //重新搜索
-        onSearch(AssetsPaging.previousIndex(index, limit))
+        onSearch((index - limit).coerceAtLeast(0))
     }
 }
 
@@ -55,7 +55,7 @@ fun nextPage(
             onSuccess(nextPage)
         } else {
             //搜索下一页
-            onSearch(AssetsPaging.nextIndex(index, limit))
+            onSearch(index + limit)
         }
     }
 }
@@ -74,6 +74,6 @@ fun navigatePage(
         onSuccess(targetPage)
     } else {
         //搜索目标页
-        onSearch(AssetsPaging.indexOfPage(pageNumber, limit))
+        onSearch(targetNumber * limit)
     }
 }

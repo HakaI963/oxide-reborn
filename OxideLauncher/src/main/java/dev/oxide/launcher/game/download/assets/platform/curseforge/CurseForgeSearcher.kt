@@ -28,7 +28,6 @@ import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseF
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeVersion
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeVersions
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.isApproved
-import dev.oxide.launcher.game.version.mod.CURSEFORGE_FINGERPRINT_SKIP_BYTES
 import dev.oxide.launcher.utils.file.MurmurHash2Incremental
 import dev.oxide.launcher.utils.network.httpGetJson
 import dev.oxide.launcher.utils.network.httpPostJson
@@ -57,7 +56,7 @@ class CurseForgeSearcher(
         platformClasses: PlatformClasses
     ): CurseForgeSearchResult {
         return httpGetJson(
-            url = CurseForgeEndpoints.search(api),
+            url = "$api/mods/search",
             parameters = searchFilter.toCurseForgeRequest(
                 query = query,
                 platformClasses = platformClasses
@@ -67,7 +66,7 @@ class CurseForgeSearcher(
 
     override suspend fun getProject(projectID: String): CurseForgeProject {
         val project = httpGetJson<CurseForgeProject>(
-            url = CurseForgeEndpoints.project(api, projectID)
+            url = "$api/mods/$projectID"
         )
         if (!project.isApproved()) throw NotFoundException("The project {$projectID} is not in a publicly available state.")
         return project
@@ -81,27 +80,24 @@ class CurseForgeSearcher(
         fileID: String,
     ): CurseForgeVersion {
         return httpGetJson(
-            url = CurseForgeEndpoints.projectFile(api, projectID, fileID)
+            url = "$api/mods/$projectID/files/$fileID"
         )
     }
 
     /**
      * 在 CurseForge 平台根据分页获取项目的版本列表
-     *
-     * 分页参数经 [CurseForgePaging] 收敛：服务端对 index/pageSize 有硬校验，
-     * 越界会返回 400 且在版本列表接口上响应体为空，只能表现为"加载失败"。
      * @param index 开始处
      * @param pageSize 每页请求数量
      */
     suspend fun getVersions(
         projectID: String,
         index: Int = 0,
-        pageSize: Int = CurseForgePaging.MAX_PAGE_SIZE
+        pageSize: Int = 100
     ): CurseForgeVersions = httpGetJson(
-        url = CurseForgeEndpoints.projectFiles(api, projectID),
+        url = "$api/mods/$projectID/files",
         parameters = Parameters.build {
-            append("index", CurseForgePaging.index(index, pageSize).toString())
-            append("pageSize", CurseForgePaging.pageSize(pageSize).toString())
+            append("index", index.toString())
+            append("pageSize", pageSize.toString())
         }
     )
 
@@ -110,7 +106,7 @@ class CurseForgeSearcher(
         pageCallback: (chunk: Int, page: Int) -> Unit
     ): List<CurseForgeFile> {
         return getAllVersions(
-            pageSize = CurseForgePaging.MAX_PAGE_SIZE,
+            pageSize = 50,
             chunkSize = 20,
             maxConcurrent = 10,
             pageCallback = pageCallback,
@@ -135,8 +131,14 @@ class CurseForgeSearcher(
         file: File,
         sha1: String
     ): CurseForgeFile? {
-        val hash = MurmurHash2Incremental.computeHash(file, byteToSkip = CURSEFORGE_FINGERPRINT_SKIP_BYTES)
-        return getFilesByFingerprints(listOf(hash)).values.firstOrNull()
+        val hash = MurmurHash2Incremental.computeHash(file, byteToSkip = listOf(0x9, 0xa, 0xd, 0x20))
+        return httpPostJson<CurseForgeFingerprintsMatches>(
+            url = "$api/fingerprints",
+            body = mapOf("fingerprints" to listOf(hash))
+        ).data.exactMatches
+            ?.takeIf { it.isNotEmpty() }
+            ?.firstOrNull()
+            ?.file
     }
 
     /**
@@ -148,45 +150,22 @@ class CurseForgeSearcher(
     ): Map<Long, CurseForgeFile> {
         if (fingerprints.isEmpty()) return emptyMap()
         val matches = httpPostJson<CurseForgeFingerprintsMatches>(
-            url = CurseForgeEndpoints.fingerprints(api),
+            url = "$api/fingerprints",
             body = CurseForgeFingerprintsRequest(fingerprints = fingerprints)
         )
-        return parseExactFingerprintMatches(matches)
+        return matches.data.exactMatches.orEmpty()
+            .associate { it.file.fileFingerprint to it.file }
     }
 }
-
-/**
- * 从指纹匹配响应里取出精确命中的文件
- * @return 键为文件指纹，值为匹配到的文件，未命中的指纹不在结果中
- */
-fun parseExactFingerprintMatches(matches: CurseForgeFingerprintsMatches): Map<Long, CurseForgeFile> =
-    matches.data.exactMatches.orEmpty()
-        .associate { it.file.fileFingerprint to it.file }
 
 /**
  * 批量获取文件指纹匹配的请求体
  */
 @Serializable
-data class CurseForgeFingerprintsRequest(
+private data class CurseForgeFingerprintsRequest(
     @SerialName("fingerprints")
     val fingerprints: List<Long>
 )
-
-/**
- * 给定单页条数与文件总数，返回最后一页的页码（从 0 开始）。
- *
- * 服务端的索引上限是硬校验，越界返回 400，而该接口的 400 响应体为空，
- * 线上只能表现为"版本列表加载失败"，日志里也看不出是分页越界。
- * 翻页必须在这里停住，绝不能把越界索引发出去。
- */
-fun lastVersionPageIndex(pageSize: Int, totalFiles: Int): Int {
-    val size = CurseForgePaging.pageSize(pageSize)
-    // 最大的合法起始索引，再折算回页码
-    val maxPageIndex = CurseForgePaging.index(CurseForgePaging.MAX_INDEX, size) / size
-    if (totalFiles <= 0) return 0
-    // 最后一条数据落在哪一页，那一页就是最后一页
-    return ((totalFiles - 1) / size).coerceAtMost(maxPageIndex)
-}
 
 /**
  * 持续分页获取项目的所有版本文件，直到全部加载完成
@@ -199,7 +178,7 @@ fun lastVersionPageIndex(pageSize: Int, totalFiles: Int): Int {
  * @param processVersions 加工返回数据，同时需要返回当前结果实际的页面大小
  */
 private suspend fun <E, T> getAllVersions(
-    pageSize: Int = CurseForgePaging.MAX_PAGE_SIZE,
+    pageSize: Int = 100,
     chunkSize: Int = 10,
     maxConcurrent: Int = 5,
     pageCallback: (chunk: Int, page: Int) -> Unit = { _ , _ -> },
@@ -222,11 +201,7 @@ private suspend fun <E, T> getAllVersions(
             //创建当前区间的任务列表
             val jobs = (0 until chunkSize).map { offset ->
                 val pageIndex = startPage + offset
-                //任何一页都不能越过服务端上限，越界一律视为已到末尾
-                if (pageIndex > lastVersionPageIndex(pageSize, CurseForgePaging.MAX_INDEX)) {
-                    return@map null
-                }
-                val index = CurseForgePaging.index(pageIndex * pageSize, pageSize)
+                val index = pageIndex * pageSize
 
                 async {
                     semaphore.withPermit {
@@ -243,12 +218,6 @@ private suspend fun <E, T> getAllVersions(
             }
 
             for ((i, job) in jobs.withIndex()) {
-                //区间里越界的页直接跳过，不参与"是否到达末尾"的判定
-                if (job == null) {
-                    reachedEnd = true
-                    break
-                }
-
                 val (files, realSize) = processVersions(job.await())
                 files.takeIf { it.isNotEmpty() }?.let { list ->
                     allVersions.addAll(list)
