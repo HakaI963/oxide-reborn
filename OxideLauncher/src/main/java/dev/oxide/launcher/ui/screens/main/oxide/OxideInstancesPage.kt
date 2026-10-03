@@ -91,6 +91,7 @@ import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionFolders
 import dev.oxide.launcher.game.version.installed.VersionsManager
 import dev.oxide.launcher.ui.activities.MainActivity
+import dev.oxide.launcher.ui.components.LocalMainActivity
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.resolveAndroidString
 import dev.oxide.launcher.ui.screens.content.elements.VersionsOperation
@@ -1084,7 +1085,7 @@ private const val ACTION_GLYPH_DELETE = "\u2715"
  */
 @Composable
 internal fun rememberOxideScreenBackStack(): ScreenBackStackViewModel? {
-    val activity = LocalContext.current as? MainActivity ?: return null
+    val activity = LocalMainActivity.current ?: return null
     return remember(activity) {
         runCatching { ViewModelProvider(activity)[ScreenBackStackViewModel::class.java] }.getOrNull()
     }
@@ -1100,7 +1101,7 @@ internal fun rememberOxideScreenBackStack(): ScreenBackStackViewModel? {
 @Composable
 internal fun rememberOxideEventViewModel(): EventViewModel {
     val context = LocalContext.current
-    val fromActivity = remember(context) { (context as? MainActivity)?.eventViewModel }
+    val fromActivity = remember(context) { LocalMainActivity.current?.eventViewModel }
     val fromStore: EventViewModel = viewModel()
     return fromActivity ?: fromStore
 }

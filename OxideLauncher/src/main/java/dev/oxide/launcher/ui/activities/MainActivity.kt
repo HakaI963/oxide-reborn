@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.oxide.launcher.ui.components.LocalOxideBrandSlot
 import dev.oxide.launcher.ui.components.OxideIntro
+import dev.oxide.launcher.ui.components.LocalMainActivity
 import dev.oxide.launcher.ui.components.OxideBrandSlotState
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -317,6 +318,10 @@ class MainActivity : BaseAppCompatActivity() {
             ) {
                 ObserveFullScreenSetting(AllSettings.launcherFullScreen.state)
 
+                // 启动流程需要 Activity 上按 by viewModels() 持有的那几个实例，
+                // 显式提供比在 Composable 里向下转型 Context 可靠。
+                CompositionLocalProvider(LocalMainActivity provides this@MainActivity) {
+
                 val guides = rememberAppGuides(eventViewModel)
                 val oxideBrandSlot = remember { OxideBrandSlotState() }
                 OxideIntro(slot = oxideBrandSlot) {
@@ -525,6 +530,7 @@ class MainActivity : BaseAppCompatActivity() {
                     }
                 )
             }
+                }
         }
     }
 
