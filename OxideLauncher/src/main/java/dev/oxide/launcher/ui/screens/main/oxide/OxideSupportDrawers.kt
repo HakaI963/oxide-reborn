@@ -169,11 +169,11 @@ internal fun rememberOxideLauncherBridge(): OxideLauncherBridge {
 
     return remember(context, host, events, backStack) {
         OxideLauncherBridge(
-            openSettingsSection = host::openSettingsSection,
-            openAccountManager = host::openAccountManager,
+            openSettingsSection = { section -> host.openSettingsSection(section) },
+            openAccountManager = { host.openAccountManager() },
             openLogView = { path -> backStack.mainScreen.backStack.navigateToLogView(path) },
             checkUpdate = { events.sendEvent(EventViewModel.Event.CheckUpdate) },
-            openLink = host::openLink,
+            openLink = { link -> host.openLink(link) },
             openFileManager = { path -> events.sendEvent(EventViewModel.Event.OpenFileManager(rootPath = path)) },
             showToast = { res -> events.sendToast(androidText(res)) },
             startEditor = { file -> startEditorActivity(context, file) },
@@ -1156,7 +1156,7 @@ private fun OxideAdvancedDetails(metrics: OxideMetrics) {
             metrics = metrics,
             entries = FpsDisplayMode.entries,
             selected = AllSettings.fpsDisplayMode.state,
-            nameOf = { stringResource(it.textRes) },
+            nameOf = { stringResource(it.nameRes) },
             onSelect = { AllSettings.fpsDisplayMode.save(it) },
         )
 
@@ -1464,7 +1464,7 @@ internal fun OxideCustomColorDialog(
         isError = parsed == null,
         supportingText = {
             if (parsed != null) {
-                Text(text = draft.toHex())
+                Text(text = parsed.toHex())
             }
         },
         onDismissRequest = onDismiss,

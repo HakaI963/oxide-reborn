@@ -91,7 +91,7 @@ fun OxideShell(
                 metrics = metrics,
                 onSelect = nav::go,
                 brandSlot = brandSlot,
-                footer = { sidebarFooter(onSelect) },
+                footer = { sidebarFooter(nav::go) },
             )
 
             // ---- 右侧：顶栏 + 内容 ----
