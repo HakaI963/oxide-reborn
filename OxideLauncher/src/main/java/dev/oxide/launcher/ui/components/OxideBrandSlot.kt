@@ -19,6 +19,7 @@
 package dev.oxide.launcher.ui.components
 
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -44,3 +45,6 @@ class OxideBrandSlotState {
         width = widthPx
     }
 }
+
+/** 主界面通过它把侧栏品牌槽的实测位置交给开场动画 */
+val LocalOxideBrandSlot = compositionLocalOf { OxideBrandSlotState() }
