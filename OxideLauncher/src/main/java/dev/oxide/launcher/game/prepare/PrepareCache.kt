@@ -85,7 +85,7 @@ object PrepareCache {
         runCatching { AllSettings.gameDownloadSource.getValue().name }.getOrDefault("UNKNOWN")
 
     fun versionJsonPath(version: Version): String =
-        File(File(version.getVersionPath()), "${version.getVersionName()}.json").absolutePath
+        version.getVersionPath().resolve("${version.getVersionName()}.json").absolutePath
 
     /**
      * 判断本次启动能否复用上一次的准备结果

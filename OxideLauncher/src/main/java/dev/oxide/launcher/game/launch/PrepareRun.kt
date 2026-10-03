@@ -103,7 +103,7 @@ class PrepareRun(
         parentVersionJsonPath = if (parent.isNullOrBlank()) {
             null
         } else {
-            File(File(File(version.getGameHome(), "versions"), parent), "$parent.json").absolutePath
+            File(version.getGameHome(), "versions").resolve("$parent/$parent.json").absolutePath
         }
     }
 

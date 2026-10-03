@@ -55,7 +55,7 @@ class TrustedFiles private constructor(
 
         /** 从 "<size>\t<mtime>\t<path>" 每行一条的文本构建 */
         fun parse(lines: Sequence<String>): TrustedFiles {
-            val map = HashMap<String, LongArray>(lines.size.coerceAtLeast(16))
+            val map = HashMap<String, LongArray>()
             for (line in lines) {
                 val first = line.indexOf('\t')
                 if (first <= 0) continue
