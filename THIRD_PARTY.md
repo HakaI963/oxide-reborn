@@ -11,7 +11,45 @@ by the build, and the modifications made by the Oxide Launcher project.
 | Upstream project | [ZalithLauncher/ZalithLauncher2](https://github.com/ZalithLauncher/ZalithLauncher2) |
 | Upstream license | GNU General Public License v3.0 (see [`LICENSE`](LICENSE)) |
 | Upstream baseline commit | `68a441b0e4525ce6730efb9868befc69324d1d70` (`main`, 2026-10-02) |
-| This repository | [HakaI963/oxide-reborn](https://github.com/HakaI963/oxide-reborn) — independent repository, **not** a fork of the upstream project |
+| Secondary upstream project | [Star1xr/ZalithLauncher2Plus](https://github.com/Star1xr/ZalithLauncher2Plus) (GPL-3.0, archived 2026-08-14) |
+| Secondary upstream baseline | `7d7578c5542f65751af4f50963fd74aaa6c5bf1c` (`main`) |
+| Secondary upstream contributors | Copyright © 2026 Star1xr <166748405+Star1xr@users.noreply.github.com> |
+| This repository | [HakaI963/oxide-reborn](https://github.com/HakaI963/oxide-reborn) — independent repository, **not** a fork of either upstream project |
+
+## Account and authentication code adapted from ZalithLauncher2Plus
+
+The account system in this launcher is not written from scratch. The following behaviour was
+adapted from [Star1xr/ZalithLauncher2Plus](https://github.com/Star1xr/ZalithLauncher2Plus)
+(Copyright © 2026 Star1xr, GPL-3.0), which is a fork of Zalith Launcher 2:
+
+| Upstream commit | Subject | What was adapted |
+|---|---|---|
+| `4d513f687aff8a905e65213978633a2f3ad5fd72` | save Microsoft account even if skin download fails | A failing skin/cape download no longer discards an already authenticated Microsoft login |
+| `51a77c9864381c6c36bf9f46ee74bfbb055cecdd` | Add cape support to offline Yggdrasil server | `OfflineYggdrasilServer.addCharacter` now loads the account's cape, activating the `/textures` cape path that was declared but never populated |
+| `d98a271d531e10ea75c2fd7cb27c3a2d9a17f071` | Start offline Yggdrasil server when cape file exists even without skin | The offline server is also started for a cape-only account |
+| `50a4fec194b9608d2355d7baf74e7e2ed6e65114` | Inject local cape for Ely.by accounts via offline Yggdrasil server | The Ely.by launch branch that serves a locally selected cape through the local server |
+| `6d852486982e3eeb25d95086db3dbbbf2da733d6` | Add client-side cape support for Ely.by accounts | `Account.isElyByAccount()` and the extended `isSkinChangeAllowed()` / account screen gates |
+| `9660b25aa7f8c29be4944e9ecfac5b483a9e9261` | One-tap Ely.by auth server | The Ely.by auth server entry and its published authlib-injector endpoint |
+| `91a730ffb99c6d60f07521c4af7af539ecb96e77` | Cape file validation | `validateCapeFile()` (64x32) and the local cape import that makes the offline cape path reachable |
+| `5cb5f327d480d41bcb45c40e1010459b78716061`, `498a5cba10c2f6115104870a7890a9473fe2e3db` | Importing/exporting settings/configs/accounts | Settings and account backup/restore, rewritten to never write credentials |
+| `b0dd969c5f3983407a12761b2401fb2dc533e556` | "OPTIMIZE THE CODE AND FIX OFFLINE ACCOUNTS" | Removal of the region/Microsoft account lockout that made offline accounts unusable outside Greater China, and the `loadFromProfileID` null-type wildcard |
+
+Files carrying this adaptation state it in a dual-upstream header naming both
+`MovTery <movtery228@qq.com>` and `Star1xr <166748405+Star1xr@users.noreply.github.com>`, because
+the upstream Plus files that were adapted do not carry a `Copyright` line of their own.
+
+Deliberate deviations from the Plus implementation, each with a reason:
+
+* Plus's backup writes every credential to `/storage/emulated/0/zalithplus/`; here the backup
+  schema has no credential property and the file is only written where the user asks for it.
+* Plus does not strip the trailing slash when comparing Ely.by URLs, so its Ely.by detection can
+  never match a server added through the UI. Here the comparison ignores trailing slashes.
+* Plus's account-management screen was replaced by a dual-panel layout with drag-and-drop account
+  reordering. Oxide keeps the upstream layout, because the reorder is not persisted anyway.
+* Plus's cape gallery (`minecraftcapes.net`) and per-account cape collection were not adapted; they
+  are a cosmetics feature served by an unofficial third-party API, not authentication.
+* Plus's removal of the automatic promotion of a freshly saved account to the current account was
+  not adopted, because that promotion is what keeps a re-login on the same account.
 
 Every first-party source file carries the original upstream GPL-3.0 header, including
 `Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors`. Those headers are preserved
@@ -50,6 +88,15 @@ renamed.
    supplied by CI.
 6. **Housekeeping** — unused `net.zetetic:sqlcipher-android` dependency removed, `*-sources.jar`
    excluded from the APK, update-check fallback re-pointed at a reachable mirror.
+7. **Account and authentication** — offline accounts no longer require a Microsoft login or a
+   Chinese locale, offline and Ely.by accounts can carry a local cape, deleting an account also
+   deletes its cape, and account/settings backup and restore were added. Adapted from
+   ZalithLauncher2Plus as detailed above.
+8. **Account credential handling** — session tokens are redacted by value from the game log that
+   the share-log feature can upload, the account database is excluded from cloud backup and device
+   transfer, the offline Yggdrasil server binds to loopback only, `Account.toString()` no longer
+   prints credentials, server-controlled error text is redacted and length-limited, and
+   `SettingsRegistry.allSettings` was exposed for the backup feature.
 
 ## Bundled runtime components
 

@@ -28,8 +28,11 @@ handling, and a full instance/multiplayer tooling set.
   Panfrost (Mali) and downloadable renderer / driver / native plugins.
 * **Input** — touch controls with an in-app editor, physical keyboard and mouse, gamepads
   (including SDL direct input), joysticks, gyroscope, and the in-game hotbar.
-* **Accounts** — offline accounts, Microsoft accounts, and third-party Yggdrasil servers, with
-  skin and cape management.
+* **Accounts** — Microsoft accounts (device-code login, token refresh, entitlement check),
+  offline/local accounts that need no network and no Microsoft login, and any
+  Authlib-Injector / Yggdrasil authentication server, including a one-tap Ely.by entry. Skins and
+  capes can be managed per account; offline and Ely.by accounts get their local textures served by
+  a loopback-only offline Yggdrasil server during launch.
 * **Content** — mods, modpacks, resource packs, shaders, worlds and saves, with browsing,
   search, favourites, downloads and progress reporting.
 * **Files** — a separate file manager process with archive extraction, compression, a trash
@@ -99,6 +102,11 @@ version, GPLv3 §7 applies:
    splash screen and the About screen both state that this is an unofficial modified build.
 2. The copyright notices shown by the program have not been removed — every upstream source file
    still carries its original header.
+3. The account and authentication behaviour is adapted from
+   [Star1xr/ZalithLauncher2Plus](https://github.com/Star1xr/ZalithLauncher2Plus) (GPL-3.0,
+   Copyright © 2026 Star1xr). The About screen credits it, the adapted files carry a dual-upstream
+   header, and [`THIRD_PARTY.md`](THIRD_PARTY.md) lists every commit that was adapted together with
+   each deliberate deviation.
 
 The full upstream attribution, the third-party component inventory and the list of modifications
 are in [`THIRD_PARTY.md`](THIRD_PARTY.md). The identifiers that intentionally keep upstream naming
@@ -109,6 +117,9 @@ because they are native ABI, external API or third-party contracts are listed, w
 
 * Original project: [ZalithLauncher/ZalithLauncher2](https://github.com/ZalithLauncher/ZalithLauncher2)
   and [MovTery](https://github.com/MovTery) — copyright (C) 2025 MovTery and contributors.
+* Account and authentication behaviour adapted from
+  [Star1xr/ZalithLauncher2Plus](https://github.com/Star1xr/ZalithLauncher2Plus) —
+  copyright (C) 2026 Star1xr and contributors, GPL-3.0.
 * Launch backend: [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher).
 * [Fold Craft Launcher](https://github.com/FCL-Team/FoldCraftLauncher),
   [HMCL](https://github.com/HuangJunJie2017/HMCL),

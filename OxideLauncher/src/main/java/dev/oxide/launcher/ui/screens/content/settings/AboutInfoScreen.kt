@@ -64,6 +64,7 @@ import dev.oxide.launcher.library.LibraryInfo
 import dev.oxide.launcher.library.libraryData
 import dev.oxide.launcher.path.URL_COMMUNITY
 import dev.oxide.launcher.path.URL_MCMOD
+import dev.oxide.launcher.path.URL_PLUS
 import dev.oxide.launcher.path.URL_PROJECT
 import dev.oxide.launcher.path.URL_SUPPORT
 import dev.oxide.launcher.path.URL_WEBLATE
@@ -126,6 +127,15 @@ fun AboutInfoScreen(
                             title = stringResource(R.string.about_launcher_modified_title),
                             text = stringResource(R.string.about_launcher_modified_text),
                             openLink = { openLink(URL_PROJECT) },
+                            useImage = false
+                        )
+
+                        // GPLv3 §5(a)/§6：账号代码来自 ZalithLauncher2Plus，必须署名
+                        LinkIconItem(
+                            icon = painterResource(R.drawable.ic_github),
+                            title = stringResource(R.string.about_launcher_account_code_title),
+                            text = stringResource(R.string.about_launcher_account_code_text),
+                            openLink = { openLink(URL_PLUS) },
                             useImage = false
                         )
 

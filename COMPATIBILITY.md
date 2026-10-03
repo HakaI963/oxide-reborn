@@ -99,6 +99,8 @@ upstream Oxide Launcher — which is the point of keeping the contract.
 | `https://github.com/ZalithLauncher/NativeLibPlugin/releases` | Prebuilt native plugin bundle consumed by `NativePluginManager`. It contains ABI-compatible `.so` files only, so it is a working artifact source rather than branding. |
 | `https://github.com/FCL-Team/FoldCraftLauncher`, `ShirosakiMio/FCLRendererPlugin`, `FCL-Team/FCLDriverPlugin` | Third-party renderer/driver plugin releases. |
 | `PojavLauncher`, `Fold Craft Launcher`, `HMCL`, `Plain Craft Launcher 2`, `MCMod` entries in the About screen, `res/drawable/img_launcher_*.png`, `res/raw/*_license.txt`, and the TextMate `NOTICE.md` | Required legal attribution for code and assets that Oxide Launcher actually derives from. |
+| `authserver.ely.by/api/authlib-injector`, `account.ely.by/register` | Ely.by's authlib-injector endpoint, which Ely.by publishes for third-party launchers, plus its registration page. It is offered as a one-tap "add authentication server" entry. Only the Ely.by credentials a user explicitly types go to Ely.by, exactly as for any other authentication server the user adds. |
+| `Star1xr/ZalithLauncher2Plus`, `Zalith Launcher 2+` in `THIRD_PARTY.md` and in the dual-upstream file headers of the adapted account code | GPLv3 §5(a)/§6 attribution for the account and authentication behaviour adapted from that project. Not a product name: nothing user-facing in the application is branded after it. |
 
 ## 7. Update channel
 

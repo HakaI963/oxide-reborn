@@ -55,6 +55,8 @@ const val URL_COMMUNITY: String = "https://github.com/HakaI963/oxide-reborn/grap
 const val URL_WEBLATE: String = "https://github.com/HakaI963/oxide-reborn"
 const val URL_SUPPORT: String = "https://ifdian.net/a/MovTery"
 const val URL_EASYTIER: String = "https://easytier.cn/"
+/** 账号/认证行为所改编自的项目，仅用于满足 GPLv3 的署名要求 */
+const val URL_PLUS: String = "https://github.com/Star1xr/ZalithLauncher2Plus"
 
 const val URL_GITHUB_RENDERER_PLUGINS = "https://github.com/ShirosakiMio/FCLRendererPlugin/releases/tag/Renderer"
 const val URL_GITHUB_DRIVER_PLUGINS = "https://github.com/FCL-Team/FCLDriverPlugin/releases/tag/Turnip"
