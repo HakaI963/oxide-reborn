@@ -20,6 +20,7 @@ package dev.oxide.launcher.ui.components
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -38,7 +39,7 @@ class OxideBrandSlotState {
     var centerInRoot by mutableStateOf<Offset?>(null)
 
     /** 槽宽度（像素） */
-    var width by mutableStateOf(0f)
+    var width by mutableFloatStateOf(0f)
 
     internal fun report(center: Offset, widthPx: Float) {
         centerInRoot = center

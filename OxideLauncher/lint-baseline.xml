@@ -14721,7 +14721,7 @@
     <issue
         id="MissingTranslation"
         message="&quot;launcher_modified_build_notice&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;pt&quot; (Portuguese), &quot;in&quot; (Indonesian), &quot;fil&quot; (Filipino; Pilipino), &quot;it&quot; (Italian), &quot;es&quot; (Spanish), &quot;zh&quot; (Chinese), &quot;et&quot; (Estonian), &quot;ar&quot; (Arabic), &quot;ug&quot; (Uyghur), &quot;vi&quot; (Vietnamese), &quot;th&quot; (Thai), &quot;ja&quot; (Japanese), &quot;tr&quot; (Turkish)"
-        errorLine1="    &lt;string name=&quot;launcher_modified_build_notice&quot;>Unofficial modified build of Zalith Launcher 2&lt;/string>"
+        errorLine1="    &lt;string name=&quot;launcher_modified_build_notice&quot;>Oxide Launcher&lt;/string>"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
@@ -14732,7 +14732,7 @@
     <issue
         id="MissingTranslation"
         message="&quot;about_launcher_modified_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;pt&quot; (Portuguese), &quot;in&quot; (Indonesian), &quot;fil&quot; (Filipino; Pilipino), &quot;it&quot; (Italian), &quot;es&quot; (Spanish), &quot;zh&quot; (Chinese), &quot;et&quot; (Estonian), &quot;ar&quot; (Arabic), &quot;ug&quot; (Uyghur), &quot;vi&quot; (Vietnamese), &quot;th&quot; (Thai), &quot;ja&quot; (Japanese), &quot;tr&quot; (Turkish)"
-        errorLine1="    &lt;string name=&quot;about_launcher_modified_title&quot;>Modified Build&lt;/string>"
+        errorLine1="    &lt;string name=&quot;about_launcher_modified_title&quot;>About Oxide Launcher&lt;/string>"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
@@ -14743,7 +14743,7 @@
     <issue
         id="MissingTranslation"
         message="&quot;about_launcher_modified_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;pt&quot; (Portuguese), &quot;in&quot; (Indonesian), &quot;fil&quot; (Filipino; Pilipino), &quot;it&quot; (Italian), &quot;es&quot; (Spanish), &quot;zh&quot; (Chinese), &quot;et&quot; (Estonian), &quot;ar&quot; (Arabic), &quot;ug&quot; (Uyghur), &quot;vi&quot; (Vietnamese), &quot;th&quot; (Thai), &quot;ja&quot; (Japanese), &quot;tr&quot; (Turkish)"
-        errorLine1="    &lt;string name=&quot;about_launcher_modified_text&quot;>Oxide Launcher is an unofficial, independently maintained build of Zalith Launcher 2 (GPL-3.0). It is not affiliated with, endorsed by, or supported by the original project. All original copyright notices are preserved in the source files.&lt;/string>"
+        errorLine1="    &lt;string name=&quot;about_launcher_modified_text&quot;>Oxide Launcher is a launcher for Minecraft: Java Edition on Android. It is free software released under the GNU General Public License v3.0 and is developed independently. Full upstream attribution, third-party licences and the list of modifications are in THIRD_PARTY.md; every original copyright notice is preserved in the source files.&lt;/string>"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
@@ -14786,9 +14786,9 @@
 
     <issue
         id="MissingTranslation"
-        message="&quot;about_launcher_author_movtery_title&quot; is not translated in &quot;fil&quot; (Filipino; Pilipino), &quot;it&quot; (Italian), &quot;es&quot; (Spanish), &quot;et&quot; (Estonian), &quot;ar&quot; (Arabic), &quot;ug&quot; (Uyghur), &quot;th&quot; (Thai)"
-        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        message="&quot;about_launcher_project_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;pt&quot; (Portuguese), &quot;in&quot; (Indonesian), &quot;fil&quot; (Filipino; Pilipino), &quot;it&quot; (Italian), &quot;es&quot; (Spanish), &quot;zh&quot; (Chinese), &quot;et&quot; (Estonian), &quot;ar&quot; (Arabic), &quot;ug&quot; (Uyghur), &quot;vi&quot; (Vietnamese), &quot;th&quot; (Thai), &quot;ja&quot; (Japanese), &quot;tr&quot; (Turkish)"
+        errorLine1="    &lt;string name=&quot;about_launcher_project_title&quot;>Oxide Launcher project&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
             line="1279"
@@ -14797,9 +14797,9 @@
 
     <issue
         id="MissingTranslation"
-        message="&quot;about_launcher_author_movtery_text&quot; is not translated in &quot;fil&quot; (Filipino; Pilipino), &quot;it&quot; (Italian), &quot;et&quot; (Estonian), &quot;ar&quot; (Arabic), &quot;ug&quot; (Uyghur), &quot;th&quot; (Thai)"
-        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>Author of %s&lt;/string>"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        message="&quot;about_launcher_project_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;pt&quot; (Portuguese), &quot;in&quot; (Indonesian), &quot;fil&quot; (Filipino; Pilipino), &quot;it&quot; (Italian), &quot;es&quot; (Spanish), &quot;zh&quot; (Chinese), &quot;et&quot; (Estonian), &quot;ar&quot; (Arabic), &quot;ug&quot; (Uyghur), &quot;vi&quot; (Vietnamese), &quot;th&quot; (Thai), &quot;ja&quot; (Japanese), &quot;tr&quot; (Turkish)"
+        errorLine1="    &lt;string name=&quot;about_launcher_project_text&quot;>Source, releases and issue tracker for %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
             line="1280"
@@ -16919,6 +16919,237 @@
     </issue>
 
     <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="341"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>%s の作者&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="342"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-pt/strings.xml"
+            line="371"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>Autor de %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-pt/strings.xml"
+            line="372"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-vi/strings.xml"
+            line="610"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>Tác giả %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-vi/strings.xml"
+            line="611"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-tr/strings.xml"
+            line="662"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>%s\&apos;nin Oluşturucusu&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-tr/strings.xml"
+            line="663"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-in/strings.xml"
+            line="726"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>Pembuat %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-in/strings.xml"
+            line="727"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="819"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>Автор %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="820"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>%s의 제작자&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko/strings.xml"
+            line="904"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko/strings.xml"
+            line="905"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>Autor de %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-es/strings.xml"
+            line="974"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>墨北 MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="989"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>%s 的作者&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="990"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-pt-rBR/strings.xml"
+            line="1009"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>Autor de %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-pt-rBR/strings.xml"
+            line="1010"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_title&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>墨北MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rCN/strings.xml"
+            line="1261"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ExtraTranslation"
+        message="&quot;about_launcher_author_movtery_text&quot; is translated here but not found in default locale"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>%s 的作者&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rCN/strings.xml"
+            line="1262"
+            column="13"/>
+    </issue>
+
+    <issue
         id="PluralsCandidate"
         message="Formatting %d followed by words (&quot;minutes&quot;): This should probably be a plural rather than a string"
         errorLine1="    &lt;string name=&quot;minutes_ago&quot;>%d minutes ago&lt;/string>"
@@ -17583,6 +17814,17 @@
     </issue>
 
     <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableFloatStateOf` instead of `mutableStateOf`"
+        errorLine1="    var width by mutableStateOf(0f)"
+        errorLine2="                 ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/oxide/launcher/ui/components/OxideBrandSlot.kt"
+            line="41"
+            column="18"/>
+    </issue>
+
+    <issue
         id="UnusedResources"
         message="The resource `R.drawable.ic_help_outlined` appears to be unused"
         errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
@@ -17606,6 +17848,13 @@
 
     <issue
         id="UnusedResources"
+        message="The resource `R.drawable.img_avatar_movtery` appears to be unused">
+        <location
+            file="src/main/res/drawable/img_avatar_movtery.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
         message="The resource `R.string.account_local_uuid_copied` appears to be unused"
         errorLine1="    &lt;string name=&quot;account_local_uuid_copied&quot;>Copied UUID of Account %s&lt;/string>"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
@@ -17617,12 +17866,34 @@
 
     <issue
         id="UnusedResources"
+        message="The resource `R.string.about_launcher_author_movtery_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_title&quot;>MovTery&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-in/strings.xml"
+            line="726"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
         message="The resource `R.string.screenshots_manage_export_success` appears to be unused"
         errorLine1="    &lt;string name=&quot;screenshots_manage_export_success&quot;>Export completed&lt;/string>"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
             line="859"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.about_launcher_author_movtery_text` appears to be unused"
+        errorLine1="    &lt;string name=&quot;about_launcher_author_movtery_text&quot;>Autor de %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-es/strings.xml"
+            line="974"
             column="13"/>
     </issue>
 
