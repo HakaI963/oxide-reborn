@@ -72,11 +72,7 @@ import dev.oxide.launcher.game.version.installed.VersionsManager
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.unit.min
 import dev.oxide.launcher.ui.androidText
-import dev.oxide.launcher.ui.screens.NestedNavKey
-import dev.oxide.launcher.ui.screens.NormalNavKey
 import dev.oxide.launcher.ui.screens.content.elements.VersionsOperation
-import dev.oxide.launcher.ui.screens.navigateTo
-import dev.oxide.launcher.ui.screens.removeAndNavigateTo
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.formatDate
 import dev.oxide.launcher.utils.logging.Logger
@@ -84,7 +80,6 @@ import dev.oxide.launcher.utils.platform.getMaxMemoryForSettings
 import dev.oxide.launcher.utils.string.getMessageOrToString
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
-import dev.oxide.launcher.viewmodel.sendToast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -125,13 +120,8 @@ fun OxideInstanceDrawer(
 ) {
     val eventViewModel = rememberOxideEventViewModel()
     val errorViewModel: ErrorViewModel = viewModel()
-    // 必须是 MainActivity 上那一份：NavDisplay 条目自己的 ViewModelStore 里
-    // 另有一份，往那份上面推的导航没有任何反应。取不到时下面每一处
-    // 深层入口都会退回成一次提示，而不是静默失败。
-    val backStack = rememberOxideScreenBackStack()
-    // 宿主给出的真实深层入口（版本设置屏幕等），由外壳决定怎么走
+    // 宿主给出的真实深层入口（实例设置、五类内容、导出向导），由外壳决定怎么走
     val hostActions = LocalOxideHostActions.current
-    val eventToast = androidText(R.string.oxide_ins_operation_failed)
 
     val config = version.getVersionConfig()
     val versionName = version.getVersionName()
@@ -191,31 +181,20 @@ fun OxideInstanceDrawer(
     val openFolder: (File) -> Unit = { dir ->
         eventViewModel.sendEvent(EventViewModel.Event.OpenFileManager(rootPath = dir.absolutePath))
     }
-    // 进入既有的版本子屏幕，导航键与入口和旧版本管理页完全一致
-    val openLegacy: (NormalNavKey.Versions) -> Unit = { target ->
-        val stack = backStack
-        if (stack == null) {
-            // 拿不到真实导航栈时明确提示，而不是点了没反应
-            eventViewModel.sendToast(eventToast)
-        } else {
-            val key = NestedNavKey.VersionSettings(version)
-            stack.mainScreen.navigateTo(key, useClassEquality = true)
-            key.backStack.navigateTo(target)
-            onDismiss()
-        }
+    // 五类内容现在进的是 Oxide 自己的管理表面，不再推旧界面的那五块整页
+    val openContent: (OxideContentCategory) -> Unit = { category ->
+        hostActions.openInstanceContent(version, category)
+        onDismiss()
+    }
+    // 实例设置整块也是 Oxide 自己的那一屏；旧的标签页宿主从此不再从新界面可达
+    val openInstanceSettings: () -> Unit = {
+        hostActions.openInstanceSettings(version)
+        onDismiss()
     }
     val openExport: () -> Unit = {
-        val stack = backStack
-        if (stack == null) {
-            eventViewModel.sendToast(eventToast)
-        } else {
-            stack.mainScreen.removeAndNavigateTo(
-                remove = NestedNavKey.VersionSettings::class,
-                screenKey = NestedNavKey.VersionExport(version),
-                useClassEquality = true,
-            )
-            onDismiss()
-        }
+        // 导出同样走 Oxide 自己的向导，与实例列表那一个入口是同一处
+        hostActions.openVersionExport(version)
+        onDismiss()
     }
 
     val tabTitles = listOf(
@@ -254,10 +233,7 @@ fun OxideInstanceDrawer(
                     onCopy = { operation = VersionsOperation.Copy(version) },
                     onExport = openExport,
                     onDelete = { operation = VersionsOperation.Delete(version) },
-                    onFullSettings = {
-                        hostActions.openVersionSettings(version)
-                        onDismiss()
-                    },
+                    onFullSettings = openInstanceSettings,
                 )
 
                 1 -> OxideInstanceRuntimeTab(
@@ -274,11 +250,11 @@ fun OxideInstanceDrawer(
                     version = version,
                     probe = probe,
                     onOpenFolder = openFolder,
-                    onManageMods = { openLegacy(NormalNavKey.Versions.ModsManager) },
-                    onManageResourcePacks = { openLegacy(NormalNavKey.Versions.ResourcePackManager) },
-                    onManageShaders = { openLegacy(NormalNavKey.Versions.ShadersManager) },
-                    onManageSaves = { openLegacy(NormalNavKey.Versions.SavesManager) },
-                    onManageScreenshots = { openLegacy(NormalNavKey.Versions.ScreenshotsManager) },
+                    onManageMods = { openContent(OxideContentCategory.Mods) },
+                    onManageResourcePacks = { openContent(OxideContentCategory.ResourcePacks) },
+                    onManageShaders = { openContent(OxideContentCategory.Shaders) },
+                    onManageSaves = { openContent(OxideContentCategory.Saves) },
+                    onManageScreenshots = { openContent(OxideContentCategory.Screenshots) },
                 )
 
                 else -> OxideInstanceLogsTab(

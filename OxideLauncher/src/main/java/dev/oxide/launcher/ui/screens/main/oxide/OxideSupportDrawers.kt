@@ -171,7 +171,9 @@ internal fun rememberOxideLauncherBridge(): OxideLauncherBridge {
         OxideLauncherBridge(
             openSettingsSection = { section -> host.openSettingsSection(section) },
             openAccountManager = { host.openAccountManager() },
-            openLogView = { path -> backStack.mainScreen.backStack.navigateToLogView(path) },
+            // The Oxide log screen already exists, so this must not push NormalNavKey.LogView,
+            // which renders the original log viewer.
+            openLogView = { path -> host.openLog(path) },
             checkUpdate = { events.sendEvent(EventViewModel.Event.CheckUpdate) },
             openLink = { link -> host.openLink(link) },
             openFileManager = { path -> events.sendEvent(EventViewModel.Event.OpenFileManager(rootPath = path)) },

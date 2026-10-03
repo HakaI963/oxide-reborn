@@ -112,6 +112,7 @@ import dev.oxide.launcher.viewmodel.ModpackImportViewModel
 import dev.oxide.launcher.viewmodel.ModpackVersionNameOperation
 import dev.oxide.launcher.viewmodel.ScreenBackStackViewModel
 import dev.oxide.launcher.viewmodel.VulkanCheckerViewModel
+import dev.oxide.launcher.viewmodel.sendToast
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -367,9 +368,9 @@ class MainActivity : BaseAppCompatActivity() {
                             screenBackStackModel.mainScreen.clearWith(NormalNavKey.LauncherMain)
                         },
                         toVersionManageScreen = {
-                            screenBackStackModel.mainScreen.removeAndNavigateTo(
-                                remove = NestedNavKey.VersionSettings::class,
-                                screenKey = NormalNavKey.VersionsManager
+                            // 不能再推旧的版本管理页：它仍是旧界面。外壳会切到新的"实例"页。
+                            eventViewModel.sendEvent(
+                                EventViewModel.Event.ShowLauncherPage(SHOW_PAGE_INSTANCES)
                             )
                         },
                         navigateToWeb = { url ->
@@ -782,3 +783,6 @@ class MainActivity : BaseAppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 }
+
+/** [EventViewModel.Event.ShowLauncherPage] 使用的页序号，与外壳的导航顺序一致 */
+private const val SHOW_PAGE_INSTANCES = 1

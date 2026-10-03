@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +43,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.oxide.launcher.R
 import dev.oxide.launcher.game.version.installed.Version
+import dev.oxide.launcher.viewmodel.EventViewModel
+import dev.oxide.launcher.game.version.installed.VersionsManager
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.ui.theme.ProvideOxideChrome
@@ -55,7 +58,17 @@ import dev.oxide.launcher.viewmodel.LaunchGameViewModel
  */
 class OxideHostActions(
     val navigateTo: (OxidePage) -> Unit,
-    val openVersionSettings: (Version) -> Unit,
+    /** 打开 Oxide 自己的实例设置整块标签页宿主（概览 / 配置 / 五类内容） */
+    val openInstanceSettings: (Version) -> Unit,
+    /**
+     * 打开 Oxide 自己的"修改实例"表面（目标版本 → 加载器 → 改名与图标 → 执行）
+     *
+     * 这一块现在由本文件渲染，因此不再推进旧的 `NestedNavKey.VersionSettings`
+     * 嵌套栈；接口形状保持不变，页面只描述意图。
+     */
+    val openVersionModify: (Version) -> Unit,
+    /** 打开实例的五类内容（模组、资源包、光影、存档、截图），落在指定的那一类上 */
+    val openInstanceContent: (Version, OxideContentCategory) -> Unit,
     val openLink: (String) -> Unit,
     val openSettingsSection: (OxideSettingsSection) -> Unit,
     val openAccountManager: () -> Unit,
@@ -64,6 +77,8 @@ class OxideHostActions(
     val openFiles: (String) -> Unit,
     /** 打开 Oxide 自己的日志页；[initialLogPath] 非空时直接选中那一份 */
     val openLog: (String?) -> Unit,
+    /** 用 Oxide 自己的三步向导导出这个实例的整合包 */
+    val openVersionExport: (Version) -> Unit,
 )
 
 /** 设置页里可以直接打开的深层分类 */
@@ -79,13 +94,16 @@ enum class OxideDownloadCategory {
 val LocalOxideHostActions = staticCompositionLocalOf {
     OxideHostActions(
         navigateTo = {},
-        openVersionSettings = {},
+        openInstanceSettings = {},
+        openVersionModify = {},
+        openInstanceContent = { _, _ -> },
         openLink = {},
         openSettingsSection = {},
         openAccountManager = {},
         openDownloadCategory = {},
         openFiles = {},
         openLog = {},
+        openVersionExport = {},
     )
 }
 
@@ -93,14 +111,32 @@ val LocalOxideHostActions = staticCompositionLocalOf {
  * 侧栏四个页面之外的目的地
  *
  * 账号、联机、文件、日志都不在侧栏里：它们是从顶栏动作或页面内入口打开的
- * 整块表面，而不是第五、第六个侧栏页。因此它们盖在页面区之上，
- * 硬件返回先关掉当前这一块，再退回首页。
+ * 整块表面，而不是第五、第六个侧栏页。实例设置与实例的五个内容管理页同理。
+ * 因此它们盖在页面区之上，硬件返回先关掉当前这一块，再退回首页。
  */
 sealed interface OxideDestination {
     data object Account : OxideDestination
     data object Multiplayer : OxideDestination
     data class Files(val rootPath: String) : OxideDestination
     data class Log(val initialLogPath: String?) : OxideDestination
+
+    /** 装一个 Minecraft 版本：选版本 → 选加载器与 API → 命名并安装 */
+    data object InstallVersion : OxideDestination
+
+    /** 把某个实例导出成整合包：格式 → 元数据 → 挑文件 */
+    data class ExportModpack(val versionPath: String) : OxideDestination
+
+    /** 修改一个已安装的实例：目标版本 → 加载器 → 改名与图标 → 执行 */
+    data class ModifyVersion(val versionPath: String) : OxideDestination
+
+    /** 实例的概览 / 配置 / 五类内容那一整块标签页宿主 */
+    data class InstanceSettings(val versionPath: String) : OxideDestination
+
+    /** 实例的某一类内容，[category] 决定落在哪一栏 */
+    data class InstanceContent(
+        val versionPath: String,
+        val category: OxideContentCategory,
+    ) : OxideDestination
 }
 
 /**
@@ -119,7 +155,6 @@ sealed interface OxideDestination {
  */
 @Composable
 fun OxideMainShell(
-    openVersionSettings: (Version) -> Unit,
     openLink: (String) -> Unit,
     openSettingsSection: (OxideSettingsSection) -> Unit,
     openDownloadCategory: (OxideDownloadCategory) -> Unit,
@@ -131,12 +166,27 @@ fun OxideMainShell(
     val nav = rememberOxideNavState()
     val metrics = rememberOxideMetrics()
 
+    // MainActivity 在启动前弹窗里需要跳到某个主页（例如没有可用实例时去"实例"页），
+    // 但它拿不到外壳的导航状态，所以走事件流，不把导航对象泄漏进 Activity。
+    val navEventViewModel = rememberOxideEventViewModel()
+    LaunchedEffect(navEventViewModel) {
+        navEventViewModel.events.collect { event ->
+            if (event is EventViewModel.Event.ShowLauncherPage) {
+                OxidePage.entries.getOrNull(event.page)?.let(nav::go)
+            }
+        }
+    }
+
     // MainActivity 持有同一个 LaunchGameViewModel；这里取到的就是那一个，
     // 因此按 Play 之后这一屏显示的是真实启动阶段，取消按钮也作用在同一条链路上
     val launchViewModel: LaunchGameViewModel = viewModel()
     val launchFlow by launchViewModel.launchFlow.collectAsStateWithLifecycle()
 
     var destination by remember { mutableStateOf<OxideDestination?>(null) }
+
+    // 实例相关的目的地按路径记住，而不是按 Version 对象：
+    // 版本改名之后路径会变，下面的 LaunchedEffect 会顺手把那一块收掉
+    val versions by VersionsManager.versions.collectAsStateWithLifecycle()
 
     // 不在第一个页面、也没有打开任何目的地时，返回键先退回首页；
     // 后注册的这一层优先，因此打开目的地时返回先关目的地
@@ -147,15 +197,67 @@ fun OxideMainShell(
         destination = null
     }
 
+    // 版本被改名或删除之后，目的地引用的那条路径已经不存在了，收起那一块
+    val livePaths = remember(versions) {
+        versions.map { version -> version.getVersionPath().absolutePath }.toSet()
+    }
+    LaunchedEffect(livePaths, destination) {
+        val path = when (val current = destination) {
+            is OxideDestination.InstanceSettings -> current.versionPath
+            is OxideDestination.InstanceContent -> current.versionPath
+            is OxideDestination.ExportModpack -> current.versionPath
+            is OxideDestination.ModifyVersion -> current.versionPath
+            else -> null
+        }
+        // 列表还没探完时"一个都看不到"不代表这个版本被删了，因此要等它非空
+        if (path != null && livePaths.isNotEmpty() && path !in livePaths) {
+            destination = null
+        }
+    }
+
+    fun versionAt(path: String): Version? =
+        versions.firstOrNull { version -> version.getVersionPath().absolutePath == path }
+
     val actions = OxideHostActions(
         navigateTo = nav::go,
-        openVersionSettings = openVersionSettings,
+        // 「完整实例设置」现在是 Oxide 自己那一屏，而不是旧的标签页宿主
+        openInstanceSettings = { version ->
+            destination = OxideDestination.InstanceSettings(
+                versionPath = version.getVersionPath().absolutePath,
+            )
+        },
+        // 「修改版本 / 选择版本」现在由 Oxide 自己那一屏负责，改名成功之后那一屏
+        // 会因为路径消失而自己退回来，这里只需要换掉目的地
+        openVersionModify = { version ->
+            destination = OxideDestination.ModifyVersion(
+                versionPath = version.getVersionPath().absolutePath,
+            )
+        },
+        openInstanceContent = { version, category ->
+            destination = OxideDestination.InstanceContent(
+                versionPath = version.getVersionPath().absolutePath,
+                category = category,
+            )
+        },
         openLink = openLink,
         openSettingsSection = openSettingsSection,
         openAccountManager = { destination = OxideDestination.Account },
-        openDownloadCategory = openDownloadCategory,
+        // 装 Minecraft 版本已经有 Oxide 自己的三步向导，因此这一类不再推进旧的下载嵌套栈；
+        // 其余分类原样交给宿主，路径与旧界面完全一致
+        openDownloadCategory = { category ->
+            if (category == OxideDownloadCategory.Game) {
+                destination = OxideDestination.InstallVersion
+            } else {
+                openDownloadCategory(category)
+            }
+        },
         openFiles = { path -> destination = OxideDestination.Files(path) },
         openLog = { path -> destination = OxideDestination.Log(path) },
+        openVersionExport = { version ->
+            destination = OxideDestination.ExportModpack(
+                versionPath = version.getVersionPath().absolutePath,
+            )
+        },
     )
 
     // ProvideOxideChrome 必须包在整棵 Oxide 树的根上：
@@ -251,6 +353,49 @@ fun OxideMainShell(
                                     initialLogPath = target.initialLogPath,
                                     onDismiss = { destination = null },
                                 )
+
+                                is OxideDestination.InstallVersion -> OxideInstallVersionPage(
+                                    metrics = metrics,
+                                    onDismiss = { destination = null },
+                                )
+
+                                is OxideDestination.ExportModpack ->
+                                    versionAt(target.versionPath)?.let { version ->
+                                        OxideExportPage(
+                                            metrics = metrics,
+                                            version = version,
+                                            onDismiss = { destination = null },
+                                        )
+                                    }
+
+                                is OxideDestination.ModifyVersion ->
+                                    versionAt(target.versionPath)?.let { version ->
+                                        OxideModifyVersionPage(
+                                            metrics = metrics,
+                                            version = version,
+                                            onDismiss = { destination = null },
+                                        )
+                                    }
+
+                                is OxideDestination.InstanceSettings ->
+                                    versionAt(target.versionPath)?.let { version ->
+                                        OxideVersionSettingsPage(
+                                            version = version,
+                                            metrics = metrics,
+                                            onDismiss = { destination = null },
+                                            openModifyVersion = actions.openVersionModify,
+                                        )
+                                    }
+
+                                is OxideDestination.InstanceContent ->
+                                    versionAt(target.versionPath)?.let { version ->
+                                        OxideContentManagerScreen(
+                                            version = version,
+                                            metrics = metrics,
+                                            initialCategory = target.category,
+                                            onDismiss = { destination = null },
+                                        )
+                                    }
                             }
                         }
                     }

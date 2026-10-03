@@ -46,6 +46,14 @@ class EventViewModel : ViewModel() {
     }
 
     sealed interface Event {
+        /**
+         * 让外壳切换到某个主页
+         *
+         * MainActivity 处理启动前的弹窗时需要跳到"实例"页，但它拿不到外壳的导航状态；
+         * 走事件流就不用把导航对象泄漏进 Activity。
+         */
+        data class ShowLauncherPage(val page: Int) : Event
+
         sealed interface Key : Event {
             /** 让MainActivity开始按键捕获 */
             data object StartKeyCapture : Key

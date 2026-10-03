@@ -159,9 +159,14 @@ private fun oxideSidebarFixedHeight(brandGap: Dp): Dp =
  * 与 [Oxide.Type.Nav] 的 14sp 行高对应，同样乘一次界面缩放。放在这里而不是直接在
  * 界面里读字体，是因为项高与文字必须用同一个系数算，否则两者会在某一档上错开。
  * 参数是系数而不是百分比，因为 [OxideMetrics] 那一侧手上已经是系数了。
+ *
+ * 返回值是 dp 而不是排版单位（TextUnit）：这里给 [oxideNavItemHeightFor] 当高度下限用，
+ * 而那条链路上全是 dp，比较和取整都必须在同一个单位里。按参考稿"1px = 1dp"的
+ * 直译约定，取行高的数值当 dp 用；`Oxide.Type.Nav` 是 sp，这里不掺系统
+ * 字号缩放，避免项高下限被用户字体设置带偏。
  */
 fun oxideNavTextLineHeight(factor: Float): Dp =
-    oxideScaledTextStyle(NAV_TEXT_BASE, factor).lineHeight
+    oxideScaledTextStyle(NAV_TEXT_BASE, factor).lineHeight.value.dp
 
 /** 导航项文字的基准行高，与 [Oxide.Type.Nav] 一致；单独存一份是为了纯函数化 */
 private val NAV_TEXT_BASE: TextStyle = TextStyle(fontSize = 10.sp, lineHeight = 14.sp)

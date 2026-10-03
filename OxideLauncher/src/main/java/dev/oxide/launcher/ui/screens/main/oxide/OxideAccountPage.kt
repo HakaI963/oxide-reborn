@@ -100,6 +100,7 @@ import dev.oxide.launcher.utils.copyText
 import dev.oxide.launcher.utils.settings.SettingsExport
 import dev.oxide.launcher.utils.settings.SettingsTransferUtils
 import dev.oxide.launcher.utils.string.getMessageOrToString
+import dev.oxide.launcher.viewmodel.AccountManageEffect
 import dev.oxide.launcher.viewmodel.AccountManageIntent
 import dev.oxide.launcher.viewmodel.AccountManageViewModel
 import dev.oxide.launcher.viewmodel.ErrorViewModel
@@ -181,7 +182,10 @@ fun OxideAccountPage(
     // ViewModel 抛出的错误就地展示，而不是依赖另一个 Activity 头上的弹窗
     LaunchedEffect(viewModel) {
         viewModel.effect.collect { effect ->
-            failure = ErrorViewModel.ThrowableMessage(effect.title, effect.message)
+            when (effect) {
+                is AccountManageEffect.ShowError ->
+                    failure = ErrorViewModel.ThrowableMessage(effect.title, effect.message)
+            }
         }
     }
 
@@ -215,7 +219,15 @@ fun OxideAccountPage(
                 }
             }
 
-            AccountOperation.Delete, AccountOperation.None -> Unit
+            is AccountOperation.Delete -> {
+                // 旧账号管理界面与这一页共用同一个 ViewModel，它把删除请求派发成
+                // AccountOperation.Delete；这里交给本页自己的确认条承接，
+                // 确认之后才真正删除，用完立即复位
+                deleteTarget = op.account
+                viewModel.onIntent(AccountManageIntent.UpdateAccountOp(AccountOperation.None))
+            }
+
+            AccountOperation.None -> Unit
         }
     }
 
@@ -929,6 +941,17 @@ private fun OxideAccountSheetHost(
     openLink: (String) -> Unit,
 ) {
     val dismissDescription = stringResource(R.string.oxide_sec_accounts_dismiss)
+    // 抽屉标题：登录服务器那一页用服务器名，其余各页用各自的固定文案
+    val sheetTitle: String = when (sheet) {
+        AccountSheet.Menu -> stringResource(R.string.oxide_sec_accounts_sign_in_title)
+        AccountSheet.Offline -> stringResource(R.string.oxide_sec_accounts_sign_in_offline)
+        is AccountSheet.ServerLogin -> sheet.server.serverName
+        AccountSheet.AddServer -> stringResource(R.string.oxide_sec_accounts_add_server)
+        is AccountSheet.PickRole -> stringResource(R.string.oxide_sec_accounts_pick_role)
+        is AccountSheet.Relogin -> stringResource(R.string.oxide_sec_accounts_relogin_title)
+        is AccountSheet.Skin -> stringResource(R.string.oxide_sec_accounts_change_skin)
+        AccountSheet.None -> stringResource(R.string.generic_close)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -955,18 +978,7 @@ private fun OxideAccountSheetHost(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = stringResource(
-                            when (sheet) {
-                                AccountSheet.Menu -> R.string.oxide_sec_accounts_sign_in_title
-                                AccountSheet.Offline -> R.string.oxide_sec_accounts_sign_in_offline
-                                is AccountSheet.ServerLogin -> sheet.server.serverName
-                                AccountSheet.AddServer -> R.string.oxide_sec_accounts_add_server
-                                is AccountSheet.PickRole -> R.string.oxide_sec_accounts_pick_role
-                                is AccountSheet.Relogin -> R.string.oxide_sec_accounts_relogin_title
-                                is AccountSheet.Skin -> R.string.oxide_sec_accounts_change_skin
-                                AccountSheet.None -> R.string.generic_close
-                            }
-                        ),
+                        text = sheetTitle,
                         color = Oxide.Fg,
                         fontSize = Oxide.Type.DrawerTitle.fontSize,
                         lineHeight = Oxide.Type.DrawerTitle.lineHeight,

@@ -93,9 +93,7 @@ import dev.oxide.launcher.game.version.installed.VersionsManager
 import dev.oxide.launcher.ui.activities.MainActivity
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.resolveAndroidString
-import dev.oxide.launcher.ui.screens.NestedNavKey
 import dev.oxide.launcher.ui.screens.content.elements.VersionsOperation
-import dev.oxide.launcher.ui.screens.removeAndNavigateTo
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.getTimeAgo
 import dev.oxide.launcher.utils.logging.Logger
@@ -116,11 +114,11 @@ private const val TAG = "OxideInstancesPage"
 private const val GRID_ROWS = 2
 
 /** 参考稿 `.miniStat` 的 `gap`，也是统计块内部的间距 */
-private const val STAT_GAP = 6.dp
+private val STAT_GAP = 6.dp
 
 /** 参考稿 `.instanceCard` 的内边距 */
-private const val CARD_PADDING_H = 12.dp
-private const val CARD_PADDING_V = 11.dp
+private val CARD_PADDING_H = 12.dp
+private val CARD_PADDING_V = 11.dp
 
 /**
  * 卡片真正的内容高度，用来给行高兜底
@@ -160,7 +158,6 @@ fun OxideInstancesPage(
 ) {
     val context = LocalContext.current
     val eventViewModel = rememberOxideEventViewModel()
-    val backStack = rememberOxideScreenBackStack()
     val hostActions = LocalOxideHostActions.current
 
     val versions by VersionsManager.versions.collectAsStateWithLifecycle()
@@ -243,18 +240,9 @@ fun OxideInstancesPage(
             InstanceAction.Configure -> drawerKey = version.getVersionPath().absolutePath
             InstanceAction.Rename -> operation = VersionsOperation.Rename(version)
             InstanceAction.Copy -> operation = VersionsOperation.Copy(version)
-            InstanceAction.ExportModPack -> {
-                val stack = backStack
-                if (stack == null) {
-                    eventViewModel.sendToast(androidText(R.string.oxide_ins_operation_failed))
-                } else {
-                    stack.mainScreen.removeAndNavigateTo(
-                        remove = NestedNavKey.VersionSettings::class,
-                        screenKey = NestedNavKey.VersionExport(version),
-                        useClassEquality = true,
-                    )
-                }
-            }
+            InstanceAction.ExportModPack ->
+                // 导出走 Oxide 自己的三步向导，不再推进旧的 VersionExport 嵌套栈
+                hostActions.openVersionExport(version)
 
             InstanceAction.SetPinned -> setPinned(version, true, submitError)
             InstanceAction.ClearPinned -> setPinned(version, false, submitError)

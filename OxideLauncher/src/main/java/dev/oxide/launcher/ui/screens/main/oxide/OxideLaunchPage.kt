@@ -61,6 +61,7 @@ import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.file.formatFileSize
 import dev.oxide.launcher.viewmodel.LaunchGameViewModel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * 启动页
@@ -90,8 +91,11 @@ fun OxideLaunchPage(
     val operation by launchViewModel.launchGameOperation.collectAsStateWithLifecycle()
     val currentVersion by VersionsManager.currentVersion.collectAsStateWithLifecycle()
 
-    val tasks: List<TitledTask> = if (flow != null) {
-        flow.tasksFlow.collectAsStateWithLifecycle().value
+    // `flow` 是 `by` 委托出来的属性，Kotlin 不会对委托属性做智能转换，
+    // 因此先绑到一个局部变量上，再在里面以非空类型读 tasksFlow
+    val activeFlow = flow
+    val tasks: List<TitledTask> = if (activeFlow != null) {
+        activeFlow.tasksFlow.collectAsStateWithLifecycle().value
     } else {
         emptyList()
     }

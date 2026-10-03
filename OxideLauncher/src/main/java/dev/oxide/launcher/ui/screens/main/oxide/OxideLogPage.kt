@@ -105,7 +105,9 @@ fun OxideLogPage(
     onDismiss: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    val hostActions = LocalOxideHostActions.current
+    // 打开系统文件管理器走既有桥接，它内部就是 EventViewModel.Event.OpenFileManager，
+    // 与设置页/抽屉里的同一处完全一致
+    val bridge = rememberOxideLauncherBridge()
 
     val version by VersionsManager.currentVersion.collectAsStateWithLifecycle()
 
@@ -172,10 +174,10 @@ fun OxideLogPage(
                             .fillMaxHeight(),
                         onSelect = { path -> selectedPath = path },
                         onShare = { source ->
-                            shareFile(context, source.path)
+                            shareFile(context, File(source.path))
                         },
                         onOpenFolder = {
-                            hostActions.openFileManager(PathManager.DIR_LAUNCHER_LOGS.absolutePath)
+                            bridge.openFileManager(PathManager.DIR_LAUNCHER_LOGS.absolutePath)
                         },
                     )
 
@@ -202,9 +204,9 @@ fun OxideLogPage(
                             .fillMaxWidth()
                             .weight(0.42f),
                         onSelect = { path -> selectedPath = path },
-                        onShare = { source -> shareFile(context, source.path) },
+                        onShare = { source -> shareFile(context, File(source.path)) },
                         onOpenFolder = {
-                            hostActions.openFileManager(
+                            bridge.openFileManager(
                                 PathManager.DIR_LAUNCHER_LOGS.absolutePath
                             )
                         },

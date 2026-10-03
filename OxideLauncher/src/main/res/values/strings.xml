@@ -1992,6 +1992,58 @@
     <string name="oxide_ins_content_empty">Nothing in this folder yet.</string>
     <string name="oxide_ins_log_missing">This instance has never been launched, so there is no log yet.</string>
 
+    <!-- Oxide: instance content managers (mods, resource packs, shaders, saves, screenshots) -->
+    <string name="oxide_mgr_page_subtitle">Everything this instance keeps on disk. Selecting a category reads that folder for real.</string>
+    <string name="oxide_mgr_settings_subtitle">Instance overview, configuration and content. Every value is written straight back to this instance.</string>
+    <string name="oxide_mgr_cat_mods">Mods</string>
+    <string name="oxide_mgr_cat_resource_packs">Resource packs</string>
+    <string name="oxide_mgr_cat_shaders">Shaders</string>
+    <string name="oxide_mgr_cat_saves">Saves</string>
+    <string name="oxide_mgr_cat_screenshots">Screenshots</string>
+    <string name="oxide_mgr_tab_overview">Overview</string>
+    <string name="oxide_mgr_tab_config">Configuration</string>
+    <string name="oxide_mgr_count">%1$d items</string>
+    <string name="oxide_mgr_loading">Reading this folder…</string>
+    <string name="oxide_mgr_done">Done.</string>
+    <string name="oxide_mgr_reading">Reading</string>
+    <string name="oxide_mgr_invalid">This file cannot be read by Minecraft, so some actions are unavailable.</string>
+    <string name="oxide_mgr_incompatible">Made for another Minecraft version than %1$s.</string>
+    <string name="oxide_mgr_name_exists">A file or folder with that name already exists.</string>
+    <string name="oxide_mgr_no_version_info">This instance has no readable version information, so it cannot be updated.</string>
+    <string name="oxide_mgr_sort_label">Sort: %1$s</string>
+    <string name="oxide_mgr_filter_count">%1$s %2$d</string>
+    <string name="oxide_mgr_delete_confirm">Delete %1$d selected item(s)? This cannot be undone.</string>
+    <string name="oxide_mgr_updated">Mods updated.</string>
+    <string name="oxide_mgr_update_confirm_title">%1$d mod(s) have a newer version. Pick the ones to install.</string>
+    <string name="oxide_mgr_action_update">Update</string>
+    <string name="oxide_mgr_action_delete_selected">Delete selected</string>
+    <string name="oxide_mgr_action_select_all">Select all</string>
+    <string name="oxide_mgr_action_clear_selection">Clear selection</string>
+    <string name="oxide_mgr_action_backup">Back up</string>
+    <string name="oxide_mgr_action_quick_play">Play this save</string>
+    <string name="oxide_mgr_action_open_image">Open this screenshot</string>
+    <string name="oxide_mgr_quick_play_unsupported">This instance cannot open a save directly</string>
+    <string name="oxide_mgr_action_launch">Launch</string>
+    <string name="oxide_mgr_action_modify_version">Modify version</string>
+    <string name="oxide_mgr_action_share_log">Share log</string>
+    <string name="oxide_mgr_action_open_icon">Open the instance folder holding the icon</string>
+    <string name="oxide_mgr_row_game_home">Game home</string>
+    <string name="oxide_mgr_row_game_dir">Game directory</string>
+    <string name="oxide_mgr_row_validity">Instance state</string>
+    <string name="oxide_mgr_section_state">State</string>
+    <string name="oxide_mgr_section_version_config">Version</string>
+    <string name="oxide_mgr_section_support">Support</string>
+    <string name="oxide_mgr_empty_mods">No mods installed</string>
+    <string name="oxide_mgr_empty_mods_detail">This instance\'s mods folder is empty.</string>
+    <string name="oxide_mgr_empty_resource_packs">No resource packs installed</string>
+    <string name="oxide_mgr_empty_resource_packs_detail">This instance\'s resourcepacks folder is empty.</string>
+    <string name="oxide_mgr_empty_shaders">No shader packs installed</string>
+    <string name="oxide_mgr_empty_shaders_detail">This instance\'s shaderpacks folder is empty.</string>
+    <string name="oxide_mgr_empty_saves">No saves yet</string>
+    <string name="oxide_mgr_empty_saves_detail">Play the game once to create a world in this instance\'s saves folder.</string>
+    <string name="oxide_mgr_empty_screenshots">No screenshots yet</string>
+    <string name="oxide_mgr_empty_screenshots_detail">Take a screenshot in game and it will appear in this instance\'s screenshots folder.</string>
+
     <!-- Oxide: the secondary surfaces (accounts, multiplayer, files, logs, launch) -->
     <string name="oxide_sec_topbar_account">Account</string>
     <string name="oxide_sec_topbar_back">Back</string>
@@ -2148,4 +2200,78 @@
     <string name="oxide_sec_launch_op_unsupported_plugins">Some loaded plugins do not support this version</string>
     <string name="oxide_sec_launch_op_relogin">%1$s has to sign in again</string>
     <string name="oxide_sec_launch_op_refresh_failed">Refreshing %1$s failed</string>
+
+    <!-- Oxide: installing a Minecraft version (replaces DownloadGameScreen) -->
+    <string name="oxide_inst_title">Install a version</string>
+    <string name="oxide_inst_subtitle">VERSION · LOADER · INSTALL</string>
+    <string name="oxide_inst_step_version">Version</string>
+    <string name="oxide_inst_step_loader">Loader</string>
+    <string name="oxide_inst_step_install">Install</string>
+    <string name="oxide_inst_slot_list">Loaders and mods</string>
+    <string name="oxide_inst_slot_count">%1$d selected</string>
+    <string name="oxide_inst_clear_addon">Clear the %1$s selection</string>
+    <string name="oxide_inst_addon_api_action">Choose</string>
+    <string name="oxide_inst_addon_unavailable_detail">No build of this loader exists for the selected Minecraft version.</string>
+    <string name="oxide_inst_addon_api_detail">Most mods need this API. Pick a loader version first.</string>
+    <string name="oxide_inst_versions_failed">The version list could not be loaded</string>
+    <string name="oxide_inst_versions_empty">No version matches the filter</string>
+    <string name="oxide_inst_versions_empty_detail">Turn on another release type, or clear the search box.</string>
+    <string name="oxide_inst_version_wiki">Open the wiki page for %1$s</string>
+    <string name="oxide_inst_no_version">No version chosen yet</string>
+    <string name="oxide_inst_no_version_detail">Pick a Minecraft version first — the loader list depends on it.</string>
+    <string name="oxide_inst_loading_loaders">Reading the loader list for this version…</string>
+    <string name="oxide_inst_chosen_version">Minecraft version</string>
+    <string name="oxide_inst_edit_version">Change the Minecraft version</string>
+    <string name="oxide_inst_summary">This install will contain</string>
+
+    <!-- Oxide: modpack export (replaces VersionExportScreen) -->
+    <string name="oxide_exp_title">Export modpack</string>
+    <string name="oxide_exp_subtitle">%1$s · TYPE · DETAILS · FILES</string>
+    <string name="oxide_exp_step_type">Type</string>
+    <string name="oxide_exp_step_info">Details</string>
+    <string name="oxide_exp_step_files">Files</string>
+    <string name="oxide_exp_type_section">Pack format</string>
+    <string name="oxide_exp_identity_section">Identity</string>
+    <string name="oxide_exp_content_section">Description and runtime</string>
+    <string name="oxide_exp_remote_section">Remote resources</string>
+    <string name="oxide_exp_remote_hint">Remote files are embedded as links, so the exported pack stays small.</string>
+    <string name="oxide_exp_files_refreshing">Reading the folder…</string>
+    <string name="oxide_exp_files_selected">Files selected</string>
+    <string name="oxide_exp_files_none">Nothing selected</string>
+    <string name="oxide_exp_files_hint">Tick a folder to include everything inside it. Tick it again to clear the whole folder.</string>
+    <string name="oxide_exp_files_empty">This instance folder is empty</string>
+    <string name="oxide_exp_files_empty_detail">Install something into this instance, or refresh the list.</string>
+    <string name="oxide_exp_confirm_folder">Choose the folder</string>
+    <string name="oxide_exp_invalid_instance">This instance is no longer available</string>
+
+    <!-- Oxide: modifying an installed instance (replaces ModifyVersionScreen) -->
+    <string name="oxide_mod_title">Modify instance</string>
+    <string name="oxide_mod_subtitle">%1$s · VERSION · LOADER · INSTANCE</string>
+    <string name="oxide_mod_step_version">Version</string>
+    <string name="oxide_mod_step_loader">Loader</string>
+    <string name="oxide_mod_step_instance">Instance</string>
+    <string name="oxide_mod_step_apply">Apply</string>
+    <string name="oxide_mod_target_section">Target Minecraft version</string>
+    <string name="oxide_mod_loader_section">Loaders on this instance</string>
+    <string name="oxide_mod_badge_installed">Installed</string>
+    <string name="oxide_mod_loader_installed">Installed: %1$s</string>
+    <string name="oxide_mod_loader_kept">This one cannot be matched against the published list, so it stays unless you pick another version.</string>
+    <string name="oxide_mod_loader_kept_short">Kept as it is</string>
+    <string name="oxide_mod_loader_remove">Removed</string>
+    <string name="oxide_mod_instance_section">Instance details</string>
+    <string name="oxide_mod_name_tip">The instance folder is named after this. Renaming happens once the modify finishes.</string>
+    <string name="oxide_mod_name_kept">Unchanged</string>
+    <string name="oxide_mod_icon_section">Icon</string>
+    <string name="oxide_mod_icon_none">No custom icon</string>
+    <string name="oxide_mod_icon_custom">Custom icon</string>
+    <string name="oxide_mod_action_pick_icon">Pick an image…</string>
+    <string name="oxide_mod_action_reset_icon">Reset</string>
+    <string name="oxide_mod_icon_busy">Reading the image…</string>
+    <string name="oxide_mod_icon_failed">%1$s is not an image, so the icon was left untouched.</string>
+    <string name="oxide_mod_review_section">What this modify will do</string>
+    <string name="oxide_mod_review_none">Nothing has changed yet. Pick another Minecraft version, another loader version, or clear a loader.</string>
+    <string name="oxide_mod_review_nothing_installed">This instance has no mod loader, and none is picked.</string>
+    <string name="oxide_mod_start">Modify</string>
+    <string name="oxide_mod_info_missing">This instance has no readable metadata, so it cannot be modified.</string>
+    <string name="oxide_mod_loading_instance">Reading this instance…</string>
 </resources>

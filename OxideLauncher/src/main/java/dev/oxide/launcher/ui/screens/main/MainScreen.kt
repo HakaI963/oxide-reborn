@@ -515,7 +515,7 @@ private fun NavigationUI(
     }
 
     if (backStack.isNotEmpty()) {
-        /** 导航至版本详细信息屏幕 */
+        /** 导航至版本详细信息屏幕；只有既有的版本管理页还会用到它 */
         val navigateToVersions: (Version) -> Unit = { version ->
             screenBackStackModel.mainScreen.navigateTo(
                 screenKey = NestedNavKey.VersionSettings(version),
@@ -542,7 +542,6 @@ private fun NavigationUI(
             entryProvider = entryProvider {
                 entry<NormalNavKey.LauncherMain> {
                     OxideMainShell(
-                        openVersionSettings = navigateToVersions,
                         openLink = {
                             eventViewModel.sendEvent(EventViewModel.Event.OpenLink(it))
                         },

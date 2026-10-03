@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
@@ -111,7 +112,7 @@ private const val OxidePopoverScaleFrom = 0.94f
  * 只有两种，且各自成对使用：面板的一条边缘与控件的同一条边缘对齐。
  * 本启动器里所有下拉都是左对齐控件，所以默认是 [START]。
  */
-internal enum class OxidePopoverAlignment {
+enum class OxidePopoverAlignment {
     /** 面板左边缘与控件左边缘对齐 */
     START,
 
