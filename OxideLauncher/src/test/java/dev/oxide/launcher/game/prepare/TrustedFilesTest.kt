@@ -136,8 +136,13 @@ class TrustedFilesTest {
             )
         )
         assertEquals(1, parsed.size)
-        assertFalse(parsed.isTrusted(File("/other")))
-        assertTrue(parsed.isTrusted(File("/good/path")))
+        assertFalse(parsed.isTrusted(File(dir, "other")))
+        assertFalse(parsed.isTrusted(File(dir, "path")))
+        // 唯一被接受的那行指向一个真实存在的文件
+        val good = File(dir, "good").apply { writeText("x") }
+        assertTrue(
+            TrustedFiles.parse("12\t34\t${good.absolutePath}".lineSequence()).isTrusted(good)
+        )
     }
 
     @Test

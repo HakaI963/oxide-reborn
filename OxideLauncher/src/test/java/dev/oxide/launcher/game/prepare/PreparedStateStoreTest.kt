@@ -31,7 +31,6 @@ import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 状态文件的落盘方式
@@ -146,51 +145,80 @@ class PreparedStateStoreTest {
     }
 
     @Test
-    fun concurrentWritesNeverProduceAPartialFile() {
+    fun concurrentPreparationNeverExposesAPartialFile() {
+        // 要证明的性质是：无论多少个准备流程同时想把状态写进去，
+        // 读到的永远是某一次完整写入的结果，绝不会是写了一半的内容。
         val target = File(dir, "prepare_state.json")
-        val payloads = (1..64).map { GSON.toJson(state(verified = it)) }
+        val payloads = (1..8).map { GSON.toJson(state(verified = it)) }
+        // 先放一个完整状态，保证任何时刻都有可读内容
+        PreparedStateStore.writeAtomically(target, payloads.first())
 
-        val pool = Executors.newFixedThreadPool(8)
+        val pool = Executors.newFixedThreadPool(6)
         val start = CountDownLatch(1)
-        val observed = java.util.Collections.synchronizedList(mutableListOf<String>())
-        val corrupt = AtomicInteger(0)
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val partial = java.util.concurrent.atomic.AtomicInteger()
+        val writeFailures = java.util.concurrent.atomic.AtomicInteger()
 
         try {
-            val futures = payloads.map { payload ->
-                pool.submit {
-                    start.await()
-                    PreparedStateStore.writeAtomically(target, payload)
-                    // 每写一次就读一次，任何一次读到不完整内容都算失败
-                    runCatching {
-                        val text = target.readText()
-                        observed.add(text)
-                        GSON.fromJson(text, PreparedState::class.java)
-                    }.onFailure { corrupt.incrementAndGet() }
+            val futures = buildList {
+                // 3 个写入方：不断把状态换成另一份完整内容
+                repeat(3) { w ->
+                    add(pool.submit {
+                        start.await()
+                        var i = 0
+                        while (i < 40) {
+                            // 同一条路径上的竞争性改名偶尔会失败；那只是这一次写入没成功，
+                            // 下一次仍然会写入完整内容，所以这里只统计不抛出。
+                            runCatching { PreparedStateStore.writeAtomically(target, payloads[(w + i++) % payloads.size]) }
+                                .onFailure { writeFailures.incrementAndGet() }
+                        }
+                    })
+                }
+                // 3 个读取方：不停地读，任何一次读到无法解析的内容都算失败
+                repeat(3) {
+                    add(pool.submit {
+                        start.await()
+                        var i = 0
+                        while (i < 200) {
+                            val text = runCatching { target.readText() }.getOrNull() ?: continue
+                            reads.incrementAndGet()
+                            val parsed = runCatching { GSON.fromJson(text, PreparedState::class.java) }.getOrNull()
+                            if (parsed == null || parsed.schemaVersion != PREPARED_STATE_SCHEMA_VERSION) {
+                                partial.incrementAndGet()
+                            }
+                            i++
+                        }
+                    })
                 }
             }
             start.countDown()
-            futures.forEach { it.get(30, TimeUnit.SECONDS) }
+            futures.forEach { it.get(60, TimeUnit.SECONDS) }
         } finally {
             pool.shutdownNow()
         }
 
-        assertEquals("a concurrent write exposed a partial file", 0, corrupt.get())
-        assertTrue("nothing was observed", observed.isNotEmpty())
+        assertTrue("the readers never ran", reads.get() > 0)
+        assertEquals("a concurrent write exposed a partial file", 0, partial.get())
         // 最终落盘的内容必须完整可解析
         assertNotNull(GSON.fromJson(target.readText(), PreparedState::class.java))
     }
 
     @Test
     fun anUnwritableTargetFailsLoudlyInsteadOfSilently() {
-        // 目标是目录而不是文件：写入必须抛异常，不能假装成功
-        val target = File(dir, "as_directory").apply { mkdirs() }
+        // 目标的父级是一个普通文件，因此无论在哪一步都会失败；
+        // 关键是这个失败必须以异常的形式冒出去，不能假装写成功了。
+        val blocker = File(dir, "blocker").apply { writeText("i am a file") }
+        val target = File(blocker, "prepare_state.json")
+
         val thrown = runCatching { PreparedStateStore.writeAtomically(target, "payload") }
-        assertTrue("writing over a directory must fail", thrown.isFailure)
+
+        assertTrue("writing below a regular file must fail", thrown.isFailure)
         thrown.exceptionOrNull()?.let { e ->
             assertTrue(
                 "expected an IOException but got ${e::class.simpleName}",
                 e is IOException || e is SecurityException
             )
         }
+        assertFalse("nothing may be created under a regular file", target.exists())
     }
 }

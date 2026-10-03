@@ -282,7 +282,7 @@ class PreparedStateValidatorTest {
         for (dir in listOf("logs", "saves", "screenshots", "crash-reports", "resourcepacks", "shaderpacks")) {
             File(gameHome, dir).apply { mkdirs(); File(this, "fresh.txt").writeText("noise") }
         }
-        File(gameHome, ".fabric").apply { mkdirs(); writeText("{}") }
+        File(gameHome, ".fabric").apply { mkdirs() }.resolve("remapped.json").writeText("{}")
         File(gameHome, "options.txt").writeText("fov:70")
 
         assertValid(reason(before))
@@ -331,7 +331,7 @@ class PreparedStateValidatorTest {
     fun aLauncherUpgradeForcesARebuild() {
         assertInvalid(
             PrepareInvalidateReason.LAUNCHER_UPDATED,
-            reason(recorded(launcherVersion = launcherVersionCode + 1L), launcher = launcherVersionCode + 1L)
+            reason(recorded(), launcher = launcherVersionCode + 1L)
         )
     }
 

@@ -168,11 +168,13 @@ class DownloadTaskPreparedStateTest {
     }
 
     @Test
-    fun integrityChecksCanBeTurnedOffEntirely() {
+    fun aFileThatWasNeverCheckedIsNotRecorded() {
+        // 关掉完整性校验意味着我们根本没有证据，因此不能把它记成"已准备"：
+        // 它下次启动仍然会走真实校验，而不是被缓存当成可信。
         val file = File(dir, "unchecked.jar").apply { writeBytes(ByteArray(16) { 1 }) }
         val t = task(file, sha1Of(ByteArray(16) { 2 }), verifyIntegrity = false)
         assertTrue(t.existingFileValid())
-        assertNotNull(t.verifiedStamp)
+        assertNull("an unchecked file must not become part of the prepared state", t.verifiedStamp)
     }
 
     @Test
