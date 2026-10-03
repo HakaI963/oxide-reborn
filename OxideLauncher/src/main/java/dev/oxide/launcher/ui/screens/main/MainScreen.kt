@@ -296,18 +296,16 @@ private fun <E: TitledNavKey> TopBar(
                     Row(modifier = Modifier.fillMaxHeight()) {
                         Spacer(Modifier.width(12.dp))
 
-                        // 开场动画里那一个 logo 的落点：这里只上报几何，不额外渲染第二份 logo
+                        // 开场动画里那一个 logo 的落点：这里只上报几何，不再渲染第二份 logo
                         Box(
                             modifier = Modifier
                                 .width(Oxide.SidebarWidth - 24.dp)
                                 .height(Oxide.BrandSlotHeight)
                                 .onGloballyPositioned { coords ->
                                     val size = coords.size
+                                    val origin = coords.positionInRoot()
                                     brandSlot.report(
-                                        center = Offset(
-                                            coords.positionInRoot().x + size.width / 2f,
-                                            coords.positionInRoot().y + size.height / 2f
-                                        ),
+                                        center = Offset(origin.x + size.width / 2f, origin.y + size.height / 2f),
                                         widthPx = size.width.toFloat()
                                     )
                                 }

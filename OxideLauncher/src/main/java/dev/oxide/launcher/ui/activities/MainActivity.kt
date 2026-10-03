@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.activities
 
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.oxide.launcher.ui.components.LocalOxideBrandSlot
 import dev.oxide.launcher.ui.components.OxideIntro
@@ -316,13 +317,10 @@ class MainActivity : BaseAppCompatActivity() {
             ) {
                 ObserveFullScreenSetting(AllSettings.launcherFullScreen.state)
 
-                // 开场动画覆盖在真实界面之上：界面从第一帧就在渲染，只有一块黑幕盖住它，
-                // 幕布淡出时 logo 还在飞向侧栏，因此不会出现黑屏停顿。
+                val guides = rememberAppGuides(eventViewModel)
                 val oxideBrandSlot = remember { OxideBrandSlotState() }
                 OxideIntro(slot = oxideBrandSlot) {
                 CompositionLocalProvider(LocalOxideBrandSlot provides oxideBrandSlot) {
-
-                val guides = rememberAppGuides(eventViewModel)
                 GuideHost(
                     guides.mainScreen,
                     nextTip = { NextTipLabel(it) }
@@ -395,6 +393,7 @@ class MainActivity : BaseAppCompatActivity() {
                             }
                         )
                     }
+                }
                 }
                 }
 
