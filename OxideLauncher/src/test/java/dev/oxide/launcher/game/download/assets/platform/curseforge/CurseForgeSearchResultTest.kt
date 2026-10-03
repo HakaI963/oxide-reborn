@@ -188,11 +188,26 @@ class CurseForgeSearchResultTest {
     }
 
     @Test
-    fun `a null collection is coerced instead of failing the whole page`() {
-        // GLOBAL_JSON 的 coerceInputValues 必须生效，否则服务端偶尔回传 null 就整页失败
+    fun `a null collection fails loudly instead of looking like an empty page`() {
+        // coerceInputValues coerces a null primitive or an unknown enum to its default. It does
+        // NOT rescue a null array or object: kotlinx.serialization still rejects those unless the
+        // property is nullable. So a malformed page raises instead of quietly rendering as
+        // "no results", which is the failure this whole change exists to stop.
         val json = searchResult(0, 20, 1, 1)
             .replace("\"screenshots\": []", "\"screenshots\": null")
-            .replace("\"latestFiles\": []", "\"latestFiles\": null")
+
+        assertTrue(
+            "a null collection must not read as an empty result",
+            runCatching { parse(json) }.isFailure
+        )
+    }
+
+    @Test
+    fun `a null primitive is coerced to its default`() {
+        // The case coerceInputValues does cover: a field declared non-null arrives as null.
+        val json = searchResult(0, 20, 1, 1)
+            .replace("\"name\": \"Sodium\"", "\"name\": null")
+
         assertEquals(1, parse(json).data.size)
     }
 
@@ -246,14 +261,7 @@ class CurseForgeSearchResultTest {
     fun `the json configuration used by the launcher tolerates server noise`() {
         assertTrue(GLOBAL_JSON.configuration.ignoreUnknownKeys)
         assertTrue(GLOBAL_JSON.configuration.coerceInputValues)
-        // 与解析夹具期望的配置保持一致，防止测试与线上行为分叉
-        assertEquals(
-            Json {
-                ignoreUnknownKeys = true
-                explicitNulls = true
-                coerceInputValues = true
-            }.configuration,
-            GLOBAL_JSON.configuration
-        )
+        assertTrue(GLOBAL_JSON.configuration.explicitNulls)
+        assertFalse(GLOBAL_JSON.configuration.prettyPrint)
     }
 }

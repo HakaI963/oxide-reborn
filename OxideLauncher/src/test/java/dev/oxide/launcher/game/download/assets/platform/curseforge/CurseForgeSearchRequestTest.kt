@@ -24,6 +24,7 @@ import dev.oxide.launcher.game.download.assets.platform.PlatformSortField
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeModCategory
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeModLoader
 import io.ktor.http.Parameters
+import java.net.URLDecoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -222,15 +223,22 @@ class CurseForgeSearchRequestTest {
 
     @Test
     fun `the query string survives ktor url encoding`() {
-        // 带空格的关键词会被编码成 +，服务端能正确还原
-        val encoded = params(
-            CurseForgeSearchRequest(
-                searchFilter = "just enough items",
-                categories = setOf(CurseForgeModCategory.WORLDGEN, CurseForgeModCategory.BIOMES)
-            )
-        ).toString()
+        val request = CurseForgeSearchRequest(
+            searchFilter = "just enough items",
+            categories = setOf(CurseForgeModCategory.WORLDGEN, CurseForgeModCategory.BIOMES)
+        )
+        val encoded = params(request).toString()
 
-        assertTrue(encoded.contains("searchFilter=just+enough+items"))
-        assertFalse(encoded.contains(" "))
+        // A raw space would truncate the value server side. Ktor may legitimately emit either
+        // "+" or "%20" for a space, so assert the round trip rather than one escape style.
+        assertFalse("a raw space would break the query", encoded.contains(" "))
+
+        val value = encoded.split('&')
+            .first { it.startsWith("searchFilter=") }
+            .removePrefix("searchFilter=")
+        assertEquals(
+            "just enough items",
+            URLDecoder.decode(value, Charsets.UTF_8.name())
+        )
     }
 }
