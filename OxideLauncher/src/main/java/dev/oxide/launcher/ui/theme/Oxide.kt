@@ -763,8 +763,18 @@ internal val TightLineHeight = LineHeightStyle(
  * 纯函数：不读设置也不碰组合期状态，所以可以直接写单测。`Oxide.Type` 里每个样式
  * 都是"这个函数 + 一个来自 [oxideGuiScaleFactor] 的系数"，因此没有第二个缩放出口。
  */
+/**
+ * 按界面缩放系数放大一份文字样式
+ *
+ * [TextUnit.Unspecified] 不能参与算术：对它做乘法会抛 IllegalArgumentException。
+ * 而 fontSize / lineHeight / letterSpacing 在没有显式赋值时**默认就是 Unspecified**
+ * （letterWidth/letterHeight 同理），所以这里必须逐个判断，
+ * 否则任何一份没写 letterSpacing 的样式在读取时都会直接崩掉。
+ */
 internal fun oxideScaledTextStyle(base: TextStyle, factor: Float): TextStyle = base.copy(
-    fontSize = base.fontSize * factor,
-    lineHeight = base.lineHeight * factor,
-    letterSpacing = base.letterSpacing * factor,
+    fontSize = if (base.fontSize.isSpecified) base.fontSize * factor else base.fontSize,
+    lineHeight = if (base.lineHeight.isSpecified) base.lineHeight * factor else base.lineHeight,
+    letterSpacing = if (base.letterSpacing.isSpecified) base.letterSpacing * factor else base.letterSpacing,
+    letterWidth = if (base.letterWidth.isSpecified) base.letterWidth * factor else base.letterWidth,
+    letterHeight = if (base.letterHeight.isSpecified) base.letterHeight * factor else base.letterHeight,
 )
