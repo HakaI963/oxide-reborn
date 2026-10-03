@@ -53,6 +53,9 @@ object Oxide {
     /** 分隔线，1px 低透明度白 */
     val Line = Color(0x12FFFFFF) // rgba(255,255,255,.07)
 
+    /** 更强的分隔线，用于弹出面板、选中卡片等需要抬高一层的边界 */
+    val Line2 = Color(0x1FFFFFFF) // rgba(255,255,255,.12)
+
     /** 更弱的行分隔线 */
     val LineFaint = Color(0x0BFFFFFF) // rgba(255,255,255,.045)
 

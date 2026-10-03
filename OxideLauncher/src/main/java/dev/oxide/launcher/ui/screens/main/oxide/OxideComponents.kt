@@ -21,9 +21,7 @@ package dev.oxide.launcher.ui.screens.main.oxide
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,6 +40,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -58,7 +57,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import dev.oxide.launcher.ui.theme.Oxide
 
 /**
@@ -466,8 +464,8 @@ fun OxideProgressBar(
     ) {
         Box(
             modifier = Modifier
+                .fillMaxHeight()
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
-                .fillMaxSize()
                 .clip(RoundedCornerShape(50))
                 .background(Oxide.FgMuted)
         )
@@ -530,9 +528,3 @@ fun OxidePageColumn(
         content = content,
     )
 }
-
-/** 退出动画用的小工具，保持所有页面一致 */
-@Composable
-internal fun oxideExitDown(): Pair<androidx.compose.animation.EnterTransition, androidx.compose.animation.ExitTransition> =
-    fadeOut(tween(Oxide.Motion.PopoverFadeMs)) to
-        slideOutVertically(tween(Oxide.Motion.PopoverMs)) { it }
