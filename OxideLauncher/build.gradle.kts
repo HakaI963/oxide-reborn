@@ -162,11 +162,14 @@ android {
     }
 
     /*
-     * Android Lint runs on every CI build and aborts the build on a *new* finding. The project
-     * inherited a large number of existing findings from the upstream baseline (mostly
-     * MissingPermission in the vendored SDL/HID code and unused-resource noise in the vendored
-     * HMCL/LWJGL trees); those are recorded in lint-baseline.xml instead of being fixed blind,
-     * and they are still published as a CI artifact so they stay visible.
+     * Android Lint runs on every CI build and aborts the build on a *new* finding.
+     *
+     * lint-baseline.xml records findings that are knowingly accepted rather than fixed blind: the
+     * bulk are inherited from the upstream baseline (MissingPermission in the vendored SDL/HID
+     * code, unused-resource noise in the vendored HMCL/LWJGL trees), plus MissingTranslation for
+     * strings that upstream's Weblate translators have not caught up with yet. Regenerate it
+     * deliberately with the "Lint baseline" workflow after reviewing a new lint report. The full
+     * report is still published as a CI artifact so every finding stays visible.
      */
     lint {
         baseline = file("lint-baseline.xml")
