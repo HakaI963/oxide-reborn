@@ -112,19 +112,3 @@ The full upstream attribution, the third-party component inventory and the list 
 are in [`THIRD_PARTY.md`](THIRD_PARTY.md). The identifiers that intentionally keep upstream naming
 because they are native ABI, external API or third-party contracts are listed, with reasons, in
 [`COMPATIBILITY.md`](COMPATIBILITY.md).
-
-## Credits
-
-* Original project: [ZalithLauncher/ZalithLauncher2](https://github.com/ZalithLauncher/ZalithLauncher2)
-  and [MovTery](https://github.com/MovTery) — copyright (C) 2025 MovTery and contributors.
-* Account and authentication behaviour adapted from
-  [Star1xr/ZalithLauncher2Plus](https://github.com/Star1xr/ZalithLauncher2Plus) —
-  copyright (C) 2026 Star1xr and contributors, GPL-3.0.
-* Launch backend: [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher).
-* [Fold Craft Launcher](https://github.com/FCL-Team/FoldCraftLauncher),
-  [HMCL](https://github.com/HuangJunJie2017/HMCL),
-  [Plain Craft Launcher 2](https://github.com/Meloong-Git/PCL),
-  [Terracotta](https://github.com/burningtnt/Terracotta).
-* [LWJGL](https://www.lwjgl.org/), [SDL](https://www.libsdl.org/),
-  [MCMod](https://www.mcmod.cn/), and the many libraries listed in
-  [`THIRD_PARTY.md`](THIRD_PARTY.md).
