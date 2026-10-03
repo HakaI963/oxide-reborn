@@ -188,27 +188,24 @@ class CurseForgeSearchResultTest {
     }
 
     @Test
-    fun `a null collection fails loudly instead of looking like an empty page`() {
-        // coerceInputValues coerces a null primitive or an unknown enum to its default. It does
-        // NOT rescue a null array or object: kotlinx.serialization still rejects those unless the
-        // property is nullable. So a malformed page raises instead of quietly rendering as
-        // "no results", which is the failure this whole change exists to stop.
-        val json = searchResult(0, 20, 1, 1)
+    fun `a null is coerced where the model declares a default and raises where it does not`() {
+        // coerceInputValues fills in the declared default for a non-nullable field that has one.
+        // screenshots is declared as `= emptyArray()`, so a null from the server becomes empty.
+        val withDefault = searchResult(0, 20, 1, 1)
             .replace("\"screenshots\": []", "\"screenshots\": null")
+        val coerced = parse(withDefault)
+        assertEquals(1, coerced.data.size)
+        assertEquals(0, coerced.data.first().screenshots.size)
 
-        assertTrue(
-            "a null collection must not read as an empty result",
-            runCatching { parse(json) }.isFailure
-        )
-    }
-
-    @Test
-    fun `a null primitive is coerced to its default`() {
-        // The case coerceInputValues does cover: a field declared non-null arrives as null.
-        val json = searchResult(0, 20, 1, 1)
+        // name is non-nullable with no default, so there is nothing to coerce to and the page
+        // raises. That is the outcome we want: a malformed response must not read as
+        // "the category is empty", which is what made this look like CurseForge was broken.
+        val withoutDefault = searchResult(0, 20, 1, 1)
             .replace("\"name\": \"Sodium\"", "\"name\": null")
-
-        assertEquals(1, parse(json).data.size)
+        assertTrue(
+            "a malformed page must not read as an empty result",
+            runCatching { parse(withoutDefault) }.isFailure
+        )
     }
 
     @Test
