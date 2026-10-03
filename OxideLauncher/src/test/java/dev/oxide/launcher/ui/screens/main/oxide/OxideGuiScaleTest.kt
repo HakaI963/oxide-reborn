@@ -127,20 +127,21 @@ class OxideGuiScaleTest {
         val small = oxideMetricsFor(1280, 760, 75)
         val factor = 0.75f
 
-        assertDp(base.sidebarWidth.value * factor, small.sidebarWidth.value)
-        assertDp(base.sidebarPaddingH.value * 0.75f, small.sidebarPaddingH.value)
-        assertDp(base.pagePaddingH.value * 0.75f, small.pagePaddingH.value)
-        assertDp(base.pagePaddingV.value * 0.75f, small.pagePaddingV.value)
-        assertDp(base.sectionGap.value * 0.75f, small.sectionGap.value)
-        assertDp(base.cardGap.value * 0.75f, small.cardGap.value)
-        assertDp(base.cardMinWidth.value * 0.75f, small.cardMinWidth.value)
-        assertDp(base.topBarHeight.value * 0.75f, small.topBarHeight.value)
-        assertDp(base.navItemHeight.value * 0.75f, small.navItemHeight.value)
-        assertDp(base.navStep.value * 0.75f, small.navStep.value)
-        assertDp(base.navTravel.value * 0.75f, small.navTravel.value)
-        assertDp(base.sidebarNavWidth.value * 0.75f, small.sidebarNavWidth.value)
-        assertDp(base.brandSlotWidth.value * 0.75f, small.brandSlotWidth.value)
-        assertDp(base.heroTitleDp * 0.75f, small.heroTitleDp)
+        assertDp(base.sidebarWidth.value * factor, small.sidebarWidth)
+        assertDp(base.sidebarPaddingH.value * 0.75f, small.sidebarPaddingH)
+        assertDp(base.pagePaddingH.value * 0.75f, small.pagePaddingH)
+        assertDp(base.pagePaddingV.value * 0.75f, small.pagePaddingV)
+        assertDp(base.sectionGap.value * 0.75f, small.sectionGap)
+        assertDp(base.cardGap.value * 0.75f, small.cardGap)
+        assertDp(base.cardMinWidth.value * 0.75f, small.cardMinWidth)
+        assertDp(base.topBarHeight.value * 0.75f, small.topBarHeight)
+        assertDp(base.navItemHeight.value * 0.75f, small.navItemHeight)
+        assertDp(base.navStep.value * 0.75f, small.navStep)
+        assertDp(base.navTravel.value * 0.75f, small.navTravel)
+        assertDp(base.sidebarNavWidth.value * 0.75f, small.sidebarNavWidth)
+        assertDp(base.brandSlotWidth.value * 0.75f, small.brandSlotWidth)
+        // heroTitleDp 是排版数值而不是 dp，走浮点比较而不是 assertDp
+        assertEquals("heroTitleDp", base.heroTitleDp * 0.75f, small.heroTitleDp, 0.001f)
         // 宽度档本身不变：缩放不该顺手把版面推去另一档断点
         assertEquals(base.widthClass, small.widthClass)
     }
@@ -152,13 +153,13 @@ class OxideGuiScaleTest {
         for (percent in listOf(125, 150)) {
             val factor = percent / 100f
             val big = oxideMetricsFor(1280, 760, percent)
-            assertDp(base.sidebarWidth.value * factor, big.sidebarWidth.value)
-            assertDp(base.pagePaddingH.value * factor, big.pagePaddingH.value)
-            assertDp(base.cardMinWidth.value * factor, big.cardMinWidth.value)
-            assertDp(base.navItemHeight.value * factor, big.navItemHeight.value)
-            assertDp(base.navStep.value * factor, big.navStep.value)
-            assertDp(base.topBarHeight.value * factor, big.topBarHeight.value)
-            assertDp(base.heroTitleDp * factor, big.heroTitleDp)
+            assertDp(base.sidebarWidth.value * factor, big.sidebarWidth)
+            assertDp(base.pagePaddingH.value * factor, big.pagePaddingH)
+            assertDp(base.cardMinWidth.value * factor, big.cardMinWidth)
+            assertDp(base.navItemHeight.value * factor, big.navItemHeight)
+            assertDp(base.navStep.value * factor, big.navStep)
+            assertDp(base.topBarHeight.value * factor, big.topBarHeight)
+            assertEquals("heroTitleDp", base.heroTitleDp * factor, big.heroTitleDp, 0.001f)
             assertEquals(factor, big.guiScale, 0.0001f)
         }
     }
@@ -202,11 +203,12 @@ class OxideGuiScaleTest {
     /** 100% 时导航项高度与缩放功能存在之前逐档一致 */
     @Test
     fun navItemHeightMatchesTheReferenceBandsAtOneHundredPercent() {
-        assertDp(38f, oxideNavItemHeightFor(1280, 760, OxideWidthClass.Expanded))
-        assertDp(38f, oxideNavItemHeightFor(1280, 340, OxideWidthClass.Expanded))
-        assertDp(38f, oxideNavItemHeightFor(640, OxideShortScreenHeight, OxideWidthClass.Compact))
+        // oxideNavItemHeightFor 只吃高度与宽度档（宽度已折进宽度档），不再收宽度
+        assertDp(38f, oxideNavItemHeightFor(760, OxideWidthClass.Expanded))
+        assertDp(38f, oxideNavItemHeightFor(340, OxideWidthClass.Expanded))
+        assertDp(38f, oxideNavItemHeightFor(OxideShortScreenHeight, OxideWidthClass.Compact))
         // 矮屏档仍然是 32dp
-        assertDp(32f, oxideNavItemHeightFor(640, 300, OxideWidthClass.Compact))
+        assertDp(32f, oxideNavItemHeightFor(300, OxideWidthClass.Compact))
         // 100% 时导航文字行高就是参考稿的 14sp
         assertDp(14f, oxideNavTextLineHeight(oxideGuiScaleFactor(100)))
     }

@@ -75,8 +75,10 @@ class CurseForgeHeaderInjectionTest {
         runCatching { server.close() }
     }
 
-    private fun client(): OkHttpClient = createOkHttpClientBuilder {
-        dns(LoopbackDns)
+    // action 是普通参数而不是带接收者的 lambda，所以这里必须拿到那个 Builder 实例
+    private fun client(): OkHttpClient = createOkHttpClientBuilder { builder ->
+        // createOkHttpClientBuilder 先装 ResilientDns，这里再换成回环解析
+        builder.dns(LoopbackDns)
     }.build()
 
     private fun get(host: String, path: String) {

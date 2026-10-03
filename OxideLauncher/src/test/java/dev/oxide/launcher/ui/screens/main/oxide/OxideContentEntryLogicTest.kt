@@ -233,7 +233,7 @@ class OxideContentEntryLogicTest {
     @Test
     fun anUnknownKeyFallsBackToTheFirstAscendingSort() {
         val next = nextOxideContentSort(OxideContentCategory.Saves, OxideContentSort.Name, true)
-        assertEquals(oxideContentSortOptions(OxideContentCategory.Saves).first, next.first)
+        assertEquals(oxideContentSortOptions(OxideContentCategory.Saves).first(), next.first)
         assertTrue(next.second)
     }
 

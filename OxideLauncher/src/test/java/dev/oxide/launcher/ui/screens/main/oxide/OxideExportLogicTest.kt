@@ -107,7 +107,7 @@ class OxideExportLogicTest {
                 oxideExportCanContinue(defaultInfo(type).copy(author = " ")),
             )
             assertTrue(
-                type,
+                "$type 填了作者就该能继续",
                 oxideExportCanContinue(defaultInfo(type).copy(author = "me")),
             )
         }
@@ -140,7 +140,10 @@ class OxideExportLogicTest {
     @Test
     fun formatsWithoutRemoteTogglesNeverEnableTheCurseForgeRow() {
         listOf(PackType.MCBBS, PackType.MultiMC).forEach { type ->
-            assertFalse(type, oxideExportCurseForgeEnabled(defaultInfo(type).copy(packModrinth = true)))
+            assertFalse(
+                "$type 不该有 CurseForge 那一行",
+                oxideExportCurseForgeEnabled(defaultInfo(type).copy(packModrinth = true)),
+            )
         }
     }
 
