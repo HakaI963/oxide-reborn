@@ -110,6 +110,9 @@ object Oxide {
     /** 侧栏里品牌槽的高度，动画终点就是它的中心 */
     val BrandSlotHeight: Dp = 34.dp
 
+    /** 标志图形的边长，与参考稿的 37px 对应 */
+    val MarkSize: Dp = 37.dp
+
     // ---- 圆角 -------------------------------------------------------------
 
     val RadiusCard = RoundedCornerShape(15.dp)

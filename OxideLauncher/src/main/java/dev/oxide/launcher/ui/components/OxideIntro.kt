@@ -39,7 +39,6 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.toPx
 import dev.oxide.launcher.ui.theme.Oxide
 
 /**
@@ -178,7 +177,7 @@ fun OxideIntro(
                     .fillMaxSize()
                     .graphicsLayer {
                         translationX = currentRootW / 2f - lineWidth / 2f
-                        translationY = currentRootH / 2f + (37f * d) / 2f + 11f * d
+                        translationY = currentRootH / 2f + with(d) { Oxide.MarkSize.toPx() / 2f } + 11f * d
                     },
                 contentAlignment = Alignment.TopStart
             ) {
