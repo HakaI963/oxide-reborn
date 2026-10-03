@@ -235,7 +235,7 @@ fun MainScreen(
                     eventViewModel = eventViewModel,
                     modpackImportViewModel = modpackImportViewModel,
                     modifyVersionViewModel = modifyVersionViewModel,
-                    submitError = submitError
+                    submitError = submitError,
                     tasksRunning = tasks.isNotEmpty(),
                     tasksExpanded = isTaskMenuExpanded,
                     onToggleTasks = ::changeTasksExpandedState,
@@ -502,7 +502,7 @@ private fun NavigationUI(
     eventViewModel: EventViewModel,
     modpackImportViewModel: ModpackImportViewModel,
     modifyVersionViewModel: ModifyVersionViewModel,
-    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     tasksRunning: Boolean,
     tasksExpanded: Boolean,
     onToggleTasks: () -> Unit,
@@ -567,9 +567,9 @@ private fun NavigationUI(
                                 )
                             }
                         },
-                        tasksRunning = tasks.isNotEmpty(),
-                        tasksExpanded = isTaskMenuExpanded,
-                        onToggleTasks = ::changeTasksExpandedState,
+                        tasksRunning = tasksRunning,
+                        tasksExpanded = tasksExpanded,
+                        onToggleTasks = onToggleTasks,
                         onOpenFileManager = {
                             eventViewModel.sendEvent(
                                 EventViewModel.Event.OpenFileManager(
@@ -880,7 +880,7 @@ private fun OxideSettingsSection.navKey(): NormalNavKey.Settings = when (this) {
 }
 
 /** 下载分类到已有的下载嵌套栈的映射，复用既有的分类入口 */
-private fun OxideDownloadCategory.outerKey(model: ScreenBackStackViewModel): NestedNavKey = when (this) {
+private fun OxideDownloadCategory.outerKey(model: ScreenBackStackViewModel): TitledNavKey = when (this) {
     OxideDownloadCategory.Game -> model.downloadGameScreen
     OxideDownloadCategory.ModPack -> model.downloadModPackScreen
     OxideDownloadCategory.Mod -> model.downloadModScreen

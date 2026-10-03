@@ -397,11 +397,11 @@ fun OxideIconButton(
     glyph: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    size: Dp = 24.dp,
+    buttonSize: Dp = 24.dp,
 ) {
     Box(
         modifier = modifier
-            .size(size)
+            .size(buttonSize)
             .clip(Oxide.RadiusControl)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

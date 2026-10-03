@@ -195,7 +195,10 @@ internal fun shareLauncherLogs(context: Context) {
                 Logger.pack(archive)
                 task.updateProgress(1f)
                 task.updateMessage(null)
-                shareFile(context = context, file = archive)
+                // 分享面板要起 Activity，必须回到主线程
+                withContext(Dispatchers.Main) {
+                    shareFile(context = context, file = archive)
+                }
             },
             onError = { e -> Logger.error(LOG_TAG, "Failed to package log files.", e) },
         )

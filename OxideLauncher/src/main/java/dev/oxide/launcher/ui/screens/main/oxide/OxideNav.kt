@@ -86,12 +86,11 @@ class OxideNavState(initial: OxidePage = OxidePage.Home) {
 
 /** 创建并记住导航状态；用 rememberSaveable 是为了旋转屏幕后停在原来那一页 */
 @Composable
-fun rememberOxideNavState(): OxideNavState = rememberSaveable(stateSaver = OxideNavStateSaver) {
-    OxideNavState()
-}
+fun rememberOxideNavState(): OxideNavState =
+    rememberSaveable(stateSaver = OxideNavStateSaver) { OxideNavState() }.value
 
 /** 只存页面序号，避免序列化任何复杂对象 */
-private val OxideNavStateSaver: Saver<OxideNavState, Int> = listSaver(
+private val OxideNavStateSaver: Saver<OxideNavState, Any> = listSaver(
     save = { listOf(it.page.ordinal) },
     restore = { saved ->
         OxideNavState(OxidePage.entries.getOrElse(saved.firstOrNull() ?: 0) { OxidePage.Home })
