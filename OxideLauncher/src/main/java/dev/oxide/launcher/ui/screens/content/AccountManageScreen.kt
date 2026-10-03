@@ -373,7 +373,7 @@ private fun ActionsLayout(
         if (showExportWarning) {
             SimpleAlertDialog(
                 title = stringResource(R.string.settings_export_accounts),
-                description = stringResource(R.string.settings_export_accounts_warning),
+                text = stringResource(R.string.settings_export_accounts_warning),
                 confirmText = stringResource(R.string.generic_confirm),
                 dismissText = stringResource(R.string.generic_cancel),
                 onConfirm = {

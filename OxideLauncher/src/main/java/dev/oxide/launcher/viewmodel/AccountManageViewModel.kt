@@ -91,6 +91,8 @@ import java.util.UUID
 import io.ktor.client.plugins.ResponseException as KtorResponseException
 import kotlinx.coroutines.flow.combine as kotlinxCombine
 
+private const val TAG = "AccountManageViewModel"
+
 /**
  * 账号管理界面用户意图 (MVI Intent)
  * 封装了 UI 层发出的所有操作请求
@@ -229,6 +231,7 @@ class AccountManageViewModel @AssistedInject constructor(
     private val _accountSkinOp = MutableStateFlow<AccountSkinOperation>(AccountSkinOperation.None)
     private val _accountSkinDialogState = MutableStateFlow(AccountSkinDialogState())
     private val _accountCapeOpMap = MutableStateFlow<Map<String, List<PlayerProfile.Cape>>>(emptyMap())
+    private val _pendingBackup = MutableStateFlow<SettingsExport?>(null)
 
     private val _effect = Channel<AccountManageEffect>(Channel.BUFFERED)
     val effect = _effect.receiveAsFlow()
@@ -308,9 +311,10 @@ class AccountManageViewModel @AssistedInject constructor(
         _serverOp,
         _accountOp,
         _accountSkinOp,
-        _accountSkinDialogState
-    ) { serverOp, accountOp, accountSkinOp, accountSkinDialogState ->
-        OperationUiState(serverOp, accountOp, accountSkinOp, accountSkinDialogState)
+        _accountSkinDialogState,
+        _pendingBackup
+    ) { serverOp, accountOp, accountSkinOp, accountSkinDialogState, pendingBackup ->
+        OperationUiState(serverOp, accountOp, accountSkinOp, accountSkinDialogState, pendingBackup)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -365,7 +369,7 @@ class AccountManageViewModel @AssistedInject constructor(
             is AccountManageIntent.ImportLocalCape -> importLocalCape(intent.account, intent.uri)
             is AccountManageIntent.PrepareBackup -> prepareBackup()
             is AccountManageIntent.BackupPrepared ->
-                _operationUiState.update { it.copy(pendingBackup = null) }
+                _pendingBackup.value = null
 
             is AccountManageIntent.BackupFinished -> {
                 emitToast(
@@ -464,7 +468,7 @@ class AccountManageViewModel @AssistedInject constructor(
                     authServers = AccountsManager.authServersFlow.value
                 )
             }.onSuccess { export ->
-                _operationUiState.update { it.copy(pendingBackup = export) }
+                _pendingBackup.value = export
             }.onFailure { th ->
                 Logger.error(TAG, "Failed to build the backup", th)
                 emitToast(androidText(R.string.settings_export_failed))
