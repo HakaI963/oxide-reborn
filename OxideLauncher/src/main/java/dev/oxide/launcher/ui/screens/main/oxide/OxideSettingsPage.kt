@@ -1,0 +1,1169 @@
+/*
+ * Oxide Launcher
+ * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
+ */
+
+package dev.oxide.launcher.ui.screens.main.oxide
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.materialkolor.PaletteStyle
+import dev.oxide.launcher.R
+import dev.oxide.launcher.contract.MediaPickerContract
+import dev.oxide.launcher.coroutine.Task
+import dev.oxide.launcher.coroutine.TaskSystem
+import dev.oxide.launcher.game.download.assets.platform.Platform
+import dev.oxide.launcher.game.plugin.natives.NativePlugin
+import dev.oxide.launcher.game.plugin.natives.NativePluginManager
+import dev.oxide.launcher.path.URL_GITHUB_NATIVE_LIB_PLUGINS
+import dev.oxide.launcher.path.URL_PROJECT
+import dev.oxide.launcher.setting.AllSettings
+import dev.oxide.launcher.setting.enums.ActionMenuSide
+import dev.oxide.launcher.setting.enums.AppLanguage
+import dev.oxide.launcher.setting.enums.BackgroundBlur
+import dev.oxide.launcher.setting.enums.DarkMode
+import dev.oxide.launcher.setting.enums.GamepadInputMode
+import dev.oxide.launcher.setting.enums.GestureActionType
+import dev.oxide.launcher.setting.enums.MirrorSourceType
+import dev.oxide.launcher.setting.enums.MouseControlMode
+import dev.oxide.launcher.setting.enums.applyLanguage
+import dev.oxide.launcher.setting.unit.floatRange
+import dev.oxide.launcher.ui.androidText
+import dev.oxide.launcher.ui.components.SimpleAlertDialog
+import dev.oxide.launcher.ui.control.gamepad.JoystickMode
+import dev.oxide.launcher.ui.theme.ColorThemeType
+import dev.oxide.launcher.ui.theme.Oxide
+import dev.oxide.launcher.utils.animation.TransitionAnimationType
+import dev.oxide.launcher.utils.isChinaMainland
+import dev.oxide.launcher.viewmodel.LocalBackgroundViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
+/**
+ * 设置页的分类
+ *
+ * 参考稿是"左侧分类 + 右侧分组面板"，分类名与顺序沿用参考稿，
+ * 只是去掉了属于另一个项目的 Recorder，并把每一类映射到启动器真实存在的功能上。
+ */
+private enum class OxideSettingsCategory(
+    val titleRes: Int,
+    val summaryRes: Int,
+) {
+    General(R.string.oxide_set_cat_general, R.string.oxide_set_summary_general),
+    Game(R.string.oxide_set_cat_game, R.string.oxide_set_summary_game),
+    Java(R.string.oxide_set_cat_java, R.string.oxide_set_summary_java),
+    Renderer(R.string.oxide_set_cat_renderer, R.string.oxide_set_summary_renderer),
+    Graphics(R.string.oxide_set_cat_graphics, R.string.oxide_set_summary_graphics),
+    Controls(R.string.oxide_set_cat_controls, R.string.oxide_set_summary_controls),
+    Downloads(R.string.oxide_set_cat_downloads, R.string.oxide_set_summary_downloads),
+    Appearance(R.string.oxide_set_cat_appearance, R.string.oxide_set_summary_appearance),
+    Accounts(R.string.oxide_set_cat_accounts, R.string.oxide_set_summary_accounts),
+    Storage(R.string.oxide_set_cat_storage, R.string.oxide_set_summary_storage),
+    Advanced(R.string.oxide_set_cat_advanced, R.string.oxide_set_summary_advanced),
+}
+
+/** 由抽屉承载的分类：面板本身只给摘要与入口，细节在抽屉里 */
+private enum class OxideSettingsDrawer {
+    Account, Java, Renderer, Storage, Advanced,
+}
+
+private fun OxideSettingsCategory.drawer(): OxideSettingsDrawer? = when (this) {
+    OxideSettingsCategory.Accounts -> OxideSettingsDrawer.Account
+    OxideSettingsCategory.Java -> OxideSettingsDrawer.Java
+    OxideSettingsCategory.Renderer, OxideSettingsCategory.Graphics -> OxideSettingsDrawer.Renderer
+    OxideSettingsCategory.Storage -> OxideSettingsDrawer.Storage
+    OxideSettingsCategory.Advanced -> OxideSettingsDrawer.Advanced
+    OxideSettingsCategory.General,
+    OxideSettingsCategory.Game,
+    OxideSettingsCategory.Controls,
+    OxideSettingsCategory.Downloads,
+    OxideSettingsCategory.Appearance,
+    -> null
+}
+
+/**
+ * 设置页
+ *
+ * 结构与参考稿一致：左侧一列分类，右侧一块分组面板，分类之间是紧凑的行、开关与选择器。
+ * 宽度足够时左右并列，不够时分类折叠成顶部一条横向标签、面板占满剩余高度，
+ * 因此从 560dp 的小手机横屏到大平板横屏都不会裁切或重叠。
+ * 所有尺寸都来自 [metrics]，页面自身不写死 dp。
+ */
+@Composable
+fun OxideSettingsPage(
+    metrics: OxideMetrics,
+    onNavigate: (OxidePage) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bridge = rememberOxideLauncherBridge()
+
+    var selected by rememberSaveable { mutableStateOf(OxideSettingsCategory.General) }
+    var drawer by remember { mutableStateOf<OxideSettingsDrawer?>(null) }
+    var customColorDialog by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        OxidePageColumn(metrics = metrics) {
+            OxidePageTitle(text = stringResource(R.string.oxide_set_page_title))
+            Spacer(Modifier.height(metrics.rowGap))
+            Text(
+                text = stringResource(R.string.oxide_set_page_subtitle),
+                color = Oxide.FgFaint,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                letterSpacing = Oxide.Type.MicroLabel.letterSpacing,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(metrics.groupGap))
+
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // 并列门槛完全由 metrics 推导：分类列放得下标签，面板还得剩下一张卡
+                val sideBySide = maxWidth >= metrics.cardMinWidth * 1.6f
+
+                if (sideBySide) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
+                    ) {
+                        OxideCategoryRail(
+                            metrics = metrics,
+                            current = selected,
+                            onSelect = { selected = it },
+                            modifier = Modifier
+                                .width((metrics.cardMinWidth * 0.52f).coerceIn(132.dp, 220.dp))
+                                .fillMaxHeight(),
+                        )
+                        OxideSettingsPanel(
+                            metrics = metrics,
+                            category = selected,
+                            bridge = bridge,
+                            onOpenDrawer = { drawer = it },
+                            onOpenCustomColor = { customColorDialog = true },
+                            onNavigate = onNavigate,
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
+                    ) {
+                        OxideCategoryChips(
+                            metrics = metrics,
+                            current = selected,
+                            onSelect = { selected = it },
+                        )
+                        OxideSettingsPanel(
+                            metrics = metrics,
+                            category = selected,
+                            bridge = bridge,
+                            onOpenDrawer = { drawer = it },
+                            onOpenCustomColor = { customColorDialog = true },
+                            onNavigate = onNavigate,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+
+        when (drawer) {
+            OxideSettingsDrawer.Account ->
+                OxideAccountDrawer(metrics = metrics, onDismiss = { drawer = null })
+
+            OxideSettingsDrawer.Java ->
+                OxideJavaDrawer(metrics = metrics, onDismiss = { drawer = null })
+
+            OxideSettingsDrawer.Renderer ->
+                OxideRendererDrawer(metrics = metrics, onDismiss = { drawer = null })
+
+            OxideSettingsDrawer.Storage ->
+                OxideStorageDrawer(metrics = metrics, onDismiss = { drawer = null })
+
+            OxideSettingsDrawer.Advanced ->
+                OxideAdvancedDrawer(metrics = metrics, onDismiss = { drawer = null })
+
+            null -> {}
+        }
+
+        if (customColorDialog) {
+            OxideCustomColorDialog(
+                onDismiss = { customColorDialog = false },
+                onConfirm = { AllSettings.launcherCustomColor.save(it) },
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 分类列表
+// ---------------------------------------------------------------------------
+
+/** 宽屏：左侧竖排分类 */
+@Composable
+private fun OxideCategoryRail(
+    metrics: OxideMetrics,
+    current: OxideSettingsCategory,
+    onSelect: (OxideSettingsCategory) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OxideSurface(
+        modifier = modifier.verticalScroll(rememberScrollState()),
+        contentPadding = PaddingValues(all = metrics.cardGap),
+    ) {
+        OxideSettingsCategory.entries.forEach { category ->
+            OxideCategoryItem(
+                label = stringResource(category.titleRes),
+                isSelected = category == current,
+                metrics = metrics,
+                onClick = { onSelect(category) },
+            )
+        }
+    }
+}
+
+/** 窄屏：顶部横向标签，不占用纵向空间 */
+@Composable
+private fun OxideCategoryChips(
+    metrics: OxideMetrics,
+    current: OxideSettingsCategory,
+    onSelect: (OxideSettingsCategory) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
+    ) {
+        OxideSettingsCategory.entries.forEach { category ->
+            val isSelected = category == current
+            OxideSurface(
+                // selectable 同时给出选中状态与页签角色，标签不单靠颜色区分
+                modifier = Modifier.selectable(
+                    selected = isSelected,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Tab,
+                    onClick = { onSelect(category) },
+                ),
+                selected = isSelected,
+                contentPadding = PaddingValues(
+                    horizontal = metrics.cardGap,
+                    vertical = metrics.rowGap,
+                ),
+            ) {
+                Text(
+                    text = stringResource(category.titleRes),
+                    color = if (isSelected) Oxide.Fg else Oxide.FgGhost,
+                    fontSize = Oxide.Type.Body.fontSize,
+                    lineHeight = Oxide.Type.Body.lineHeight,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OxideCategoryItem(
+    label: String,
+    isSelected: Boolean,
+    metrics: OxideMetrics,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(metrics.categoryTabHeight)
+            .clip(Oxide.RadiusControl)
+            .background(if (isSelected) Oxide.BgTabActive else Color.Transparent)
+            .selectable(
+                selected = isSelected,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Tab,
+                onClick = onClick,
+            )
+            .padding(horizontal = metrics.rowGap * 2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = if (isSelected) Oxide.Fg else Oxide.FgGhost,
+            fontSize = Oxide.Type.Body.fontSize,
+            lineHeight = Oxide.Type.Body.lineHeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 右侧面板
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun OxideSettingsPanel(
+    metrics: OxideMetrics,
+    category: OxideSettingsCategory,
+    bridge: OxideLauncherBridge,
+    onOpenDrawer: (OxideSettingsDrawer) -> Unit,
+    onOpenCustomColor: () -> Unit,
+    onNavigate: (OxidePage) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(metrics.groupGap),
+    ) {
+        when (category) {
+            OxideSettingsCategory.General -> GeneralCategory(metrics, bridge)
+            OxideSettingsCategory.Game -> GameCategory(metrics, onNavigate)
+            OxideSettingsCategory.Controls -> ControlsCategory(metrics, bridge)
+            OxideSettingsCategory.Downloads -> DownloadsCategory(metrics, bridge, onNavigate)
+            OxideSettingsCategory.Appearance -> AppearanceCategory(metrics, bridge, onOpenCustomColor)
+            else -> {
+                val drawer = category.drawer()
+                OxideDrawerCategorySummary(metrics = metrics, category = category)
+                Group(
+                    index = 1,
+                    title = stringResource(R.string.oxide_set_section_details),
+                    metrics = metrics,
+                ) {
+                    OxideButton(
+                        text = stringResource(R.string.oxide_set_open, stringResource(category.titleRes)),
+                        onClick = {
+                            if (drawer != null) onOpenDrawer(drawer)
+                        },
+                        enabled = drawer != null,
+                        tone = OxideButtonTone.Primary,
+                    )
+                    when (category) {
+                        OxideSettingsCategory.Storage -> OxideActionRow(
+                            label = stringResource(R.string.oxide_set_action_open_instances),
+                            hint = stringResource(R.string.oxide_set_action_open_instances_detail),
+                            onClick = { onNavigate(OxidePage.Instances) },
+                        )
+
+                        OxideSettingsCategory.Java -> OxideActionRow(
+                            label = stringResource(R.string.oxide_set_action_open_instances),
+                            hint = stringResource(R.string.oxide_set_action_open_instances_detail),
+                            onClick = { onNavigate(OxidePage.Instances) },
+                        )
+
+                        OxideSettingsCategory.Accounts -> OxideActionRow(
+                            label = stringResource(R.string.oxide_set_action_open_home),
+                            hint = stringResource(R.string.oxide_set_action_open_home_detail),
+                            onClick = { onNavigate(OxidePage.Home) },
+                        )
+
+                        else -> {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 带错峰进场的一个分组 */
+@Composable
+private fun Group(
+    index: Int,
+    title: String,
+    metrics: OxideMetrics,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    OxideReveal(visible = true, index = index) {
+        OxideSettingsGroup(
+            title = title,
+            metrics = metrics,
+            trailing = trailing,
+            content = content,
+        )
+    }
+}
+
+/** 抽屉分类的面板摘要 */
+@Composable
+private fun OxideDrawerCategorySummary(
+    metrics: OxideMetrics,
+    category: OxideSettingsCategory,
+) {
+    OxideReveal(visible = true, index = 0) {
+        OxideSurface(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(
+                horizontal = metrics.cardGap,
+                vertical = metrics.cardGap,
+            ),
+        ) {
+            Text(
+                text = stringResource(category.summaryRes),
+                color = Oxide.FgFaint,
+                fontSize = Oxide.Type.Body.fontSize,
+                lineHeight = Oxide.Type.Body.lineHeight,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 分类：常规
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun GeneralCategory(metrics: OxideMetrics, bridge: OxideLauncherBridge) {
+    Group(index = 0, title = stringResource(R.string.oxide_set_section_launcher), metrics = metrics) {
+        OxideEnumRow(
+            label = stringResource(R.string.settings_launcher_dark_mode_title),
+            metrics = metrics,
+            entries = DarkMode.entries,
+            selected = AllSettings.launcherDarkMode.state,
+            nameOf = { stringResource(it.textRes) },
+            onSelect = { AllSettings.launcherDarkMode.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.settings_launcher_language),
+            metrics = metrics,
+            entries = AppLanguage.entries,
+            selected = AllSettings.launcherLanguage.state,
+            nameOf = { stringResource(it.textRes) },
+            onSelect = {
+                AllSettings.launcherLanguage.save(it)
+                applyLanguage(it)
+            },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.oxide_set_action_menu_side),
+            hint = stringResource(R.string.oxide_set_action_menu_side_detail),
+            metrics = metrics,
+            entries = ActionMenuSide.entries,
+            selected = AllSettings.launcherActionMenuSide.state,
+            nameOf = { oxideActionMenuSideName(it) },
+            onSelect = { AllSettings.launcherActionMenuSide.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_launcher_full_screen_title),
+            hint = stringResource(R.string.settings_launcher_full_screen_summary),
+            checked = AllSettings.launcherFullScreen.state,
+            onCheckedChange = { AllSettings.launcherFullScreen.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_launcher_festivals_effects_title),
+            hint = stringResource(R.string.settings_launcher_festivals_effects_summary),
+            checked = AllSettings.launcherFestivalEffects.state,
+            onCheckedChange = { AllSettings.launcherFestivalEffects.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.oxide_set_task_menu_expanded),
+            hint = stringResource(R.string.oxide_set_task_menu_expanded_detail),
+            checked = AllSettings.launcherTaskMenuExpanded.state,
+            onCheckedChange = { AllSettings.launcherTaskMenuExpanded.save(it) },
+        )
+    }
+
+    Group(index = 1, title = stringResource(R.string.oxide_set_section_motion), metrics = metrics) {
+        OxideEnumRow(
+            label = stringResource(R.string.settings_launcher_swap_animate_type_title),
+            hint = stringResource(R.string.settings_launcher_swap_animate_type_summary),
+            metrics = metrics,
+            entries = TransitionAnimationType.entries,
+            selected = AllSettings.launcherSwapAnimateType.state,
+            nameOf = { stringResource(it.textRes) },
+            onSelect = { AllSettings.launcherSwapAnimateType.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_launcher_animate_speed_title),
+            hint = stringResource(R.string.settings_launcher_animate_speed_summary),
+            metrics = metrics,
+            value = AllSettings.launcherAnimateSpeed.state,
+            range = AllSettings.launcherAnimateSpeed.floatRange.toIntRange(),
+            suffix = "x",
+            onValueChange = { AllSettings.launcherAnimateSpeed.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_launcher_animate_extent_title),
+            hint = stringResource(R.string.settings_launcher_animate_extent_summary),
+            metrics = metrics,
+            value = AllSettings.launcherAnimateExtent.state,
+            range = AllSettings.launcherAnimateExtent.floatRange.toIntRange(),
+            suffix = "x",
+            onValueChange = { AllSettings.launcherAnimateExtent.save(it) },
+        )
+    }
+
+    Group(index = 2, title = stringResource(R.string.oxide_set_section_quick_actions), metrics = metrics) {
+        OxideActionRow(
+            label = stringResource(R.string.oxide_set_action_check_update),
+            hint = stringResource(R.string.oxide_set_action_check_update_detail),
+            onClick = bridge.checkUpdate,
+        )
+        OxideActionRow(
+            label = stringResource(R.string.oxide_set_action_guides),
+            hint = stringResource(R.string.oxide_set_action_guides_detail),
+            onClick = bridge.replayGuide,
+        )
+        OxideActionRow(
+            label = stringResource(R.string.settings_tab_info_about),
+            hint = stringResource(R.string.oxide_set_action_about_detail),
+            onClick = { bridge.openSettingsSection(OxideSettingsSection.About) },
+        )
+        OxideActionRow(
+            label = stringResource(R.string.oxide_set_action_community),
+            hint = stringResource(R.string.oxide_set_action_community_detail),
+            onClick = { bridge.openLink(URL_PROJECT) },
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 分类：游戏
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun GameCategory(metrics: OxideMetrics, onNavigate: (OxidePage) -> Unit) {
+    Group(index = 0, title = stringResource(R.string.oxide_set_section_versions), metrics = metrics) {
+        OxideToggleRow(
+            label = stringResource(R.string.settings_game_version_isolation_title),
+            hint = stringResource(R.string.settings_game_version_isolation_summary),
+            checked = AllSettings.versionIsolation.state,
+            onCheckedChange = { AllSettings.versionIsolation.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_game_skip_game_integrity_check_title),
+            hint = stringResource(R.string.settings_game_skip_game_integrity_check_summary),
+            checked = AllSettings.skipGameIntegrityCheck.state,
+            onCheckedChange = { AllSettings.skipGameIntegrityCheck.save(it) },
+        )
+        OxideTextRow(
+            title = stringResource(R.string.settings_game_version_custom_info_title),
+            hint = stringResource(R.string.settings_game_version_custom_info_summary),
+            value = AllSettings.versionCustomInfo.state,
+            onSave = { AllSettings.versionCustomInfo.save(it) },
+        )
+    }
+
+    Group(index = 1, title = stringResource(R.string.oxide_set_section_launch), metrics = metrics) {
+        OxideActionRow(
+            label = stringResource(R.string.oxide_set_action_open_instances),
+            hint = stringResource(R.string.oxide_set_action_open_instances_detail),
+            onClick = { onNavigate(OxidePage.Instances) },
+        )
+    }
+
+    Group(index = 2, title = stringResource(R.string.oxide_set_section_game_log), metrics = metrics) {
+        OxideToggleRow(
+            label = stringResource(R.string.settings_game_show_log_automatic_title),
+            hint = stringResource(R.string.settings_game_show_log_automatic_summary),
+            checked = AllSettings.showLogAutomatic.state,
+            onCheckedChange = { AllSettings.showLogAutomatic.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_game_log_text_size_title),
+            hint = stringResource(R.string.settings_game_log_text_size_summary),
+            metrics = metrics,
+            value = AllSettings.logTextSize.state,
+            range = AllSettings.logTextSize.floatRange.toIntRange(),
+            suffix = " sp",
+            onValueChange = { AllSettings.logTextSize.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_game_log_buffer_flush_interval_title),
+            hint = stringResource(R.string.settings_game_log_buffer_flush_interval_summary),
+            metrics = metrics,
+            value = AllSettings.logBufferFlushInterval.state,
+            range = AllSettings.logBufferFlushInterval.floatRange.toIntRange(),
+            step = 20,
+            suffix = " ms",
+            onValueChange = { AllSettings.logBufferFlushInterval.save(it) },
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 分类：控制
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ControlsCategory(metrics: OxideMetrics, bridge: OxideLauncherBridge) {
+    val mouseMode = AllSettings.mouseControlMode.state
+    val gestureOn = AllSettings.gestureControl.state
+    val gyroOn = AllSettings.gyroscopeControl.state
+    val gyroSmoothing = AllSettings.gyroscopeSmoothing.state
+    val gamepadOn = AllSettings.gamepadControl.state
+
+    Group(index = 0, title = stringResource(R.string.oxide_set_section_mouse), metrics = metrics) {
+        OxideEnumRow(
+            label = stringResource(R.string.settings_control_mouse_control_mode_title),
+            hint = stringResource(R.string.settings_control_mouse_control_mode_summary),
+            metrics = metrics,
+            entries = MouseControlMode.entries,
+            selected = mouseMode,
+            nameOf = { oxideMouseControlModeName(it) },
+            onSelect = { AllSettings.mouseControlMode.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_control_mouse_physical_mouse_mode_title),
+            hint = stringResource(R.string.settings_control_mouse_physical_mouse_mode_summary),
+            checked = AllSettings.physicalMouseMode.state,
+            onCheckedChange = { AllSettings.physicalMouseMode.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_control_mouse_hide_title),
+            hint = stringResource(R.string.settings_control_mouse_hide_summary),
+            checked = AllSettings.hideMouse.state,
+            enabled = mouseMode == MouseControlMode.CLICK,
+            onCheckedChange = { AllSettings.hideMouse.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_control_mouse_enable_click_title),
+            hint = stringResource(R.string.settings_control_mouse_enable_click_summary),
+            checked = AllSettings.enableMouseClick.state,
+            enabled = mouseMode == MouseControlMode.SLIDE,
+            onCheckedChange = { AllSettings.enableMouseClick.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_control_mouse_size_title),
+            metrics = metrics,
+            value = AllSettings.mouseSize.state,
+            range = AllSettings.mouseSize.floatRange.toIntRange(),
+            suffix = " dp",
+            onValueChange = { AllSettings.mouseSize.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_control_mouse_sensitivity_title),
+            hint = stringResource(R.string.settings_control_mouse_sensitivity_summary),
+            metrics = metrics,
+            value = AllSettings.cursorSensitivity.state,
+            range = AllSettings.cursorSensitivity.floatRange.toIntRange(),
+            step = 5,
+            suffix = "%",
+            onValueChange = { AllSettings.cursorSensitivity.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_control_mouse_capture_sensitivity_title),
+            hint = stringResource(R.string.settings_control_mouse_capture_sensitivity_summary),
+            metrics = metrics,
+            value = AllSettings.mouseCaptureSensitivity.state,
+            range = AllSettings.mouseCaptureSensitivity.floatRange.toIntRange(),
+            step = 5,
+            suffix = "%",
+            onValueChange = { AllSettings.mouseCaptureSensitivity.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_control_mouse_long_press_delay_title),
+            hint = stringResource(R.string.settings_control_mouse_long_press_delay_summary),
+            metrics = metrics,
+            value = AllSettings.mouseLongPressDelay.state,
+            range = AllSettings.mouseLongPressDelay.floatRange.toIntRange(),
+            step = 20,
+            suffix = " ms",
+            onValueChange = { AllSettings.mouseLongPressDelay.save(it) },
+        )
+    }
+
+    Group(index = 1, title = stringResource(R.string.oxide_set_section_gestures), metrics = metrics) {
+        OxideToggleRow(
+            label = stringResource(R.string.settings_control_gesture_control_title),
+            hint = stringResource(R.string.settings_control_gesture_control_summary),
+            checked = gestureOn,
+            onCheckedChange = { AllSettings.gestureControl.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.settings_control_gesture_tap_action_title),
+            hint = stringResource(R.string.settings_control_gesture_tap_action_summary),
+            metrics = metrics,
+            entries = GestureActionType.entries,
+            selected = AllSettings.gestureTapMouseAction.state,
+            enabled = gestureOn,
+            nameOf = { stringResource(it.nameRes) },
+            onSelect = { AllSettings.gestureTapMouseAction.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.settings_control_gesture_long_press_action_title),
+            hint = stringResource(R.string.settings_control_gesture_long_press_action_summary),
+            metrics = metrics,
+            entries = GestureActionType.entries,
+            selected = AllSettings.gestureLongPressMouseAction.state,
+            enabled = gestureOn,
+            nameOf = { stringResource(it.nameRes) },
+            onSelect = { AllSettings.gestureLongPressMouseAction.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_control_gesture_long_press_delay_title),
+            metrics = metrics,
+            value = AllSettings.gestureLongPressDelay.state,
+            range = AllSettings.gestureLongPressDelay.floatRange.toIntRange(),
+            step = 20,
+            suffix = " ms",
+            enabled = gestureOn,
+            onValueChange = { AllSettings.gestureLongPressDelay.save(it) },
+        )
+    }
+
+    Group(index = 2, title = stringResource(R.string.oxide_set_section_gyroscope), metrics = metrics) {
+        OxideToggleRow(
+            label = stringResource(R.string.settings_control_gyroscope_title),
+            hint = stringResource(R.string.settings_control_gyroscope_summary),
+            checked = gyroOn,
+            onCheckedChange = { AllSettings.gyroscopeControl.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_control_gyroscope_sensitivity_title),
+            metrics = metrics,
+            value = AllSettings.gyroscopeSensitivity.state,
+            range = AllSettings.gyroscopeSensitivity.floatRange.toIntRange(),
+            step = 5,
+            suffix = "%",
+            enabled = gyroOn,
+            onValueChange = { AllSettings.gyroscopeSensitivity.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_control_gyroscope_sample_rate_title),
+            hint = stringResource(R.string.settings_control_gyroscope_sample_rate_summary),
+            metrics = metrics,
+            value = AllSettings.gyroscopeSampleRate.state,
+            range = AllSettings.gyroscopeSampleRate.floatRange.toIntRange(),
+            suffix = " ms",
+            enabled = gyroOn,
+            onValueChange = { AllSettings.gyroscopeSampleRate.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_control_gyroscope_smoothing_title),
+            hint = stringResource(R.string.settings_control_gyroscope_smoothing_summary),
+            checked = gyroSmoothing,
+            enabled = gyroOn,
+            onCheckedChange = { AllSettings.gyroscopeSmoothing.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_control_gyroscope_smoothing_window_title),
+            hint = stringResource(R.string.settings_control_gyroscope_smoothing_window_summary),
+            metrics = metrics,
+            value = AllSettings.gyroscopeSmoothingWindow.state,
+            range = AllSettings.gyroscopeSmoothingWindow.floatRange.toIntRange(),
+            enabled = gyroOn && gyroSmoothing,
+            onValueChange = { AllSettings.gyroscopeSmoothingWindow.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_control_gyroscope_invert_x_title),
+            hint = stringResource(R.string.settings_control_gyroscope_invert_x_summary),
+            checked = AllSettings.gyroscopeInvertX.state,
+            enabled = gyroOn,
+            onCheckedChange = { AllSettings.gyroscopeInvertX.save(it) },
+        )
+        OxideToggleRow(
+            label = stringResource(R.string.settings_control_gyroscope_invert_y_title),
+            hint = stringResource(R.string.settings_control_gyroscope_invert_y_summary),
+            checked = AllSettings.gyroscopeInvertY.state,
+            enabled = gyroOn,
+            onCheckedChange = { AllSettings.gyroscopeInvertY.save(it) },
+        )
+    }
+
+    Group(index = 3, title = stringResource(R.string.oxide_set_section_gamepad), metrics = metrics) {
+        OxideToggleRow(
+            label = stringResource(R.string.oxide_set_gamepad_control),
+            hint = stringResource(R.string.settings_gamepad_summary),
+            checked = gamepadOn,
+            onCheckedChange = { AllSettings.gamepadControl.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.settings_gamepad_input_mode_title),
+            metrics = metrics,
+            entries = GamepadInputMode.entries,
+            selected = AllSettings.gamepadInputMode.state,
+            enabled = gamepadOn,
+            nameOf = { oxideGamepadInputModeName(it) },
+            onSelect = { AllSettings.gamepadInputMode.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_gamepad_deadzone_title),
+            hint = stringResource(R.string.settings_gamepad_deadzone_summary),
+            metrics = metrics,
+            value = AllSettings.gamepadDeadZoneScale.state,
+            range = AllSettings.gamepadDeadZoneScale.floatRange.toIntRange(),
+            step = 5,
+            suffix = "%",
+            enabled = gamepadOn,
+            onValueChange = { AllSettings.gamepadDeadZoneScale.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.settings_gamepad_joystick_mode_title),
+            hint = stringResource(R.string.settings_gamepad_joystick_mode_summary),
+            metrics = metrics,
+            entries = JoystickMode.entries,
+            selected = AllSettings.joystickControlMode.state,
+            enabled = gamepadOn,
+            nameOf = { oxideJoystickModeName(it) },
+            onSelect = { AllSettings.joystickControlMode.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_gamepad_cursor_sensitivity_title),
+            hint = stringResource(R.string.settings_gamepad_cursor_sensitivity_summary),
+            metrics = metrics,
+            value = AllSettings.gamepadCursorSensitivity.state,
+            range = AllSettings.gamepadCursorSensitivity.floatRange.toIntRange(),
+            step = 5,
+            suffix = "%",
+            enabled = gamepadOn,
+            onValueChange = { AllSettings.gamepadCursorSensitivity.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_gamepad_camera_sensitivity_title),
+            hint = stringResource(R.string.settings_gamepad_camera_sensitivity_summary),
+            metrics = metrics,
+            value = AllSettings.gamepadCameraSensitivity.state,
+            range = AllSettings.gamepadCameraSensitivity.floatRange.toIntRange(),
+            step = 5,
+            suffix = "%",
+            enabled = gamepadOn,
+            onValueChange = { AllSettings.gamepadCameraSensitivity.save(it) },
+        )
+    }
+
+    Group(index = 4, title = stringResource(R.string.oxide_set_section_control_actions), metrics = metrics) {
+        OxideActionRow(
+            label = stringResource(R.string.settings_tab_control),
+            hint = stringResource(R.string.oxide_set_action_full_controls_detail),
+            onClick = { bridge.openSettingsSection(OxideSettingsSection.Control) },
+        )
+        OxideActionRow(
+            label = stringResource(R.string.settings_tab_gamepad),
+            hint = stringResource(R.string.oxide_set_action_full_gamepad_detail),
+            onClick = { bridge.openSettingsSection(OxideSettingsSection.Gamepad) },
+        )
+        OxideActionRow(
+            label = stringResource(R.string.settings_tab_control_manage),
+            hint = stringResource(R.string.oxide_set_action_control_layouts_detail),
+            onClick = { bridge.openSettingsSection(OxideSettingsSection.ControlManager) },
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 分类：下载
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun DownloadsCategory(
+    metrics: OxideMetrics,
+    bridge: OxideLauncherBridge,
+    onNavigate: (OxidePage) -> Unit,
+) {
+    // 镜像源只是为了改善中国大陆内陆的网络环境而存在的，境外开放反而会拖慢下载
+    val isChinaMainland = remember { isChinaMainland() }
+    var pluginToken by remember { mutableIntStateOf(0) }
+    val nativePlugins = remember(pluginToken) { NativePluginManager.getPlugins() }
+    val disabledPlugins = AllSettings.disableNativeLibPlugins.state
+
+    var index = 0
+
+    if (isChinaMainland) {
+        Group(
+            index = index++,
+            title = stringResource(R.string.oxide_set_section_mirrors),
+            metrics = metrics,
+        ) {
+            OxideEnumRow(
+                label = stringResource(R.string.settings_launcher_mirror_game_source_title),
+                metrics = metrics,
+                entries = MirrorSourceType.entries,
+                selected = AllSettings.gameDownloadSource.state,
+                nameOf = { stringResource(it.textRes) },
+                onSelect = { AllSettings.gameDownloadSource.save(it) },
+            )
+            OxideEnumRow(
+                label = stringResource(R.string.settings_launcher_mirror_asset_platform_source_title),
+                metrics = metrics,
+                entries = MirrorSourceType.entries,
+                selected = AllSettings.assetPlatformSource.state,
+                nameOf = { stringResource(it.textRes) },
+                onSelect = { AllSettings.assetPlatformSource.save(it) },
+            )
+        }
+    }
+
+    Group(
+        index = index++,
+        title = stringResource(R.string.oxide_set_section_plugins),
+        metrics = metrics,
+    ) {
+        if (nativePlugins.isEmpty()) {
+            OxideEmptyState(title = stringResource(R.string.oxide_set_no_plugin))
+        } else {
+            nativePlugins.forEach { plugin ->
+                NativeLibPluginRow(
+                    plugin = plugin,
+                    disabled = plugin.packageName in disabledPlugins,
+                    onToggle = { enabled ->
+                        val current = AllSettings.disableNativeLibPlugins.state
+                        AllSettings.disableNativeLibPlugins.save(
+                            if (enabled) current - plugin.packageName else current + plugin.packageName
+                        )
+                    },
+                )
+            }
+        }
+        OxideActionRow(
+            label = stringResource(R.string.oxide_set_action_dl_native_lib_plugin),
+            hint = stringResource(R.string.oxide_set_action_dl_native_lib_plugin_detail),
+            onClick = {
+                pluginToken++
+                bridge.openLink(URL_GITHUB_NATIVE_LIB_PLUGINS)
+            },
+        )
+    }
+
+    Group(
+        index = index++,
+        title = stringResource(R.string.oxide_set_section_search),
+        metrics = metrics,
+    ) {
+        OxideEnumRow(
+            label = stringResource(R.string.oxide_set_search_mod),
+            metrics = metrics,
+            entries = Platform.entries,
+            selected = AllSettings.searchModPlatform.state,
+            nameOf = { it.displayName },
+            onSelect = { AllSettings.searchModPlatform.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.oxide_set_search_modpack),
+            metrics = metrics,
+            entries = Platform.entries,
+            selected = AllSettings.searchModpackPlatform.state,
+            nameOf = { it.displayName },
+            onSelect = { AllSettings.searchModpackPlatform.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.oxide_set_search_resource_pack),
+            metrics = metrics,
+            entries = Platform.entries,
+            selected = AllSettings.searchResourcePackPlatform.state,
+            nameOf = { it.displayName },
+            onSelect = { AllSettings.searchResourcePackPlatform.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.oxide_set_search_shaders),
+            metrics = metrics,
+            entries = Platform.entries,
+            selected = AllSettings.searchShadersPlatform.state,
+            nameOf = { it.displayName },
+            onSelect = { AllSettings.searchShadersPlatform.save(it) },
+        )
+    }
+
+    Group(
+        index = index,
+        title = stringResource(R.string.oxide_set_section_browse),
+        metrics = metrics,
+    ) {
+        OxideActionRow(
+            label = stringResource(R.string.oxide_set_action_open_discover),
+            hint = stringResource(R.string.oxide_set_action_open_discover_detail),
+            onClick = { onNavigate(OxidePage.Discover) },
+        )
+    }
+}
+
+@Composable
+private fun NativeLibPluginRow(
+    plugin: NativePlugin,
+    disabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    OxideToggleRow(
+        label = plugin.displayName,
+        hint = stringResource(R.string.oxide_set_plugin_from, plugin.appName),
+        checked = !disabled,
+        onCheckedChange = onToggle,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// 分类：外观
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun AppearanceCategory(
+    metrics: OxideMetrics,
+    bridge: OxideLauncherBridge,
+    onOpenCustomColor: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val backgroundViewModel = LocalBackgroundViewModel.current
+    val colorTheme = AllSettings.launcherColorTheme.state
+
+    val filePicker = rememberLauncherForActivityResult(
+        MediaPickerContract(allowImages = true, allowVideos = true, allowMultiple = false)
+    ) { result ->
+        val uri = result?.firstOrNull() ?: return@rememberLauncherForActivityResult
+        TaskSystem.submitTask(
+            Task.runTask(
+                dispatcher = Dispatchers.IO,
+                task = { task ->
+                    task.updateMessage(androidText(R.string.settings_launcher_background_importing))
+                    backgroundViewModel.import(context, uri)
+                },
+                onError = {
+                    backgroundViewModel.delete()
+                    bridge.showToast(R.string.error_import_image)
+                },
+            )
+        )
+    }
+
+    var confirmReset by remember { mutableStateOf(false) }
+
+    Group(index = 0, title = stringResource(R.string.oxide_set_section_theme), metrics = metrics) {
+        OxideEnumRow(
+            label = stringResource(R.string.settings_launcher_color_theme_title),
+            hint = stringResource(R.string.settings_launcher_color_theme_summary),
+            metrics = metrics,
+            entries = ColorThemeType.entries,
+            selected = colorTheme,
+            nameOf = { oxideColorThemeName(it) },
+            onSelect = { picked ->
+                AllSettings.launcherColorTheme.save(picked)
+                if (picked == ColorThemeType.CUSTOM) onOpenCustomColor()
+            },
+        )
+        if (colorTheme == ColorThemeType.CUSTOM) {
+            OxideEnumRow(
+                label = stringResource(R.string.settings_launcher_color_theme_style),
+                metrics = metrics,
+                entries = PaletteStyle.entries,
+                selected = AllSettings.launcherCustomPaletteStyle.state,
+                nameOf = { it.name },
+                onSelect = { AllSettings.launcherCustomPaletteStyle.save(it) },
+            )
+            OxideActionRow(
+                label = stringResource(R.string.oxide_set_custom_color),
+                hint = stringResource(R.string.oxide_set_custom_color_detail),
+                onClick = onOpenCustomColor,
+            )
+        }
+    }
+
+    Group(index = 1, title = stringResource(R.string.oxide_set_section_background), metrics = metrics) {
+        OxideActionRow(
+            label = stringResource(R.string.settings_launcher_background_title),
+            hint = stringResource(R.string.settings_launcher_background_summary),
+            value = if (backgroundViewModel.isValid) stringResource(R.string.oxide_set_in_use) else null,
+            onClick = { filePicker.launch(Unit) },
+        )
+        if (backgroundViewModel.isValid) {
+            OxideActionRow(
+                label = stringResource(R.string.generic_reset),
+                hint = stringResource(R.string.oxide_set_background_reset_detail),
+                onClick = { confirmReset = true },
+            )
+        }
+        OxideIntRow(
+            label = stringResource(R.string.settings_launcher_background_opacity_title),
+            hint = stringResource(R.string.settings_launcher_background_opacity_summary),
+            metrics = metrics,
+            value = AllSettings.launcherBackgroundOpacity.state,
+            range = AllSettings.launcherBackgroundOpacity.floatRange.toIntRange(),
+            step = 5,
+            suffix = "%",
+            enabled = backgroundViewModel.isValid,
+            onValueChange = { AllSettings.launcherBackgroundOpacity.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_launcher_background_video_volume_title),
+            hint = stringResource(R.string.settings_launcher_background_video_volume_summary),
+            metrics = metrics,
+            value = AllSettings.videoBackgroundVolume.state,
+            range = AllSettings.videoBackgroundVolume.floatRange.toIntRange(),
+            step = 5,
+            suffix = "%",
+            enabled = backgroundViewModel.isValid && backgroundViewModel.isVideo,
+            onValueChange = { AllSettings.videoBackgroundVolume.save(it) },
+        )
+        OxideIntRow(
+            label = stringResource(R.string.settings_title_blur),
+            hint = stringResource(R.string.settings_launcher_background_blur_summary),
+            metrics = metrics,
+            value = AllSettings.backgroundBlur.state,
+            range = AllSettings.backgroundBlur.floatRange.toIntRange(),
+            suffix = " dp",
+            enabled = backgroundViewModel.isValid,
+            onValueChange = { AllSettings.backgroundBlur.save(it) },
+        )
+        OxideEnumRow(
+            label = stringResource(R.string.oxide_set_blur_type),
+            metrics = metrics,
+            entries = BackgroundBlur.entries,
+            selected = AllSettings.backgroundBlurType.state,
+            enabled = backgroundViewModel.isValid,
+            nameOf = { oxideBackgroundBlurName(it) },
+            onSelect = { AllSettings.backgroundBlurType.save(it) },
+        )
+    }
+
+    if (confirmReset) {
+        SimpleAlertDialog(
+            title = stringResource(R.string.generic_reset),
+            text = stringResource(R.string.settings_launcher_background_reset_message),
+            onConfirm = {
+                confirmReset = false
+                scope.launch { backgroundViewModel.delete() }
+            },
+            onDismiss = { confirmReset = false },
+        )
+    }
+}

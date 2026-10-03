@@ -18,11 +18,13 @@
 
 package dev.oxide.launcher.ui.screens.main
 
+import dev.oxide.launcher.ui.screens.main.oxide.OxideSettingsSection
+import dev.oxide.launcher.ui.screens.main.oxide.OxideMainShell
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDownloadCategory
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Offset
 import dev.oxide.launcher.ui.theme.Oxide
-import dev.oxide.launcher.ui.components.LocalOxideBrandSlot
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -168,8 +170,6 @@ fun MainScreen(
         backgroundColor().copy(alpha = launcherBackgroundOpacity)
     } else backgroundColor()
 
-    // 开场动画的落点由左侧品牌槽实测上报
-    val brandSlot = LocalOxideBrandSlot.current
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -180,46 +180,48 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            TopBar(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(40.dp),
-                mainScreenKey = mainScreenKey,
-                brandSlot = brandSlot,
-                inLauncherScreen = inLauncherScreen,
-                taskRunning = tasks.isEmpty(),
-                isTasksExpanded = isTaskMenuExpanded,
-                contentColor = onBackgroundColor(),
-                onScreenBack = {
-                    screenBackStackModel.mainScreen.backStack.removeFirstOrNull()
-                },
-                toMainScreen = toMainScreen,
-                toSettingsScreen = {
-                    screenBackStackModel.mainScreen.removeAndNavigateTo(
-                        removes = screenBackStackModel.clearBeforeNavKeys,
-                        screenKey = screenBackStackModel.settingsScreen
-                    )
-                },
-                toDownloadScreen = {
-                    screenBackStackModel.navigateToDownload()
-                },
-                toMultiplayerScreen = {
-                    screenBackStackModel.mainScreen.removeAndNavigateTo(
-                        removes = screenBackStackModel.clearBeforeNavKeys,
-                        screenKey = NormalNavKey.Multiplayer
-                    )
-                },
-                openFileManager = {
-                    eventViewModel.sendEvent(
-                        EventViewModel.Event.OpenFileManager(
-                            rootPath = PathManager.DIR_FILES_EXTERNAL.absolutePath
+            // 四个主页面的外壳自带顶栏；深层页面仍然是栈上的独立条目，保留原来的顶栏
+            if (!inLauncherScreen) {
+                TopBar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
+                    mainScreenKey = mainScreenKey,
+                        inLauncherScreen = inLauncherScreen,
+                    taskRunning = tasks.isEmpty(),
+                    isTasksExpanded = isTaskMenuExpanded,
+                    contentColor = onBackgroundColor(),
+                    onScreenBack = {
+                        screenBackStackModel.mainScreen.backStack.removeFirstOrNull()
+                    },
+                    toMainScreen = toMainScreen,
+                    toSettingsScreen = {
+                        screenBackStackModel.mainScreen.removeAndNavigateTo(
+                            removes = screenBackStackModel.clearBeforeNavKeys,
+                            screenKey = screenBackStackModel.settingsScreen
                         )
-                    )
-                },
-                changeExpandedState = {
-                    changeTasksExpandedState()
-                },
-            )
+                    },
+                    toDownloadScreen = {
+                        screenBackStackModel.navigateToDownload()
+                    },
+                    toMultiplayerScreen = {
+                        screenBackStackModel.mainScreen.removeAndNavigateTo(
+                            removes = screenBackStackModel.clearBeforeNavKeys,
+                            screenKey = NormalNavKey.Multiplayer
+                        )
+                    },
+                    openFileManager = {
+                        eventViewModel.sendEvent(
+                            EventViewModel.Event.OpenFileManager(
+                                rootPath = PathManager.DIR_FILES_EXTERNAL.absolutePath
+                            )
+                        )
+                    },
+                    changeExpandedState = {
+                        changeTasksExpandedState()
+                    },
+                )
+            }
 
             Box(
                 modifier = Modifier
@@ -234,6 +236,9 @@ fun MainScreen(
                     modpackImportViewModel = modpackImportViewModel,
                     modifyVersionViewModel = modifyVersionViewModel,
                     submitError = submitError
+                    tasksRunning = tasks.isNotEmpty(),
+                    tasksExpanded = isTaskMenuExpanded,
+                    onToggleTasks = ::changeTasksExpandedState,
                 )
 
                 TaskMenu(
@@ -254,7 +259,6 @@ fun MainScreen(
 
 @Composable
 private fun <E: TitledNavKey> TopBar(
-    brandSlot: dev.oxide.launcher.ui.components.OxideBrandSlotState,
     mainScreenKey: E?,
     inLauncherScreen: Boolean,
     taskRunning: Boolean,
@@ -297,21 +301,6 @@ private fun <E: TitledNavKey> TopBar(
                 ) {
                     Row(modifier = Modifier.fillMaxHeight()) {
                         Spacer(Modifier.width(12.dp))
-
-                        // 开场动画里那一个 logo 的落点：这里只上报几何，不再渲染第二份 logo
-                        Box(
-                            modifier = Modifier
-                                .width(Oxide.SidebarWidth - 24.dp)
-                                .height(Oxide.BrandSlotHeight)
-                                .onGloballyPositioned { coords ->
-                                    val size = coords.size
-                                    val origin = coords.positionInRoot()
-                                    brandSlot.report(
-                                        center = Offset(origin.x + size.width / 2f, origin.y + size.height / 2f),
-                                        widthPx = size.width.toFloat()
-                                    )
-                                }
-                        )
 
                         IconButton(
                             modifier = Modifier.fillMaxHeight(),
@@ -514,6 +503,9 @@ private fun NavigationUI(
     modpackImportViewModel: ModpackImportViewModel,
     modifyVersionViewModel: ModifyVersionViewModel,
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    tasksRunning: Boolean,
+    tasksExpanded: Boolean,
+    onToggleTasks: () -> Unit,
 ) {
     val backStack = screenBackStackModel.mainScreen.backStack
     val currentKey = backStack.lastOrNull()
@@ -549,20 +541,48 @@ private fun NavigationUI(
             popTransitionSpec = rememberTransitionSpec(),
             entryProvider = entryProvider {
                 entry<NormalNavKey.LauncherMain> {
-                    LauncherScreen(
-                        backStackViewModel = screenBackStackModel,
-                        navigateToVersions = navigateToVersions,
-                        onLaunchGame = { version ->
-                            eventViewModel.sendEvent(
-                                EventViewModel.Event.Launch.Game(version)
-                            )
-                        },
-                        onOpenLink = {
+                    OxideMainShell(
+                        openVersionSettings = navigateToVersions,
+                        openLink = {
                             eventViewModel.sendEvent(EventViewModel.Event.OpenLink(it))
                         },
-                        startGuideOnce = { keys ->
-                            eventViewModel.sendStartGuideOnce(keys)
-                        }
+                        openSettingsSection = { section ->
+                            screenBackStackModel.mainScreen.removeAndNavigateTo(
+                                removes = screenBackStackModel.clearBeforeNavKeys,
+                                screenKey = screenBackStackModel.settingsScreen
+                            )
+                            screenBackStackModel.settingsScreen.navigateOnce(section.navKey())
+                        },
+                        openAccountManager = {
+                            screenBackStackModel.mainScreen.navigateTo(NormalNavKey.AccountManager())
+                        },
+                        openDownloadCategory = { category ->
+                            if (category == OxideDownloadCategory.SearchId) {
+                                screenBackStackModel.navigateToDownload(NormalNavKey.SearchId)
+                            } else {
+                                screenBackStackModel.mainScreen.removeAndNavigateTo(
+                                    removes = screenBackStackModel.clearBeforeNavKeys,
+                                    screenKey = category.outerKey(screenBackStackModel),
+                                    useClassEquality = true
+                                )
+                            }
+                        },
+                        tasksRunning = tasks.isNotEmpty(),
+                        tasksExpanded = isTaskMenuExpanded,
+                        onToggleTasks = ::changeTasksExpandedState,
+                        onOpenFileManager = {
+                            eventViewModel.sendEvent(
+                                EventViewModel.Event.OpenFileManager(
+                                    rootPath = PathManager.DIR_FILES_EXTERNAL.absolutePath
+                                )
+                            )
+                        },
+                        onOpenMultiplayer = {
+                            screenBackStackModel.mainScreen.removeAndNavigateTo(
+                                removes = screenBackStackModel.clearBeforeNavKeys,
+                                screenKey = NormalNavKey.Multiplayer
+                            )
+                        },
                     )
                 }
                 entry<NestedNavKey.Settings> { key ->
@@ -846,4 +866,28 @@ private fun TaskItem(
             }
         }
     }
+}
+/** 设置分类到已有导航键的映射：外壳不新增深层页面，只是把已有的接上 */
+private fun OxideSettingsSection.navKey(): NormalNavKey.Settings = when (this) {
+    OxideSettingsSection.Renderer -> NormalNavKey.Settings.Renderer
+    OxideSettingsSection.Game -> NormalNavKey.Settings.Game
+    OxideSettingsSection.Control -> NormalNavKey.Settings.Control
+    OxideSettingsSection.Gamepad -> NormalNavKey.Settings.Gamepad
+    OxideSettingsSection.Launcher -> NormalNavKey.Settings.Launcher
+    OxideSettingsSection.JavaManager -> NormalNavKey.Settings.JavaManager
+    OxideSettingsSection.ControlManager -> NormalNavKey.Settings.ControlManager
+    OxideSettingsSection.About -> NormalNavKey.Settings.AboutInfo
+}
+
+/** 下载分类到已有的下载嵌套栈的映射，复用既有的分类入口 */
+private fun OxideDownloadCategory.outerKey(model: ScreenBackStackViewModel): NestedNavKey = when (this) {
+    OxideDownloadCategory.Game -> model.downloadGameScreen
+    OxideDownloadCategory.ModPack -> model.downloadModPackScreen
+    OxideDownloadCategory.Mod -> model.downloadModScreen
+    OxideDownloadCategory.ResourcePack -> model.downloadResourcePackScreen
+    OxideDownloadCategory.Saves -> model.downloadSavesScreen
+    OxideDownloadCategory.Shaders -> model.downloadShadersScreen
+    OxideDownloadCategory.Favorites -> model.downloadFavoritesScreen
+    // SearchId 由上面的 navigateToDownload 处理，这里不会走到
+    OxideDownloadCategory.SearchId -> model.downloadScreen
 }
