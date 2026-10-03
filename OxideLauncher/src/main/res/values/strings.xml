@@ -1271,6 +1271,13 @@
     <string name="account_change_cape_invalid">Invalid cape file! A Minecraft cape must be 64x32 pixels.</string>
     <string name="account_change_cape_failed_to_import">Failed to import cape</string>
     <string name="launcher_modified_build_notice">Oxide Launcher</string>
+    <!-- Oxide 外壳 -->
+    <string name="oxide_nav_home">Home</string>
+    <string name="oxide_nav_instances">Instances</string>
+    <string name="oxide_nav_discover">Discover</string>
+    <string name="oxide_nav_settings">Settings</string>
+    <string name="oxide_drawer_close">Close</string>
+    <string name="oxide_common_loading">Loading…</string>
     <string name="about_launcher_modified_title">About Oxide Launcher</string>
     <string name="about_launcher_modified_text">Oxide Launcher is a launcher for Minecraft: Java Edition on Android. It is free software released under the GNU General Public License v3.0 and is developed independently. Full upstream attribution, third-party licences and the list of modifications are in THIRD_PARTY.md; every original copyright notice is preserved in the source files.</string>
     <string name="about_launcher_account_code_title">Account code</string>
