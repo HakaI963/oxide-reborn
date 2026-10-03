@@ -31,14 +31,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toPx
 import dev.oxide.launcher.ui.theme.Oxide
 
 /**
@@ -136,9 +137,9 @@ fun OxideIntro(
         // 动画中的那一个 logo
         val d = density
         // 起始宽度 = 图形 37 + 间距 10 + 字标
-        val startWidthPx = (37f + 10f + 250f) * d
-        val targetWidthDp = (minOf(currentSlotWidth / d, maxSlotWidth.value))
-        val destScale = (targetWidthDp * d / startWidthPx)
+        val startWidthPx = with(d) { (37f + 10f + 250f).dp.toPx() }
+        val targetWidthDp = minOf(with(d) { currentSlotWidth.toDp() }, maxSlotWidth)
+        val destScale = with(d) { targetWidthDp.toPx() / startWidthPx }
             .coerceIn(Oxide.Motion.IntroScaleMin, Oxide.Motion.IntroScaleMax)
 
         val journey = remember(progress, destScale, currentSlotLeft, currentSlotTop, currentRootW, currentRootH) {
@@ -147,7 +148,7 @@ fun OxideIntro(
                 centerX = currentRootW / 2f,
                 centerY = currentRootH / 2f,
                 destX = currentSlotLeft + currentSlotWidth / 2f,
-                destY = currentSlotTop + d.toPx(Oxide.BrandSlotHeight.value) / 2f,
+                destY = currentSlotTop + with(d) { Oxide.BrandSlotHeight.toPx() } / 2f,
                 destScale = destScale,
             )
         }
