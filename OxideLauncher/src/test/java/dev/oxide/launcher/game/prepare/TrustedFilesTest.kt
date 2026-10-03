@@ -138,11 +138,11 @@ class TrustedFilesTest {
         assertEquals(1, parsed.size)
         assertFalse(parsed.isTrusted(File(dir, "other")))
         assertFalse(parsed.isTrusted(File(dir, "path")))
-        // 唯一被接受的那行指向一个真实存在的文件
-        val good = File(dir, "good").apply { writeText("x") }
-        assertTrue(
-            TrustedFiles.parse("12\t34\t${good.absolutePath}".lineSequence()).isTrusted(good)
-        )
+
+        // 唯一被接受的那一行确实描述了一个文件；这里按真实身份重建一次，确认它可用
+        val good = file("good", ByteArray(12))
+        val line = "${good.length()}\t${good.lastModified()}\t${good.absolutePath}"
+        assertTrue(TrustedFiles.parse(sequenceOf(line)).isTrusted(good))
     }
 
     @Test
