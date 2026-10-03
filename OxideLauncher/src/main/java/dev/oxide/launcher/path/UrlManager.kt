@@ -30,7 +30,6 @@ import io.ktor.client.request.HttpRequestPipeline
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
-import kotlinx.serialization.json.Json
 import okhttp3.ConnectionPool
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -41,9 +40,6 @@ import java.util.concurrent.TimeUnit
 
 val URL_USER_AGENT: String = "${BuildKeys.LAUNCHER_SHORT_NAME}/Android_${BuildConfig.VERSION_NAME}"
 val TIME_OUT = TimeUnit.SECONDS.toMillis(30L)
-
-const val HOST_CURSEFORGE_API = "api.curseforge.com"
-const val CURSEFORGE_CDN_SUFFIX = "forgecdn.net"
 
 const val URL_MCMOD: String = "https://www.mcmod.cn/"
 const val URL_MINECRAFT_VERSION_REPOS: String = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
@@ -73,11 +69,6 @@ const val URL_CLOUD_RENDERER_PLUGINS = "https://www.123865.com/s/YLIUVv-hae0v"
 const val URL_CLOUD_DRIVE_DRIVER_PLUGINS = "https://www.123865.com/s/YLIUVv-3ae0v"
 const val URL_CLOUD_NATIVE_LIB_PLUGINS = "https://www.123865.com/s/YLIUVv-Hae0v"
 
-private fun isCurseForgeHost(host: String): Boolean =
-    host == HOST_CURSEFORGE_API ||
-            host == CURSEFORGE_CDN_SUFFIX ||
-            host.endsWith(".$CURSEFORGE_CDN_SUFFIX")
-
 /**
  * An [Interceptor] for CurseForge API requests.
  *
@@ -85,15 +76,16 @@ private fun isCurseForgeHost(host: String): Boolean =
  * CurseForge host, provided the API key is not blank.
  */
 private val CURSEFORGE_INTERCEPTOR = Interceptor { chain ->
-    val request = chain.request()
-    if (isCurseForgeHost(request.url.host)) {
-        val apiKey = BuildKeys.CURSEFORGE_API
-        if (apiKey.isNotBlank()) {
-            val newRequest = request.newBuilder()
-                .header("x-api-key", apiKey)
-                .build()
-            return@Interceptor chain.proceed(newRequest)
-        }
+    val headers = curseForgeAuthHeaders(
+        host = chain.request().url.host,
+        apiKey = BuildKeys.CURSEFORGE_API
+    )
+    val request = if (headers.isEmpty()) {
+        chain.request()
+    } else {
+        chain.request().newBuilder().apply {
+            headers.forEach { (name, value) -> header(name, value) }
+        }.build()
     }
     chain.proceed(request)
 }
@@ -116,12 +108,6 @@ private val USER_AGENT_INTERCEPTOR = Interceptor { chain ->
     }
 }
 
-val GLOBAL_JSON = Json {
-    ignoreUnknownKeys = true
-    explicitNulls = true
-    coerceInputValues = true
-}
-
 val GLOBAL_CLIENT = HttpClient(OkHttp) {
     install(HttpTimeout) {
         requestTimeoutMillis = TIME_OUT
@@ -140,11 +126,13 @@ val GLOBAL_CLIENT = HttpClient(OkHttp) {
     }
 }.apply {
     requestPipeline.intercept(HttpRequestPipeline.State) {
-        if (isCurseForgeHost(context.url.host)) {
-            val apiKey = BuildKeys.CURSEFORGE_API
-            if (apiKey.isNotBlank()) {
-                context.header("x-api-key", apiKey)
-            }
+        // 与 [CURSEFORGE_INTERCEPTOR] 共用同一套作用域判断，
+        // 保证无论走 Ktor 管线还是直接用 OkHttp 客户端，密钥都只发往 CurseForge 主机
+        curseForgeAuthHeaders(
+            host = context.url.host,
+            apiKey = BuildKeys.CURSEFORGE_API
+        ).forEach { (name, value) ->
+            context.header(name, value)
         }
     }
 }

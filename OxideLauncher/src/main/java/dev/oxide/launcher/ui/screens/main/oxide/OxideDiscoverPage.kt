@@ -350,7 +350,7 @@ private class OxideDiscoverViewModel : ViewModel() {
         get() = query.isNotBlank() || gameVersion.isNotBlank() || modloader != null ||
                 sortField != PlatformSortField.RELEVANCE
 
-    fun setQuery(value: String) {
+    fun updateQuery(value: String) {
         query = value
     }
 
@@ -1122,7 +1122,7 @@ private fun DiscoverFilterBar(
             modifier = Modifier.width(metrics.searchFieldWidth),
             metrics = metrics,
             value = viewModel.query,
-            onValueChange = viewModel::setQuery,
+            onValueChange = { viewModel.updateQuery(it) },
             onSubmit = { viewModel.submitQuery(viewModel.query) },
             placeholder = stringResource(R.string.oxide_dis_search_hint)
         )
