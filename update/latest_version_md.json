@@ -1,48 +1,48 @@
 {
-  "code": 100100,
-  "version": "1.1.0",
+  "code": 100200,
+  "version": "1.2.0",
   "created_at": "2026-10-03",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.1.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0.apk",
+      "file_name": "OxideLauncher-1.2.0.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.2.0/OxideLauncher-1.2.0.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.1.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.2.0-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.2.0/OxideLauncher-1.2.0-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.1.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.2.0-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.2.0/OxideLauncher-1.2.0-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.1.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0-x86.apk",
+      "file_name": "OxideLauncher-1.2.0-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.2.0/OxideLauncher-1.2.0-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.1.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.1.0/OxideLauncher-1.1.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.2.0-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.2.0/OxideLauncher-1.2.0-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Launcher 1.1.0\n\n**Oxide Launcher** — an independently maintained Android launcher for Minecraft: Java Edition, derived from Zalith Launcher 2 (GPL-3.0).\n\n## Accounts\n\n- **Offline accounts now work everywhere.** Upstream disabled every account outside Greater China unless a Microsoft account existed. That gate is gone, so a local account can be created and used on any device, with no network and no Microsoft login.\n- **Offline and Ely.by accounts can wear a cape.** The local offline Yggdrasil server already served capes but never loaded one; it now does, and it also starts for a cape-only account. Import a 64x32 cape from the account screen.\n- **One-tap Ely.by.** Ely.by's published authlib-injector endpoint can be added as an authentication server directly, and its locally selected cape is served through the local server during launch.\n- **A failed skin download no longer discards a Microsoft login** that already succeeded.\n- **Deleting an account also deletes its cape**, and account lookup by profile id no longer requires an exact account type.\n- **Backup and restore** of accounts, authentication servers and launcher settings. The backup contains no access token, refresh token or third-party password, so every restored account has to sign in again.\n\n## Credential handling\n\n- Session tokens are now redacted **by value** from the game log. Previously only the value after a literal `--accessToken` was hidden, but Minecraft 1.6.4 and older receive the same token as `--session`, and the game log can be uploaded to a public log service.\n- The account database is excluded from cloud backup and device transfer.\n- The offline Yggdrasil server binds to `127.0.0.1` only, so no other app or LAN host can read account names, UUIDs, skins or capes from it.\n- `Account.toString()` no longer prints credentials.\n- Server-controlled error text is redacted and length-limited before it reaches the log or the screen.\n\n## Branding\n\nThe product is now **Oxide Launcher**. `applicationId` / `namespace` stay `dev.oxide.launcher`.\n\n## Provenance\n\nThe account and authentication behaviour is adapted from [Star1xr/ZalithLauncher2Plus](https://github.com/Star1xr/ZalithLauncher2Plus) (GPL-3.0, Copyright © 2026 Star1xr). [THIRD_PARTY.md](https://github.com/HakaI963/oxide-reborn/blob/main/THIRD_PARTY.md) lists every adapted commit and every deliberate deviation; the About screen credits it.\n\nThis build was verified by CI only (compilation, unit tests, lint, R8, packaging, signing) and has not been validated on physical hardware by the project maintainers. 1674 lint findings inherited from the upstream baseline are recorded in `lint-baseline.xml` and reported as a CI artifact."
+    "markdown": "# Oxide Launcher 1.2.0\n\n**Oxide Launcher** — an independently maintained Android launcher for Minecraft: Java Edition, derived from Zalith Launcher 2 (GPL-3.0).\n\n## Startup performance\n\nLaunch preparation is now cached per instance. The first launch after an instance changes prepares everything and records a prepared state; an unchanged instance skips the expensive parts of preparation.\n\nWhat is skipped on a hit:\n\n- **The full integrity walk.** Oxide used to SHA-1 the client jar, every library and every asset object on every launch: roughly 250-550 MB across a few thousand files. On a hit each of those files is identified by its size and modification time instead, which is two stat calls rather than a full read. The file list is still built from the manifest every launch, so a file that no longer matches falls straight back to real verification.\n- **The mod scan.** Every mod jar was opened up to twelve times to read its metadata. A hit restores the touchcontroller answer from the recorded state instead.\n\nA hit invalidates when any of these changes: the version JSON, the inherited parent version JSON, anything in the mods folder including enable/disable renames, the integrity-check setting, the download source, the launcher version, the cache schema, or the preparation algorithm version. It deliberately does **not** invalidate for account, renderer, driver, runtime/JRE, RAM, language, resolution or control layout, none of which take part in preparation, and it does not invalidate because Minecraft wrote to logs, saves, screenshots, crash-reports, resourcepacks, shaderpacks, .fabric or .mixin.out.\n\nInstances running lwjgl3ify always prepare in full, because patching needs the real mod objects.\n\nThe cache is written only after preparation fully succeeds, through a temporary file and an atomic rename, so an interrupted launch never leaves a partial state. A missing, malformed, unreadable or inconsistent cache simply falls back to full preparation, and deleting it costs one extra launch. It lives in the instance's own `OxideLauncher/` directory alongside `version.config`, so deleting, copying or renaming a version handles it automatically.\n\nThree smaller startup wins in the same path:\n\n- `ro.soc.model` was read with a real fork/exec on every launch for a value that cannot change while the process lives; it is now read once.\n- `options.txt` was rewritten on every launch even when unchanged; the write is skipped when the serialized content is identical.\n- The merged manifest was generated with a pretty-printing serializer and then passed across the process boundary as an Intent extra; it is now generated compactly.\n\n## Logging\n\n`PREPARE CACHE HIT`, `PREPARE CACHE MISS: <reason>`, `PREPARE CACHE REBUILT` and `PREPARE CACHE INVALIDATED` are written to the launcher log with counts only, never fingerprints or credentials.\n\n## Tests\n\n60 new unit tests covering every invalidation rule, the atomic-write and recovery behaviour, concurrent writers and readers, and the exact conditions under which a file may be treated as already verified.\n\nThis build was verified by CI only (compilation, unit tests, lint, R8, packaging, signing) and has not been validated on physical hardware by the project maintainers."
   },
   "bodies": [
     {
       "language": "en",
-      "markdown": "Offline accounts work on every device, offline and Ely.by capes work, session tokens are no longer written to uploadable logs, and the product is now called Oxide Launcher."
+      "markdown": "Startup preparation is cached per instance: an unchanged instance skips the full asset and library integrity walk and the mod scan, with atomic writes and safe fallback."
     }
   ]
 }
