@@ -1,16 +1,16 @@
-# Oxide Reborn
+# Oxide Launcher
 
 ![Build](https://github.com/HakaI963/oxide-reborn/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Android%2026%2B-green.svg)
 
-**Oxide Reborn** is a launcher for **Minecraft: Java Edition** on **Android**. It prepares and runs
+**Oxide Launcher** is a launcher for **Minecraft: Java Edition** on **Android**. It prepares and runs
 real Minecraft installations on Android devices: version resolution, library and asset
 verification, Java runtime management, native renderer bridging, on-screen and physical input
 handling, and a full instance/multiplayer tooling set.
 
 > [!IMPORTANT]
-> **Oxide Reborn is an unofficial, independently maintained build of
+> **Oxide Launcher is an unofficial, independently maintained build of
 > [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2).** It is not affiliated
 > with, endorsed by, or supported by the original project. The entire source, including every
 > original copyright notice, is preserved under GPL-3.0 — see [`LICENSE`](LICENSE),
@@ -92,7 +92,7 @@ repository and uses the same schema as upstream.
 
 ## License and provenance
 
-Oxide Reborn is licensed under the **GNU General Public License v3.0**. Because it is a modified
+Oxide Launcher is licensed under the **GNU General Public License v3.0**. Because it is a modified
 version, GPLv3 §7 applies:
 
 1. The program has been renamed and re-versioned so it cannot be confused with the original. The

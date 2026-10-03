@@ -1,6 +1,6 @@
 # NOTICE
 
-Oxide Reborn (derived from Zalith Launcher 2) includes TextMate grammar and theme files from the following
+Oxide Launcher (derived from Zalith Launcher 2) includes TextMate grammar and theme files from the following
 third-party projects. The files are redistributed under the MIT License, the
 full text of which appears at the end of this notice.
 

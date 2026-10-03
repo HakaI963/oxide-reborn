@@ -11,7 +11,7 @@
 .cxx
 local.properties
 
-# Oxide Reborn signing material — never committed, materialised by CI or generated locally
+# Oxide Launcher signing material — never committed, materialised by CI or generated locally
 *.jks
 *.keystore
 .oauth_client_id.txt

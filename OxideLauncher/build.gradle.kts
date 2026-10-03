@@ -41,7 +41,7 @@ fun getKeyFromLocal(envKey: String, fileName: String? = null, default: String? =
 }
 
 /**
- * Oxide Reborn release signing material.
+ * Oxide Launcher release signing material.
  *
  * The keystore is deliberately **not** committed. CI (or a local release build) materialises
  * `oxide_launcher.jks` before Gradle configures, and the credentials come from the environment

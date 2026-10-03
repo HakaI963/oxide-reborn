@@ -28,7 +28,7 @@ import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2PluginManager
 import dev.oxide.launcher.game.renderer.Renderers
 
 /**
- * FCL、Oxide Reborn 渲染器插件，同时支持使用本地渲染器插件
+ * FCL、Oxide Launcher 渲染器插件，同时支持使用本地渲染器插件
  * [FCL Renderer Plugin](https://github.com/FCL-Team/FCLRendererPlugin)
  */
 object RendererPluginManager: ApkPluginManager() {
@@ -75,7 +75,7 @@ object RendererPluginManager: ApkPluginManager() {
     }
 
     /**
-     * 解析 Oxide Reborn、FCL 渲染器插件
+     * 解析 Oxide Launcher、FCL 渲染器插件
      */
     override fun parseApkPlugin(
         context: Context,

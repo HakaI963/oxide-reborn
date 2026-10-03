@@ -37,12 +37,12 @@
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Reborn 1.0.0\n\nFirst release of **Oxide Reborn**, an independently maintained Android launcher for Minecraft: Java Edition, derived from Zalith Launcher 2 (GPL-3.0).\n\n- Rebranded product identity: **Oxide Reborn** (`dev.oxide.launcher`).\n- Rebuilt GitHub Actions pipeline: unit tests, Android Lint, debug APK and per-ABI release APKs.\n- All Kotlin/Java package roots, JNI symbols and ProGuard keep rules migrated in lockstep.\n- Renderer plugin ecosystem compatibility preserved (`oxideRendererPlugin` and the legacy `zalithRendererPlugin`).\n- Update channel now served from this repository, with a CDN fallback.\n\nKnown limitations: this build was verified by CI only (compilation, unit tests, lint, R8, packaging, signing) and has not been validated on physical hardware by the project maintainers. 1674 lint findings inherited from the upstream baseline are recorded in `lint-baseline.xml` and reported as a CI artifact.\n\nIdentifiers that intentionally keep upstream naming are listed in [COMPATIBILITY.md](https://github.com/HakaI963/oxide-reborn/blob/main/COMPATIBILITY.md)."
+    "markdown": "# Oxide Launcher 1.0.0\n\nFirst release of **Oxide Launcher**, an independently maintained Android launcher for Minecraft: Java Edition, derived from Zalith Launcher 2 (GPL-3.0).\n\n- Rebranded product identity: **Oxide Launcher** (`dev.oxide.launcher`).\n- Rebuilt GitHub Actions pipeline: unit tests, Android Lint, debug APK and per-ABI release APKs.\n- All Kotlin/Java package roots, JNI symbols and ProGuard keep rules migrated in lockstep.\n- Renderer plugin ecosystem compatibility preserved (`oxideRendererPlugin` and the legacy `zalithRendererPlugin`).\n- Update channel now served from this repository, with a CDN fallback.\n\nKnown limitations: this build was verified by CI only (compilation, unit tests, lint, R8, packaging, signing) and has not been validated on physical hardware by the project maintainers. 1674 lint findings inherited from the upstream baseline are recorded in `lint-baseline.xml` and reported as a CI artifact.\n\nIdentifiers that intentionally keep upstream naming are listed in [COMPATIBILITY.md](https://github.com/HakaI963/oxide-reborn/blob/main/COMPATIBILITY.md)."
   },
   "bodies": [
     {
       "language": "en",
-      "markdown": "First Oxide Reborn release. See the default changelog for details."
+      "markdown": "First Oxide Launcher release. See the default changelog for details."
     }
   ]
 }

@@ -1,8 +1,8 @@
 # Third-Party Components and Licenses
 
-Oxide Reborn is a derivative work of **Zalith Launcher 2** (GPL-3.0). This file records the
+Oxide Launcher is a derivative work of **Zalith Launcher 2** (GPL-3.0). This file records the
 provenance of the upstream baseline, the third-party components that are redistributed or linked
-by the build, and the modifications made by the Oxide Reborn project.
+by the build, and the modifications made by the Oxide Launcher project.
 
 ## Provenance
 
@@ -16,14 +16,14 @@ by the build, and the modifications made by the Oxide Reborn project.
 Every first-party source file carries the original upstream GPL-3.0 header, including
 `Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors`. Those headers are preserved
 verbatim: they are a licence condition of GPLv3 §7(b) and of the upstream project's own additional
-terms. Oxide Reborn branding is applied to the product identity, not to the copyright attribution.
+terms. Oxide Launcher branding is applied to the product identity, not to the copyright attribution.
 
 Upstream source directories that are derived from other open source projects keep their own
 licences, headers and notices:
 
 * `OxideLauncher/src/main/java/org/jackhuang/hmcl/util/**` — derived from HMCL (GPL-3.0), header preserved.
 * `OxideLauncher/src/main/java/org/libsdl/app/**` — SDL3 Java bindings (zlib), header preserved.
-* `LWJGL/**` — LWJGL (BSD-3-Clause) with Oxide Reborn patches; `LWJGL/patches/**` is GPL-3.0.
+* `LWJGL/**` — LWJGL (BSD-3-Clause) with Oxide Launcher patches; `LWJGL/patches/**` is GPL-3.0.
 * `OxideLauncher/src/main/assets/textmate/**` — TextMate grammars, see
   [`OxideLauncher/src/main/assets/textmate/NOTICE.md`](OxideLauncher/src/main/assets/textmate/NOTICE.md) (MIT).
 * `OxideLauncher/src/main/jni/**` — native bridge derived from PojavLauncher, Fold Craft Launcher,
@@ -31,13 +31,13 @@ licences, headers and notices:
 * `OxideLauncher/src/main/res/raw/*_license.txt` — full licence texts shipped inside the APK and
   surfaced in the in-app "Third-Party Libraries" screen.
 
-## Modifications by Oxide Reborn
+## Modifications by Oxide Launcher
 
 The following changes were made on top of the upstream baseline. They are described here because
 GPLv3 §5(a) requires modified versions to be distinguishable and §7(c) requires the product to be
 renamed.
 
-1. **Product identity** — renamed to *Oxide Reborn*: application label, launcher title, splash
+1. **Product identity** — renamed to *Oxide Launcher*: application label, launcher title, splash
    branding, Android theme, task description, log prefixes, the self-update channel and all
    repository URLs now point at `HakaI963/oxide-reborn`.
 2. **Android application identity** — `applicationId` / `namespace` moved to `dev.oxide.launcher`
@@ -111,7 +111,7 @@ covered by the Maven dependency table below:
 | StringFog                             | Copyright © 2016-2023, Megatron King                                                                          | Apache 2.0           | [Link↗](https://github.com/MegatronKing/StringFog)                                 |
 | tm4e (TextMate for Eclipse)           | Copyright © Eclipse Foundation                                                                                | EPL-2.0 License      | [Link↗](https://github.com/eclipse-tm4e/tm4e)                                      |
 | XZ for Java                           | Copyright © The XZ for Java authors and contributors                                                          | 0BSD License         | [Link↗](https://tukaani.org/xz/java.html)                                          |
-| sqlcipher-android | - | Apache 2.0 | Removed from Oxide Reborn (declared but never used) |
+| sqlcipher-android | - | Apache 2.0 | Removed from Oxide Launcher (declared but never used) |
 | zip4j | Copyright © 2008-2024 Sharath Prajapati | Apache 2.0 | [Link↗](https://github.com/sjwood/zip4j) |
 | LunarCalendar | Copyright © 2021 xhinliang | Apache 2.0 | [Link↗](https://github.com/xhinliang/LunarCalendar) |
 | toml4j | Copyright © 2015 Moandjiezana | Apache 2.0 | [Link↗](https://github.com/moandjiezana/toml4j) |

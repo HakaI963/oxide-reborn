@@ -123,14 +123,14 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
         return false;
     }
 
-    //Oxide Reborn added
+    //Oxide Launcher added
     public boolean isRelease() {
         if (this instanceof Release release) {
             return release.getEaType() == Release.ReleaseType.GA;
         }
         return false;
     }
-    //Oxide Reborn ended
+    //Oxide Launcher ended
 
     enum Type {
         PRE_CLASSIC, CLASSIC, INDEV, INFDEV, ALPHA, BETA, NEW

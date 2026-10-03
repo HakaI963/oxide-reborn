@@ -1,6 +1,6 @@
-# Oxide Reborn — Preserved Compatibility Identifiers
+# Oxide Launcher — Preserved Compatibility Identifiers
 
-Oxide Reborn renames product branding and the Android application identity, but a number of
+Oxide Launcher renames product branding and the Android application identity, but a number of
 identifiers must stay exactly as they are because they are part of a contract with something this
 repository does not own. This file records each one, what depends on it, and whether a user can
 see it.
@@ -84,12 +84,12 @@ recognised exactly as upstream defines them:
 `fclPlugin`, `fclPlugin_V2`, `FCLNativePlugin`, `pojavEnv`, `renderer`, `des`, `minMCVer`,
 `maxMCVer`, `driver`.
 
-The `zalithRendererPlugin` key is the upstream brand's own key. Oxide Reborn **accepts both**
+The `zalithRendererPlugin` key is the upstream brand's own key. Oxide Launcher **accepts both**
 `oxideRendererPlugin` and `zalithRendererPlugin` so that already published renderer plugins keep
 working; it does not drop support for either.
 
 User-visible: only insofar as a user can install a third-party plugin APK that was built for
-upstream Oxide Reborn — which is the point of keeping the contract.
+upstream Oxide Launcher — which is the point of keeping the contract.
 
 ## 6. External applications and services
 
@@ -98,7 +98,7 @@ upstream Oxide Reborn — which is the point of keeping the contract.
 | `<package android:name="net.kdt.pojavlaunch.ffmpeg"/>` in `AndroidManifest.xml` and `FFmpegPluginManager` | Package name of an unrelated third-party app used as the optional ffmpeg/Twitch provider. |
 | `https://github.com/ZalithLauncher/NativeLibPlugin/releases` | Prebuilt native plugin bundle consumed by `NativePluginManager`. It contains ABI-compatible `.so` files only, so it is a working artifact source rather than branding. |
 | `https://github.com/FCL-Team/FoldCraftLauncher`, `ShirosakiMio/FCLRendererPlugin`, `FCL-Team/FCLDriverPlugin` | Third-party renderer/driver plugin releases. |
-| `PojavLauncher`, `Fold Craft Launcher`, `HMCL`, `Plain Craft Launcher 2`, `MCMod` entries in the About screen, `res/drawable/img_launcher_*.png`, `res/raw/*_license.txt`, and the TextMate `NOTICE.md` | Required legal attribution for code and assets that Oxide Reborn actually derives from. |
+| `PojavLauncher`, `Fold Craft Launcher`, `HMCL`, `Plain Craft Launcher 2`, `MCMod` entries in the About screen, `res/drawable/img_launcher_*.png`, `res/raw/*_license.txt`, and the TextMate `NOTICE.md` | Required legal attribution for code and assets that Oxide Launcher actually derives from. |
 
 ## 7. Update channel
 
@@ -110,11 +110,11 @@ upstream (`code`, `version`, `created_at`, `files`, `default_body`, `bodies`, op
 
 ## 8. On-disk data created by a previous Zalith Launcher 2 install
 
-`applicationId` changed to `dev.oxide.launcher`, therefore Android treats Oxide Reborn as a
+`applicationId` changed to `dev.oxide.launcher`, therefore Android treats Oxide Launcher as a
 **new application**: game directories, accounts, MMKV settings and control layouts created by an
 upstream Zalith Launcher 2 install live under the old package's private directory and are not
 imported. Game folders inside shared storage (the `.minecraft` directory selected by the user) are
-unaffected and remain usable — Oxide Reborn reads and writes the standard Minecraft layout
+unaffected and remain usable — Oxide Launcher reads and writes the standard Minecraft layout
 (`versions/`, `libraries/`, `assets/`, `resourcepacks/`, `shaderpacks/`, `saves/`).
 
 Per-instance launcher data lives in a subdirectory named after the launcher identifier inside each

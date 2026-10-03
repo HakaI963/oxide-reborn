@@ -94,7 +94,7 @@ jobs:
               -storepass "$PASSWORD" -keypass "$PASSWORD" \
               -alias "$ALIAS" \
               -keyalg RSA -keysize 4096 -validity 10950 \
-              -dname "CN=Oxide Reborn, OU=Oxide Reborn, O=Oxide Reborn, C=ZZ"
+              -dname "CN=Oxide Launcher, OU=Oxide Launcher, O=Oxide Launcher, C=ZZ"
             echo "Generated an ephemeral release keystore for this run."
           fi
           {
