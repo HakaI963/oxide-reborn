@@ -115,6 +115,7 @@ import dev.oxide.launcher.ui.screens.content.download.assets.elements.AssetsPage
 import dev.oxide.launcher.ui.screens.content.download.assets.elements.initAll
 import dev.oxide.launcher.ui.screens.content.elements.isFilenameInvalid
 import dev.oxide.launcher.ui.theme.Oxide
+import dev.oxide.launcher.ui.toAndroidString
 import dev.oxide.launcher.utils.file.formatFileSize
 import dev.oxide.launcher.utils.formatNumberByLocale
 import dev.oxide.launcher.utils.logging.Logger
@@ -204,10 +205,16 @@ private enum class DiscoverCategory(
     )
 }
 
-/** 一条搜索结果：字段都在搜索时取好，绘制时不再访问平台模型 */
+/**
+ * 一条搜索结果：字段都在搜索时取好，绘制时不再访问平台模型
+ *
+ * [classes] 是发起本次搜索时使用的类别，平台接口对一次搜索只返回这一类结果，
+ * 因此它就是这条结果真实所属的类别，安装路径与详情标签都直接用它
+ */
 private data class DiscoverItem(
     val data: PlatformSearchData,
     val title: String,
+    val classes: PlatformClasses,
     val loaderLabel: String?
 ) {
     val key: String get() = "${data.platform().name}/${data.platformId()}"
@@ -704,6 +711,16 @@ private fun DiscoverInstall.busy(): Boolean = when (this) {
 /** 只有 CurseForge 提供存档 */
 private fun PlatformClasses.supportsModrinth(): Boolean = this != PlatformClasses.SAVES
 
+/** 类别的短标签，与资源页的类别文案保持一致 */
+@StringRes
+private fun PlatformClasses.typeLabelRes(): Int = when (this) {
+    PlatformClasses.MOD -> R.string.download_category_mod
+    PlatformClasses.MOD_PACK -> R.string.download_category_modpack
+    PlatformClasses.RESOURCE_PACK -> R.string.download_category_resource_pack
+    PlatformClasses.SAVES -> R.string.download_category_saves
+    PlatformClasses.SHADERS -> R.string.download_category_shaders
+}
+
 /** 与资源搜索页一致：两个平台各自可选的模组加载器 */
 private fun loadersFor(platform: Platform): List<PlatformDisplayLabel> = when (platform) {
     Platform.CURSEFORGE -> curseForgeModLoaderFilters
@@ -722,7 +739,7 @@ private fun uniqueInstanceName(title: String): String {
 }
 
 /** 任务阶段对应的短标签 */
-@get:StringRes
+@StringRes
 private fun TaskStage.labelRes(): Int = when (this) {
     TaskStage.PREPARING -> R.string.oxide_dis_task_stage_preparing
     TaskStage.RUNNING -> R.string.oxide_dis_task_stage_running
@@ -1278,6 +1295,7 @@ private fun DiscoverResultsGrid(
                     DiscoverItem(
                         data = data,
                         title = mcmod.getMcmodTitle(data.platformTitle(), context),
+                        classes = category.classes,
                         loaderLabel = data.platformModLoaders()
                             ?.firstOrNull()
                             ?.getDisplayName()

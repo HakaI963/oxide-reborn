@@ -1045,6 +1045,10 @@ private fun AppearanceCategory(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val backgroundViewModel = LocalBackgroundViewModel.current
+    //宿主没有提供背景管理时，背景相关的开关一律不可用，而不是直接崩掉
+    val backgroundAvailable = backgroundViewModel != null
+    val backgroundValid = backgroundViewModel?.isValid == true
+    val backgroundVideo = backgroundViewModel?.isVideo == true
     val colorTheme = AllSettings.launcherColorTheme.state
 
     val filePicker = rememberLauncherForActivityResult(
@@ -1056,10 +1060,10 @@ private fun AppearanceCategory(
                 dispatcher = Dispatchers.IO,
                 task = { task ->
                     task.updateMessage(androidText(R.string.settings_launcher_background_importing))
-                    backgroundViewModel.import(context, uri)
+                    backgroundViewModel?.import(context, uri)
                 },
                 onError = {
-                    backgroundViewModel.delete()
+                    backgroundViewModel?.delete()
                     bridge.showToast(R.string.error_import_image)
                 },
             )
@@ -1102,10 +1106,11 @@ private fun AppearanceCategory(
         OxideActionRow(
             label = stringResource(R.string.settings_launcher_background_title),
             hint = stringResource(R.string.settings_launcher_background_summary),
-            value = if (backgroundViewModel.isValid) stringResource(R.string.oxide_set_in_use) else null,
+            value = if (backgroundValid) stringResource(R.string.oxide_set_in_use) else null,
+            enabled = backgroundAvailable,
             onClick = { filePicker.launch(Unit) },
         )
-        if (backgroundViewModel.isValid) {
+        if (backgroundValid) {
             OxideActionRow(
                 label = stringResource(R.string.generic_reset),
                 hint = stringResource(R.string.oxide_set_background_reset_detail),
@@ -1120,7 +1125,7 @@ private fun AppearanceCategory(
             range = AllSettings.launcherBackgroundOpacity.floatRange.toIntRange(),
             step = 5,
             suffix = "%",
-            enabled = backgroundViewModel.isValid,
+            enabled = backgroundValid,
             onValueChange = { AllSettings.launcherBackgroundOpacity.save(it) },
         )
         OxideIntRow(
@@ -1131,7 +1136,7 @@ private fun AppearanceCategory(
             range = AllSettings.videoBackgroundVolume.floatRange.toIntRange(),
             step = 5,
             suffix = "%",
-            enabled = backgroundViewModel.isValid && backgroundViewModel.isVideo,
+            enabled = backgroundValid && backgroundVideo,
             onValueChange = { AllSettings.videoBackgroundVolume.save(it) },
         )
         OxideIntRow(
@@ -1141,7 +1146,7 @@ private fun AppearanceCategory(
             value = AllSettings.backgroundBlur.state,
             range = AllSettings.backgroundBlur.floatRange.toIntRange(),
             suffix = " dp",
-            enabled = backgroundViewModel.isValid,
+            enabled = backgroundValid,
             onValueChange = { AllSettings.backgroundBlur.save(it) },
         )
         OxideEnumRow(
@@ -1149,7 +1154,7 @@ private fun AppearanceCategory(
             metrics = metrics,
             entries = BackgroundBlur.entries,
             selected = AllSettings.backgroundBlurType.state,
-            enabled = backgroundViewModel.isValid,
+            enabled = backgroundValid,
             nameOf = { oxideBackgroundBlurName(it) },
             onSelect = { AllSettings.backgroundBlurType.save(it) },
         )
@@ -1161,7 +1166,7 @@ private fun AppearanceCategory(
             text = stringResource(R.string.settings_launcher_background_reset_message),
             onConfirm = {
                 confirmReset = false
-                scope.launch { backgroundViewModel.delete() }
+                scope.launch { backgroundViewModel?.delete() }
             },
             onDismiss = { confirmReset = false },
         )

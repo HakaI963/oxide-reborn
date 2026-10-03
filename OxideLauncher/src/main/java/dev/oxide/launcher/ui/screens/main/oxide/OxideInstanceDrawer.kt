@@ -75,6 +75,7 @@ import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.screens.NestedNavKey
 import dev.oxide.launcher.ui.screens.NormalNavKey
 import dev.oxide.launcher.ui.screens.content.elements.VersionsOperation
+import dev.oxide.launcher.ui.screens.navigateTo
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.formatDate
 import dev.oxide.launcher.utils.logging.Logger

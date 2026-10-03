@@ -1352,6 +1352,7 @@
     <string name="oxide_dis_error_detail">The platform could not be reached.</string>
     <string name="oxide_dis_retry">Retry</string>
     <string name="oxide_dis_result_count">%1$d results</string>
+    <string name="oxide_dis_by">by %1$s</string>
     <string name="oxide_dis_action_install">Install</string>
     <string name="oxide_dis_badge_installed">Installed</string>
     <string name="oxide_dis_drawer_title">Project</string>
@@ -1363,6 +1364,9 @@
     <string name="oxide_dis_detail_authors">by %1$s</string>
     <string name="oxide_dis_detail_downloads">%1$s downloads</string>
     <string name="oxide_dis_detail_follows">%1$s followers</string>
+    <string name="oxide_dis_detail_downloads_label">Downloads</string>
+    <string name="oxide_dis_detail_follows_label">Follows</string>
+    <string name="oxide_dis_detail_authors_label">Authors</string>
     <string name="oxide_dis_detail_source">Source</string>
     <string name="oxide_dis_detail_target">Install into</string>
     <string name="oxide_dis_detail_target_none">No instance selected</string>
@@ -1393,6 +1397,7 @@
     <string name="oxide_dis_modpack_dialog_title">Install modpack</string>
     <string name="oxide_dis_modpack_dialog_detail">A modpack is installed as its own instance, with its game version and mod loader.</string>
     <string name="oxide_dis_modpack_name_label">Instance name</string>
+    <string name="oxide_dis_modpack_name_required">Enter a name for the new instance</string>
     <string name="oxide_dis_modpack_name_exists">An instance with this name already exists</string>
     <string name="oxide_dis_modpack_name_invalid">%1$s</string>
     <string name="oxide_dis_mobile_title">Use mobile data?</string>
@@ -1410,7 +1415,7 @@
     <string name="about_launcher_project_title">Oxide Launcher project</string>
     <string name="about_launcher_project_text">Source, releases and issue tracker for %s</string>
     <string name="about_launcher_project_link">Project Link</string>
-    <string name="about_sponsor">Sponsorship Support</string>
+    <string name="about_sponsor">Oxide Launcher project</string>
     <string name="about_acknowledgements_title">Acknowledgements</string>
     <string name="about_acknowledgements_pojav_text">%s uses the launch backend from PojavLauncher</string>
     <string name="about_acknowledgements_pcl_text">%s references parts of the implementation from PCL2</string>
