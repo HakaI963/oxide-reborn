@@ -185,6 +185,7 @@ fun MainScreen(
                     .fillMaxWidth()
                     .height(40.dp),
                 mainScreenKey = mainScreenKey,
+                brandSlot = brandSlot,
                 inLauncherScreen = inLauncherScreen,
                 taskRunning = tasks.isEmpty(),
                 isTasksExpanded = isTaskMenuExpanded,
@@ -253,6 +254,7 @@ fun MainScreen(
 
 @Composable
 private fun <E: TitledNavKey> TopBar(
+    brandSlot: dev.oxide.launcher.ui.components.OxideBrandSlotState,
     mainScreenKey: E?,
     inLauncherScreen: Boolean,
     taskRunning: Boolean,
