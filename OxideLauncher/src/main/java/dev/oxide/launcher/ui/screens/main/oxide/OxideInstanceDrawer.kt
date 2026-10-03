@@ -76,6 +76,7 @@ import dev.oxide.launcher.ui.screens.NestedNavKey
 import dev.oxide.launcher.ui.screens.NormalNavKey
 import dev.oxide.launcher.ui.screens.content.elements.VersionsOperation
 import dev.oxide.launcher.ui.screens.navigateTo
+import dev.oxide.launcher.ui.screens.removeAndNavigateTo
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.formatDate
 import dev.oxide.launcher.utils.logging.Logger
@@ -83,7 +84,7 @@ import dev.oxide.launcher.utils.platform.getMaxMemoryForSettings
 import dev.oxide.launcher.utils.string.getMessageOrToString
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
-import dev.oxide.launcher.viewmodel.ScreenBackStackViewModel
+import dev.oxide.launcher.viewmodel.sendToast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -124,9 +125,13 @@ fun OxideInstanceDrawer(
 ) {
     val eventViewModel = rememberOxideEventViewModel()
     val errorViewModel: ErrorViewModel = viewModel()
-    val backStack: ScreenBackStackViewModel = viewModel()
+    // 必须是 MainActivity 上那一份：NavDisplay 条目自己的 ViewModelStore 里
+    // 另有一份，往那份上面推的导航没有任何反应。取不到时下面每一处
+    // 深层入口都会退回成一次提示，而不是静默失败。
+    val backStack = rememberOxideScreenBackStack()
     // 宿主给出的真实深层入口（版本设置屏幕等），由外壳决定怎么走
     val hostActions = LocalOxideHostActions.current
+    val eventToast = androidText(R.string.oxide_ins_operation_failed)
 
     val config = version.getVersionConfig()
     val versionName = version.getVersionName()
@@ -164,6 +169,8 @@ fun OxideInstanceDrawer(
 
     // 重命名或删除之后这个对象已经不在真实列表里了，收起抽屉，避免继续往一个已改名的目录写配置
     val liveVersions by VersionsManager.versions.collectAsStateWithLifecycle()
+    // isNotEmpty() 这一层判断是必要的：刚打开抽屉时列表可能还没探完，
+    // 此时"一个都看不到"不代表这个版本被删了
     LaunchedEffect(liveVersions, versionName) {
         if (liveVersions.isNotEmpty() && liveVersions.none { it.getVersionName() == versionName }) {
             onDismiss()
@@ -186,18 +193,29 @@ fun OxideInstanceDrawer(
     }
     // 进入既有的版本子屏幕，导航键与入口和旧版本管理页完全一致
     val openLegacy: (NormalNavKey.Versions) -> Unit = { target ->
-        val key = NestedNavKey.VersionSettings(version)
-        backStack.mainScreen.navigateTo(key, useClassEquality = true)
-        key.backStack.navigateTo(target)
-        onDismiss()
+        val stack = backStack
+        if (stack == null) {
+            // 拿不到真实导航栈时明确提示，而不是点了没反应
+            eventViewModel.sendToast(eventToast)
+        } else {
+            val key = NestedNavKey.VersionSettings(version)
+            stack.mainScreen.navigateTo(key, useClassEquality = true)
+            key.backStack.navigateTo(target)
+            onDismiss()
+        }
     }
     val openExport: () -> Unit = {
-        backStack.mainScreen.removeAndNavigateTo(
-            remove = NestedNavKey.VersionSettings::class,
-            screenKey = NestedNavKey.VersionExport(version),
-            useClassEquality = true,
-        )
-        onDismiss()
+        val stack = backStack
+        if (stack == null) {
+            eventViewModel.sendToast(eventToast)
+        } else {
+            stack.mainScreen.removeAndNavigateTo(
+                remove = NestedNavKey.VersionSettings::class,
+                screenKey = NestedNavKey.VersionExport(version),
+                useClassEquality = true,
+            )
+            onDismiss()
+        }
     }
 
     val tabTitles = listOf(

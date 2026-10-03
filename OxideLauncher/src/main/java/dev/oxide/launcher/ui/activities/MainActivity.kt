@@ -73,7 +73,6 @@ import dev.oxide.launcher.ui.screens.NestedNavKey
 import dev.oxide.launcher.ui.screens.NormalNavKey
 import dev.oxide.launcher.ui.screens.content.elements.Background
 import dev.oxide.launcher.ui.screens.content.elements.LaunchGameOperation
-import dev.oxide.launcher.ui.screens.content.elements.TitleTaskFlowDialog
 import dev.oxide.launcher.ui.screens.content.navigateToLogView
 import dev.oxide.launcher.ui.screens.content.navigateToWeb
 import dev.oxide.launcher.ui.screens.main.MainScreen
@@ -358,10 +357,14 @@ class MainActivity : BaseAppCompatActivity() {
                         submitError = {
                             errorViewModel.showError(it)
                         },
-                        toAccountManageScreen = { menu ->
-                            screenBackStackModel.mainScreen.navigateTo(
-                                screenKey = NormalNavKey.AccountManager(menu)
+                        toAccountManageScreen = {
+                            // 账号现在有 Oxide 自己的那一屏，从顶栏的 Account 入口进去。
+                            // 这里不再把旧的 Zalith 账号界面压回栈上，否则"没有账号就启动"
+                            // 仍然会把人送进旧界面；改为退回主页并如实说明原因。
+                            eventViewModel.sendToast(
+                                androidText(R.string.game_launch_no_account)
                             )
+                            screenBackStackModel.mainScreen.clearWith(NormalNavKey.LauncherMain)
                         },
                         toVersionManageScreen = {
                             screenBackStackModel.mainScreen.removeAndNavigateTo(
@@ -380,19 +383,11 @@ class MainActivity : BaseAppCompatActivity() {
                         }
                     )
 
-                    //启动游戏流程展示
-                    val launchFlow by launchGameViewModel.launchFlow.collectAsStateWithLifecycle()
-                    val flow = launchFlow
-                    if (flow != null) {
-                        val launchTasks by flow.tasksFlow.collectAsStateWithLifecycle()
-                        TitleTaskFlowDialog(
-                            title = stringResource(R.string.main_launch_game),
-                            tasks = launchTasks,
-                            onCancel = {
-                                launchGameViewModel.cancel()
-                            }
-                        )
-                    }
+                    // 启动流程的呈现已经换成 OxideLaunchPage：它在 OxideMainShell 里，
+                    // 直接读同一个 LaunchGameViewModel 的 launchFlow 与阶段列表，
+                    // 取消按钮也作用在同一条链路上。旧的那个 Material 任务弹窗
+                    // 因此从这一层移除——启动系统本身（GameLaunchFlow / GameLauncher /
+                    // launchJvm 与快速加载插桩）一个字都没有改。
                 }
                 }
                 }

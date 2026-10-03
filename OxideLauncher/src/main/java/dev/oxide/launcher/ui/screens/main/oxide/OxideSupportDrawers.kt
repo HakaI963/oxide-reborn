@@ -256,7 +256,15 @@ internal fun OxideToggleRow(
         trailing = {
             // 状态由整行承载，这个开关本身不再重复朗读，避免同一信息被念两遍
             Box(modifier = Modifier.clearAndSetSemantics { }) {
-                OxideToggle(checked = checked, onCheckedChange = onCheckedChange)
+                OxideToggle(
+                    checked = checked,
+                    // 禁用行必须整个按下去都不写设置：[OxideToggle] 没有 enabled 参数，
+                    // 只关掉整行的 toggleable 会让开关自己仍然能点——那样用户点一个
+                    // 已经变灰的开关，值会悄悄变掉而整行却毫无反应。
+                    onCheckedChange = { next ->
+                        if (enabled) onCheckedChange(next)
+                    },
+                )
             }
         },
     )
@@ -626,7 +634,8 @@ fun OxideJavaDrawer(
     val compatible = remember(runtimes) { runtimes.filter { it.isCompatible() } }
     val autoPick = AllSettings.autoPickJavaRuntime.state
     val selectedRuntime = AllSettings.javaRuntime.state
-    val memoryUnit = AllSettings.ramAllocation
+    // 内存分配没有默认值，所以下限要从设置单元自己取，写回时仍然走 AllSettings.ramAllocation.save(...)
+    val minRam = AllSettings.ramAllocation.min
 
     OxideDrawerHost(
         visible = true,
@@ -684,11 +693,11 @@ fun OxideJavaDrawer(
                 label = stringResource(R.string.settings_game_java_memory_title),
                 hint = stringResource(R.string.settings_game_java_memory_summary),
                 metrics = metrics,
-                value = memoryUnit.state ?: memoryUnit.min,
-                range = memoryUnit.min..maxOf(memoryUnit.min, maxMemory),
+                value = AllSettings.ramAllocation.state ?: minRam,
+                range = minRam..maxOf(minRam, maxMemory),
                 step = 128,
                 suffix = " MB",
-                onValueChange = { memoryUnit.save(it) },
+                onValueChange = { AllSettings.ramAllocation.save(it) },
             )
             OxideTextRow(
                 title = stringResource(R.string.settings_game_jvm_args_title),
@@ -720,16 +729,34 @@ fun OxideJavaDrawer(
 // 渲染器 / 图形
 // ---------------------------------------------------------------------------
 
+/**
+ * 渲染器抽屉的标签页下标
+ *
+ * 公开成常量而不是散落的字面量，是为了让设置页能说清"从 Graphics 进来就落在图形那一页"。
+ */
+internal object OxideRendererTabs {
+    const val RENDERER = 0
+    const val GRAPHICS = 1
+    const val PERFORMANCE = 2
+}
+
 /** 渲染器抽屉：渲染器与驱动、图形 API 与分辨率、性能相关的开关 */
 @Composable
 fun OxideRendererDrawer(
     metrics: OxideMetrics,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 落在哪一页标签
+     *
+     * 同一个抽屉同时是设置页里 Renderer 与 Graphics 两类的入口，标签页顺序保持固定，
+     * 由调用方指定起点：Graphics 直接落在"图形"上，Renderer 落在"渲染器"上。
+     */
+    initialTab: Int = OxideRendererTabs.RENDERER,
 ) {
     val context = LocalContext.current
     val bridge = rememberOxideLauncherBridge()
-    var tab by rememberSaveable { mutableStateOf(0) }
+    var tab by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
     var pluginToken by remember { mutableIntStateOf(0) }
 
     val tabs = listOf(
@@ -933,6 +960,13 @@ private fun oxideGraphicsApiName(api: GraphicsApi): String = when (api) {
     GraphicsApi.DEFAULT -> stringResource(R.string.settings_game_graphics_api_default)
     GraphicsApi.DEFAULT_OPENGL -> stringResource(R.string.settings_game_graphics_api_default_opengl)
     else -> api.displayName
+}
+
+/** 吸附范围用启动器自己的字符串，而不是枚举名 FullScreen / Local */
+@Composable
+internal fun oxideSnapModeName(mode: SnapMode): String = when (mode) {
+    SnapMode.FullScreen -> stringResource(R.string.control_editor_menu_widget_snap_mode_fullscreen)
+    SnapMode.Local -> stringResource(R.string.control_editor_menu_widget_snap_mode_local)
 }
 
 // ---------------------------------------------------------------------------
@@ -1279,7 +1313,7 @@ private fun OxideAdvancedDetails(metrics: OxideMetrics) {
             entries = SnapMode.entries,
             selected = AllSettings.editorWidgetSnapMode.state,
             enabled = AllSettings.editorEnableWidgetSnap.state,
-            nameOf = { it.name },
+            nameOf = { oxideSnapModeName(it) },
             onSelect = { AllSettings.editorWidgetSnapMode.save(it) },
         )
     }
@@ -1372,7 +1406,11 @@ private fun OxideAdvancedActions(
         OxideActionRow(
             label = stringResource(R.string.oxide_set_action_check_update),
             hint = stringResource(R.string.oxide_set_action_check_update_detail),
-            onClick = bridge.checkUpdate,
+            onClick = {
+                // 更新对话框会被盖在抽屉底下，所以先把抽屉收掉
+                onDismiss()
+                bridge.checkUpdate()
+            },
         )
     }
 

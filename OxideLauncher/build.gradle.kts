@@ -1,6 +1,7 @@
 import com.android.build.api.variant.FilterConfiguration.FilterType.ABI
 import com.android.build.api.variant.impl.VariantOutputImpl
 import com.android.build.gradle.tasks.MergeSourceSetFolders
+import org.gradle.api.GradleException
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -29,14 +30,68 @@ val defaultCurseForgeApiKey = project.findProperty("curseforge_api_key") as? Str
 
 val projectArch: String = System.getProperty("arch", "all")
 
+/**
+ * 按 环境变量 → 仓库根目录下的文件 → Gradle 属性 的顺序解析一个构建期密钥。
+ *
+ * 每个来源在 **为空白** 时都算“没有提供”，而不只是为 null 时。这点很关键：CI 用
+ * `${{ secrets.NAME }}` 注入密钥，而未配置的 secret 会展开成 **空字符串**（不是“不存在”），
+ * 所以 `System.getenv` 返回的是 `""` 而不是 null。如果只用 `?:` 串起来，这个空串会在第一级
+ * 就短路掉，后面的文件和 Gradle 属性根本不会被读到，构建便悄无声息地编进一个空值——哪怕
+ * gradle.properties 里就摆着一份完全可用的默认值。
+ *
+ * 这正是 CurseForge 只在 release 里失效的原因：ci.yml 从不设置 CURSEFORGE_API_KEY，
+ * 于是 debug 回落到 gradle.properties 拿到真密钥；而 release.yml 总会设置它，未配置的
+ * secret 变成空串，debug 能用的密钥在 release 里变成了空字符串，最终连 x-api-key 头都不会带。
+ */
 fun getKeyFromLocal(envKey: String, fileName: String? = null, default: String? = null): String {
-    val key = System.getenv(envKey)
-    return key ?: fileName?.let {
-        val file = File(rootDir, fileName)
-        if (file.canRead() && file.isFile) file.readText().trim() else null
-    } ?: default ?: run {
-        logger.warn("BUILD: $envKey not set; related features may throw exceptions.")
-        ""
+    fun String?.nonBlankOrNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+    return System.getenv(envKey).nonBlankOrNull()
+        ?: fileName?.let {
+            val file = File(rootDir, it)
+            if (file.canRead() && file.isFile) file.readText().nonBlankOrNull() else null
+        }
+        ?: default.nonBlankOrNull()
+        ?: run {
+            logger.warn("BUILD: $envKey not set; related features may throw exceptions.")
+            ""
+        }
+}
+
+/**
+ * CurseForge 客户端标识（每个 CurseForge 客户端都自带一份），只作为 x-api-key 请求头发往
+ * CurseForge 主机，从不记录日志、也从不在界面显示。
+ *
+ * 提前解析一次，让编译进 BuildKeys 的值和下面 [verifyCurseForgeApiKey] 检查的值**永远是同一个**，
+ * 否则断言就可能检查不到真正被打包进去的东西。
+ */
+val resolvedCurseForgeApiKey = getKeyFromLocal("CURSEFORGE_API_KEY", ".curseforge_api.txt", defaultCurseForgeApiKey)
+
+/**
+ * 构建期护栏：release 构建不允许带着空的 CurseForge 客户端标识产出。
+ *
+ * 空密钥会让 `curseForgeAuthHeaders` 直接返回空列表（它对空值返回空是为了避免误导调用方），
+ * 于是每个请求都不带 x-api-key，CurseForge 一律回 403，表现为“CurseForge 在 release 里坏了”。
+ * 这个检查必须挂在 pre<Variant>Build 上，而不是只挂在 assembleRelease 上，否则
+ * `bundleRelease`、单测等其它 release 入口仍能绕过它。
+ */
+val verifyCurseForgeApiKey = tasks.register("verifyCurseForgeApiKey") {
+    group = "verification"
+    description = "Fails a release build if the CurseForge API key resolves to a blank value."
+    // 立即捕获，任务执行时不再回头去读构建脚本的局部状态
+    val key = resolvedCurseForgeApiKey
+    doFirst {
+        if (key.isBlank()) {
+            throw GradleException(
+                "CURSEFORGE_API_KEY resolved to a blank value, so this APK would ship without an " +
+                    "x-api-key header and CurseForge would reject every request with HTTP 403. " +
+                    "Provide it as the Gradle property 'curseforge_api_key', as the " +
+                    "CURSEFORGE_API_KEY environment variable, or as a .curseforge_api.txt file. " +
+                    "A blank value in any of those counts as absent and falls back to the next " +
+                    "source, so an unset CI secret no longer silently empties the key."
+            )
+        }
+        // 只打印长度，不打印密钥本身
+        logger.lifecycle("[verifyCurseForgeApiKey] CurseForge client identifier resolved (${key.length} chars).")
     }
 }
 
@@ -185,6 +240,14 @@ android {
 
 androidComponents {
     onVariants { variant ->
+        // release 变体必须能解析出非空的 CurseForge 密钥。用 matching/configureEach 而不是
+        // tasks.named，避免在 onVariants 回调过早求值任务名。
+        if (variant.buildType == "release") {
+            val variantNameCap = variant.name.replaceFirstChar { it.uppercaseChar() }
+            tasks.matching { it.name == "pre${variantNameCap}Build" }.configureEach {
+                dependsOn(verifyCurseForgeApiKey)
+            }
+        }
         variant.outputs.forEach { output ->
             if (output is VariantOutputImpl) {
                 val variantName = variant.name.replaceFirstChar { it.uppercaseChar() }
@@ -258,7 +321,7 @@ buildKeys {
     string("LAUNCHER_IDENTIFIER", launcherName, true)
     string("LAUNCHER_SHORT_NAME", launcherShortName, true)
     string("URL_HOME", launcherUrl, true)
-    string("CURSEFORGE_API", getKeyFromLocal("CURSEFORGE_API_KEY", ".curseforge_api.txt", defaultCurseForgeApiKey), true)
+    string("CURSEFORGE_API", resolvedCurseForgeApiKey, true)
     string("BUILD_ARCH", projectArch)
 }
 

@@ -106,6 +106,8 @@ import dev.oxide.launcher.game.version.installed.VersionsManager
 import dev.oxide.launcher.game.versioninfo.MinecraftVersion
 import dev.oxide.launcher.game.versioninfo.MinecraftVersions
 import dev.oxide.launcher.game.versioninfo.popularVersions
+import dev.oxide.launcher.setting.AllSettings
+import dev.oxide.launcher.setting.unit.EnumSettingUnit
 import dev.oxide.launcher.ui.AndroidStringText
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.components.imePanAnchor
@@ -142,8 +144,16 @@ private val OxideMetrics.controlHeight: Dp get() = topBarHeight * 0.61f
 /** 控件内部的横向留白 */
 private val OxideMetrics.controlPadding: Dp get() = pagePaddingH * 0.3f
 
-/** 左侧类别栏宽度：参考稿是 145px，这里按侧栏宽度等比推导 */
-private val OxideMetrics.categoryRailWidth: Dp get() = sidebarWidth * 0.58f
+/**
+ * 左侧类别栏宽度：参考稿 `.discoverLayout{grid-template-columns:145px minmax(0,1fr)}`
+ * 把它写死成 145px，不随侧栏宽度或可用宽度变化。
+ *
+ * 之前这里按 `sidebarWidth * 0.58` 推导，只有 107dp，比参考稿窄了一大截；
+ * 固定成 145dp 后在 640x360 这一档（内容区 453dp）右侧仍剩 299dp，两列结果放得下。
+ */
+/** The reference fixes this rail at 145px; it has to follow the interface scale like every
+ *  other dimension, otherwise raising the scale silently shrinks only this one column. */
+internal val OxideMetrics.categoryRailWidth: Dp get() = 145.dp * guiScale
 
 /** 类别栏中一项的高度 */
 private val OxideMetrics.categoryItemHeight: Dp get() = navItemHeight * 0.79f
@@ -302,7 +312,9 @@ private class OxideDiscoverViewModel : ViewModel() {
 
     var category by mutableStateOf(DiscoverCategory.MODS)
         private set
-    var platform by mutableStateOf(Platform.CURSEFORGE)
+
+    // 初始来源取自设置里的"初始搜索平台"，与资源搜索页共用同一份配置
+    var platform by mutableStateOf(DiscoverCategory.MODS.initialPlatform())
         private set
     var query by mutableStateOf("")
         private set
@@ -364,8 +376,8 @@ private class OxideDiscoverViewModel : ViewModel() {
         if (category == value) return
         category = value
         onlyInstalled = false
-        // 该类别只有一个平台时，平台固定
-        if (!value.classes.supportsModrinth()) platform = Platform.CURSEFORGE
+        // 切类别时来源平台回到该类别自己的设置值；只有一个平台的类别固定为 CurseForge
+        platform = value.initialPlatform()
         // 该类别不支持加载器过滤时，旧的加载器过滤不再有意义
         if (!value.loaderFilterable) modloader = null
         modloader = modloader?.takeIf { it in loadersFor(platform) }
@@ -380,6 +392,8 @@ private class OxideDiscoverViewModel : ViewModel() {
         if (platform == value) return
         platform = value
         modloader = modloader?.takeIf { it in loadersFor(value) }
+        // 来源平台要落到设置里：设置页与资源搜索页读的是同一份
+        category.platformSetting()?.save(value)
         search()
     }
 
@@ -391,7 +405,11 @@ private class OxideDiscoverViewModel : ViewModel() {
 
     fun selectModloader(value: PlatformDisplayLabel?) {
         if (modloader == value) return
-        modloader = value
+        // 只接受当前平台真实支持的加载器：两个平台的枚举是不同的类型，
+        // 一个平台的加载器在另一个平台上无法转换成请求参数，发过去只会静默失效
+        val valid = value?.takeIf { it in loadersFor(platform) }
+        modloader = valid
+        if (valid != value) return
         search()
     }
 
@@ -710,6 +728,29 @@ private fun DiscoverInstall.busy(): Boolean = when (this) {
 
 /** 只有 CurseForge 提供存档 */
 private fun PlatformClasses.supportsModrinth(): Boolean = this != PlatformClasses.SAVES
+
+/**
+ * 每个类别在设置里对应的"初始搜索平台"，与资源搜索页共用同一份配置
+ *
+ * 存档只有 CurseForge 一个平台，没有对应的设置项，因此这里是 null
+ */
+private fun DiscoverCategory.platformSetting(): EnumSettingUnit<Platform>? = when (this) {
+    DiscoverCategory.MODS -> AllSettings.searchModPlatform
+    DiscoverCategory.MODPACKS -> AllSettings.searchModpackPlatform
+    DiscoverCategory.RESOURCE_PACKS -> AllSettings.searchResourcePackPlatform
+    DiscoverCategory.SHADERS -> AllSettings.searchShadersPlatform
+    DiscoverCategory.MAPS -> null
+}
+
+/**
+ * 进入该类别时的初始来源平台
+ *
+ * 取自设置里的"初始搜索平台"；只有一个平台的类别（存档）固定为 CurseForge。
+ */
+private fun DiscoverCategory.initialPlatform(): Platform {
+    if (!classes.supportsModrinth()) return Platform.CURSEFORGE
+    return platformSetting()?.getValue() ?: Platform.CURSEFORGE
+}
 
 /** 类别的短标签，与资源页的类别文案保持一致 */
 @StringRes
@@ -1090,6 +1131,8 @@ private fun DiscoverFilterBar(
         versionOptions.indexOf(viewModel.gameVersion).coerceAtLeast(0)
     }
 
+    // 加载器：下标 0 是"任意加载器"，之后与 loaders 一一对应，
+    // 所以 loaderOptions[i] 对应的就是 loaders[i - 1]
     val loaders = remember(viewModel.platform) { loadersFor(viewModel.platform) }
     val loaderOptions = remember(loaders, anyLoader) {
         buildList {
@@ -1097,8 +1140,11 @@ private fun DiscoverFilterBar(
             loaders.forEach { add(it.getDisplayName()) }
         }
     }
+    // 直接用下标，不用显示名反查：两个平台的枚举是不同的类型但共用
+    // "Forge"/"Fabric" 这类同名显示名，比名字在跨平台残留时会命中错误的项，
+    // 控件就会显示一个其实并没有被选中的加载器
     val loaderIndex = viewModel.modloader
-        ?.let { selected -> loaderOptions.indexOf(selected.getDisplayName()).coerceAtLeast(0) }
+        ?.let { selected -> loaders.indexOf(selected).takeIf { it >= 0 }?.plus(1) }
         ?: 0
 
     val sourceOptions = remember(viewModel.category) {
@@ -1244,11 +1290,28 @@ private fun DiscoverField(
 }
 
 /**
+ * 结果网格的列数上限
+ *
+ * 参考稿 `.resultsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}` 恒为两列。
+ * 共享的 [OxideMetrics.gridColumns] 上限是 3，那是给实例网格
+ * （`repeat(3,minmax(0,1fr))`）准备的，所以结果网格自己再夹一层，不动共享上限。
+ */
+private const val DISCOVER_RESULT_MAX_COLUMNS = 2
+
+/**
+ * 结果网格的列数
+ *
+ * 下限与按宽度推算的部分仍然交给 [OxideMetrics.gridColumns]（窗口被切分、
+ * 折叠屏展开时列数会跟着变），只是上限收到 [DISCOVER_RESULT_MAX_COLUMNS]。
+ */
+internal fun discoverResultColumns(metrics: OxideMetrics, contentWidth: Dp): Int =
+    metrics.gridColumns(contentWidth).coerceAtMost(DISCOVER_RESULT_MAX_COLUMNS)
+
+/**
  * 结果网格
  *
- * 列数由 [OxideMetrics.gridColumns] 按实际内容宽度算出，因此窗口被切分、
- * 折叠屏展开或外接显示器接入时列数都会跟着变。加载中、空结果与失败是三种
- * 各自独立的状态，不会互相折叠。
+ * 列数由 [discoverResultColumns] 按实际内容宽度算出，但封顶两列，与参考稿一致。
+ * 加载中、空结果与失败是三种各自独立的状态，不会互相折叠。
  */
 @Composable
 private fun DiscoverResultsGrid(
@@ -1341,7 +1404,7 @@ private fun DiscoverResultsGrid(
                 }
             } else {
                 BoxWithConstraints(modifier = modifier) {
-                    val columns = metrics.gridColumns(maxWidth)
+                    val columns = discoverResultColumns(metrics, maxWidth)
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(columns),
                         horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   ~ Oxide Launcher launcher icon monochrome (themed icons).
+  ~ Same two nested rotated rounded squares as the colour artwork; measured off
+  ~ the shipped raster (1024 canvas: path side 453.84/264.15, radius 102.92/43.08,
+  ~ stroke 19.44/15.13, centred on 511.5,489) and converted to the 108 viewport.
   ~ Original artwork created for Oxide Launcher. Licensed GPL-3.0 with the rest of the project.
   -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -10,8 +13,19 @@
     android:viewportHeight="108"
     android:tint="#FFFFFFFF">
 
-    <path
-        android:pathData="M54,54 L71,24.56 L88,54 L71,83.44 L37,83.44 L20,54 L37,24.56 Z M73,54 L63.5,70.39 L44.5,70.39 L35,54 L44.5,37.61 L63.5,37.61 Z"
-        android:fillColor="#FFFFFFFF"
-        android:fillType="evenOdd" />
+    <group
+        android:pivotX="53.95"
+        android:pivotY="51.57"
+        android:rotation="45">
+        <path
+            android:pathData="M40.875,27.635 H67.025 A10.86,10.86 0 0 1 77.885,38.495 V64.645 A10.86,10.86 0 0 1 67.025,75.505 H40.875 A10.86,10.86 0 0 1 30.015,64.645 V38.495 A10.86,10.86 0 0 1 40.875,27.635 Z"
+            android:strokeWidth="2.05"
+            android:strokeColor="#FFFFFFFF"
+            android:fillColor="#00000000" />
+        <path
+            android:pathData="M44.56,37.64 H63.34 A4.54,4.54 0 0 1 67.88,42.18 V60.96 A4.54,4.54 0 0 1 63.34,65.5 H44.56 A4.54,4.54 0 0 1 40.02,60.96 V42.18 A4.54,4.54 0 0 1 44.56,37.64 Z"
+            android:strokeWidth="1.6"
+            android:strokeColor="#FFFFFFFF"
+            android:fillColor="#00000000" />
+    </group>
 </vector>

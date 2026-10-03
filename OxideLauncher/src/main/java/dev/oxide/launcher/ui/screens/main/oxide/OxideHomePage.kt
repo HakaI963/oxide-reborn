@@ -125,6 +125,55 @@ private data class OxideHomeSnapshot(
     val lastPlayedAt: Long? = null,
 )
 
+// ---------------------------------------------------------------------------
+// 宽屏两列表的列宽
+//
+// 参考稿 `.home` 是一张两列表，且右列写的是 `minmax(下限, fr)` 而不是单纯的 `fr`：
+// 它的宽度是**有硬保证的**，窄到不能再分时也只会让左列让路。所以这里不靠 weight
+// 按比例分（那会把右列拉到 190px），而是把 CSS 的分列算法原样搬过来。
+// ---------------------------------------------------------------------------
+
+/** 宽屏两列的实际宽度 */
+internal data class OxideHomeColumns(val hero: Dp, val rail: Dp)
+
+/** `.home` 在某一档上的列规则：一对 fr 与右列的下限 */
+private data class OxideHomeColumnsRule(val heroFr: Float, val railFr: Float, val railMin: Dp)
+
+/**
+ * 宽屏两列的列宽
+ *
+ * 参考稿的规则：
+ *  - >1120px：`minmax(0,1.45fr) minmax(270px,.56fr)`
+ *  - ≤1120px：`minmax(0,1.35fr) minmax(235px,.65fr)`
+ *
+ * CSS 的算法是先满足右列的硬下限，再把剩下的宽度按 fr 比例分给两列；左列下限是 0，
+ * 因此连下限都放不下时它先让位，右列最多退到可用宽度，两列都不会被压成 0 或互相挤掉。
+ * 紧凑档在参考稿里是单列（`.home{grid-template-columns:1fr}`），走不到这里，
+ * 但函数对任意档位都给出合法结果，方便单测直接覆盖边界。
+ */
+internal fun oxideHomeColumnsFor(
+    contentWidth: Dp,
+    gap: Dp,
+    widthClass: OxideWidthClass,
+): OxideHomeColumns {
+    val rule = when (widthClass) {
+        OxideWidthClass.Expanded, OxideWidthClass.Large ->
+            OxideHomeColumnsRule(heroFr = 1.45f, railFr = 0.56f, railMin = 270.dp)
+
+        OxideWidthClass.Compact, OxideWidthClass.Medium ->
+            OxideHomeColumnsRule(heroFr = 1.35f, railFr = 0.65f, railMin = 235.dp)
+    }
+    val space = (contentWidth - gap).coerceAtLeast(0.dp)
+    // 扣掉列间距后剩下的宽度才是两列分的地方
+    val railFloor = rule.railMin.coerceAtMost(space)
+    val free = (space - railFloor).coerceAtLeast(0.dp)
+    val hero = free * (rule.heroFr / (rule.heroFr + rule.railFr))
+    return OxideHomeColumns(
+        hero = hero,
+        rail = railFloor + (free - hero)
+    )
+}
+
 @Composable
 fun OxideHomePage(
     metrics: OxideMetrics,
@@ -277,6 +326,7 @@ fun OxideHomePage(
         } else {
             OxideHomeWideBody(
                 metrics = metrics,
+                contentWidth = contentWidth,
                 revealed = revealed,
                 kicker = kicker,
                 playEnabled = !isRefreshing,
@@ -296,10 +346,17 @@ fun OxideHomePage(
     }
 }
 
-/** 宽屏布局：左 hero + 右竖排栏，下面一条横贯的实例条 */
+/**
+ * 宽屏布局：左 hero + 右竖排栏，下面一条横贯的实例条
+ *
+ * 两列的宽度由 [oxideHomeColumnsFor] 一次算清，而不是按固定 weight 分：
+ * 参考稿的右列有 235px / 270px 的硬下限，只有 weight 的话在 901~1120dp 这一档
+ * 它会被压到 192px，环境面板里的标签和值就会挤在一起。
+ */
 @Composable
 private fun OxideHomeWideBody(
     metrics: OxideMetrics,
+    contentWidth: Dp,
     revealed: Boolean,
     kicker: String,
     playEnabled: Boolean,
@@ -315,6 +372,10 @@ private fun OxideHomeWideBody(
     modsCount: Int?,
     onGoInstances: () -> Unit,
 ) {
+    val columns = remember(contentWidth, metrics.cardGap, metrics.widthClass) {
+        oxideHomeColumnsFor(contentWidth, metrics.cardGap, metrics.widthClass)
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -325,7 +386,7 @@ private fun OxideHomeWideBody(
                 visible = revealed,
                 index = 0,
                 modifier = Modifier
-                    .weight(1.45f)
+                    .width(columns.hero)
                     .fillMaxHeight()
             ) {
                 OxideHomeHero(
@@ -340,7 +401,7 @@ private fun OxideHomeWideBody(
             Spacer(Modifier.width(metrics.cardGap))
             Column(
                 modifier = Modifier
-                    .weight(0.56f)
+                    .width(columns.rail)
                     .fillMaxHeight()
             ) {
                 OxideReveal(

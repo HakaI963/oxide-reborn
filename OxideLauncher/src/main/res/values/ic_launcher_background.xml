@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Oxide Launcher icon background -->
-    <color name="ic_launcher_background">#FF1F1B18</color>
+    <!-- Oxide Launcher icon background: the backdrop of the shipped icon art -->
+    <color name="ic_launcher_background">#080709</color>
 </resources>

@@ -392,6 +392,14 @@ object AllSettings : SettingsRegistry() {
     val launcherFullScreen = boolSetting("launcherFullScreen", true)
 
     /**
+     * 启动器界面缩放，百分比
+     *
+     * 缩的是新 Oxide 界面自己的版面与字号（见 OxideMetrics/ Oxide.Type），和游戏内的
+     * 分辨率缩放、鼠标大小那些游戏侧设置互不相干。
+     */
+    val launcherGuiScale = intSetting("launcherGuiScale", 100, 75..150)
+
+    /**
      * 持续型节日彩蛋效果
      */
     val launcherFestivalEffects = boolSetting("launcherFestivalEffects", true)

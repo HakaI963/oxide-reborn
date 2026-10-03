@@ -553,9 +553,6 @@ private fun NavigationUI(
                             )
                             screenBackStackModel.settingsScreen.navigateOnce(section.navKey())
                         },
-                        openAccountManager = {
-                            screenBackStackModel.mainScreen.navigateTo(NormalNavKey.AccountManager())
-                        },
                         openDownloadCategory = { category ->
                             if (category == OxideDownloadCategory.SearchId) {
                                 screenBackStackModel.navigateToDownload(NormalNavKey.SearchId)
@@ -570,19 +567,6 @@ private fun NavigationUI(
                         tasksRunning = tasksRunning,
                         tasksExpanded = tasksExpanded,
                         onToggleTasks = onToggleTasks,
-                        onOpenFileManager = {
-                            eventViewModel.sendEvent(
-                                EventViewModel.Event.OpenFileManager(
-                                    rootPath = PathManager.DIR_FILES_EXTERNAL.absolutePath
-                                )
-                            )
-                        },
-                        onOpenMultiplayer = {
-                            screenBackStackModel.mainScreen.removeAndNavigateTo(
-                                removes = screenBackStackModel.clearBeforeNavKeys,
-                                screenKey = NormalNavKey.Multiplayer
-                            )
-                        },
                     )
                 }
                 entry<NestedNavKey.Settings> { key ->

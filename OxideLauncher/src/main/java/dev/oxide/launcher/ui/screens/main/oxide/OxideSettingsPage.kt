@@ -17,6 +17,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -82,6 +83,7 @@ import dev.oxide.launcher.ui.components.SimpleAlertDialog
 import dev.oxide.launcher.ui.control.gamepad.JoystickMode
 import dev.oxide.launcher.ui.theme.ColorThemeType
 import dev.oxide.launcher.ui.theme.Oxide
+import dev.oxide.launcher.ui.theme.ProvideOxideChrome
 import dev.oxide.launcher.utils.animation.TransitionAnimationType
 import dev.oxide.launcher.utils.isChinaMainland
 import dev.oxide.launcher.viewmodel.LocalBackgroundViewModel
@@ -116,6 +118,19 @@ private enum class OxideSettingsDrawer {
     Account, Java, Renderer, Storage, Advanced,
 }
 
+/**
+ * 一次"打开抽屉"的请求
+ *
+ * Renderer 抽屉同时承载 Renderer 与 Graphics 两类，两类的入口按钮是同一个，
+ * 所以要记住是从哪一类进来的：Graphics 应当直接落在"图形"那一页，
+ * 否则用户点了 Graphics 却看到渲染器列表，会以为按钮没生效。
+ */
+private data class OxideDrawerRequest(
+    val drawer: OxideSettingsDrawer,
+    /** 抽屉内部的初始标签页 */
+    val initialTab: Int = 0,
+)
+
 private fun OxideSettingsCategory.drawer(): OxideSettingsDrawer? = when (this) {
     OxideSettingsCategory.Accounts -> OxideSettingsDrawer.Account
     OxideSettingsCategory.Java -> OxideSettingsDrawer.Java
@@ -129,6 +144,27 @@ private fun OxideSettingsCategory.drawer(): OxideSettingsDrawer? = when (this) {
     OxideSettingsCategory.Appearance,
     -> null
 }
+
+/** 同一抽屉里，这两类分别落在第几页标签 */
+private fun OxideSettingsCategory.drawerTab(): Int = when (this) {
+    OxideSettingsCategory.Graphics -> OxideRendererTabs.GRAPHICS
+    OxideSettingsCategory.Renderer -> OxideRendererTabs.RENDERER
+    else -> 0
+}
+
+/**
+ * Android 12 以下没有动态取色
+ *
+ * [dev.oxide.launcher.ui.theme.OxideTheme] 在 API 31 以下会跳过 Dynamic 分支并落到
+ * 默认配色，也就是说旧设备上选中它等于什么都没选。旧设置页用禁用单项的方式处理，
+ * 这里直接把那一项从列表里去掉，避免出现"能点、但看不出变化"的控件。
+ */
+internal fun colorThemeEntries(sdkInt: Int): List<ColorThemeType> =
+    if (sdkInt >= Build.VERSION_CODES.S) {
+        ColorThemeType.entries.toList()
+    } else {
+        ColorThemeType.entries.filter { it != ColorThemeType.DYNAMIC }
+    }
 
 /**
  * 设置页
@@ -144,10 +180,24 @@ fun OxideSettingsPage(
     onNavigate: (OxidePage) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // 把用户选的颜色主题递给 Oxide。调色板是全局状态而不是 CompositionLocal，
+    // 所以在设置里换主题之后，整个界面上用到 Oxide 颜色的地方都会一起变。
+    // 界面根上还需要再包一层，见 dev.oxide.launcher.ui.theme.ProvideOxideChrome。
+    ProvideOxideChrome {
+        OxideSettingsPageContent(metrics = metrics, onNavigate = onNavigate, modifier = modifier)
+    }
+}
+
+@Composable
+private fun OxideSettingsPageContent(
+    metrics: OxideMetrics,
+    onNavigate: (OxidePage) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val bridge = rememberOxideLauncherBridge()
 
     var selected by rememberSaveable { mutableStateOf(OxideSettingsCategory.General) }
-    var drawer by remember { mutableStateOf<OxideSettingsDrawer?>(null) }
+    var drawer by remember { mutableStateOf<OxideDrawerRequest?>(null) }
     var customColorDialog by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -179,14 +229,14 @@ fun OxideSettingsPage(
                             current = selected,
                             onSelect = { selected = it },
                             modifier = Modifier
-                                .width((metrics.cardMinWidth * 0.52f).coerceIn(132.dp, 220.dp))
+                                .width((155.dp * metrics.guiScale).coerceIn(132.dp, 260.dp))
                                 .fillMaxHeight(),
                         )
                         OxideSettingsPanel(
                             metrics = metrics,
                             category = selected,
                             bridge = bridge,
-                            onOpenDrawer = { drawer = it },
+                            onOpenDrawer = { request -> drawer = request },
                             onOpenCustomColor = { customColorDialog = true },
                             onNavigate = onNavigate,
                             modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -206,7 +256,7 @@ fun OxideSettingsPage(
                             metrics = metrics,
                             category = selected,
                             bridge = bridge,
-                            onOpenDrawer = { drawer = it },
+                            onOpenDrawer = { request -> drawer = request },
                             onOpenCustomColor = { customColorDialog = true },
                             onNavigate = onNavigate,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -216,21 +266,28 @@ fun OxideSettingsPage(
             }
         }
 
-        when (drawer) {
-            OxideSettingsDrawer.Account ->
-                OxideAccountDrawer(metrics = metrics, onDismiss = { drawer = null })
+        val openDrawer = drawer
+        when (openDrawer) {
+            is OxideDrawerRequest -> when (openDrawer.drawer) {
+                OxideSettingsDrawer.Account ->
+                    OxideAccountDrawer(metrics = metrics, onDismiss = { drawer = null })
 
-            OxideSettingsDrawer.Java ->
-                OxideJavaDrawer(metrics = metrics, onDismiss = { drawer = null })
+                OxideSettingsDrawer.Java ->
+                    OxideJavaDrawer(metrics = metrics, onDismiss = { drawer = null })
 
-            OxideSettingsDrawer.Renderer ->
-                OxideRendererDrawer(metrics = metrics, onDismiss = { drawer = null })
+                OxideSettingsDrawer.Renderer ->
+                    OxideRendererDrawer(
+                        metrics = metrics,
+                        initialTab = openDrawer.initialTab,
+                        onDismiss = { drawer = null },
+                    )
 
-            OxideSettingsDrawer.Storage ->
-                OxideStorageDrawer(metrics = metrics, onDismiss = { drawer = null })
+                OxideSettingsDrawer.Storage ->
+                    OxideStorageDrawer(metrics = metrics, onDismiss = { drawer = null })
 
-            OxideSettingsDrawer.Advanced ->
-                OxideAdvancedDrawer(metrics = metrics, onDismiss = { drawer = null })
+                OxideSettingsDrawer.Advanced ->
+                    OxideAdvancedDrawer(metrics = metrics, onDismiss = { drawer = null })
+            }
 
             null -> {}
         }
@@ -356,7 +413,7 @@ private fun OxideSettingsPanel(
     metrics: OxideMetrics,
     category: OxideSettingsCategory,
     bridge: OxideLauncherBridge,
-    onOpenDrawer: (OxideSettingsDrawer) -> Unit,
+    onOpenDrawer: (OxideDrawerRequest) -> Unit,
     onOpenCustomColor: () -> Unit,
     onNavigate: (OxidePage) -> Unit,
     modifier: Modifier = Modifier,
@@ -382,7 +439,14 @@ private fun OxideSettingsPanel(
                     OxideButton(
                         text = stringResource(R.string.oxide_set_open, stringResource(category.titleRes)),
                         onClick = {
-                            if (drawer != null) onOpenDrawer(drawer)
+                            if (drawer != null) {
+                                onOpenDrawer(
+                                    OxideDrawerRequest(
+                                        drawer = drawer,
+                                        initialTab = category.drawerTab(),
+                                    )
+                                )
+                            }
                         },
                         enabled = drawer != null,
                         tone = OxideButtonTone.Primary,
@@ -394,18 +458,14 @@ private fun OxideSettingsPanel(
                             onClick = { onNavigate(OxidePage.Instances) },
                         )
 
-                        OxideSettingsCategory.Java -> OxideActionRow(
-                            label = stringResource(R.string.oxide_set_action_open_instances),
-                            hint = stringResource(R.string.oxide_set_action_open_instances_detail),
-                            onClick = { onNavigate(OxidePage.Instances) },
-                        )
-
                         OxideSettingsCategory.Accounts -> OxideActionRow(
                             label = stringResource(R.string.oxide_set_action_open_home),
                             hint = stringResource(R.string.oxide_set_action_open_home_detail),
                             onClick = { onNavigate(OxidePage.Home) },
                         )
 
+                        // Java / Renderer / Graphics / Advanced 的去处都在各自的抽屉里，
+                        // 这里再摆一个入口只会和抽屉里的那一行重复，所以不渲染
                         else -> {}
                     }
                 }
@@ -1049,7 +1109,10 @@ private fun AppearanceCategory(
     val backgroundAvailable = backgroundViewModel != null
     val backgroundValid = backgroundViewModel?.isValid == true
     val backgroundVideo = backgroundViewModel?.isVideo == true
-    val colorTheme = AllSettings.launcherColorTheme.state
+    // API 31 以下不列 Dynamic，否则那一项会保存成功却看不出任何变化
+    val themeEntries = remember { colorThemeEntries(Build.VERSION.SDK_INT) }
+    val storedTheme = AllSettings.launcherColorTheme.state
+    val colorTheme = if (storedTheme in themeEntries) storedTheme else themeEntries.first()
 
     val filePicker = rememberLauncherForActivityResult(
         MediaPickerContract(allowImages = true, allowVideos = true, allowMultiple = false)
@@ -1077,7 +1140,7 @@ private fun AppearanceCategory(
             label = stringResource(R.string.settings_launcher_color_theme_title),
             hint = stringResource(R.string.settings_launcher_color_theme_summary),
             metrics = metrics,
-            entries = ColorThemeType.entries,
+            entries = themeEntries,
             selected = colorTheme,
             nameOf = { oxideColorThemeName(it) },
             onSelect = { picked ->
@@ -1102,7 +1165,29 @@ private fun AppearanceCategory(
         }
     }
 
-    Group(index = 1, title = stringResource(R.string.oxide_set_section_background), metrics = metrics) {
+    // 界面缩放夹在主题与壁纸之间：它和主题一样是"整个界面长什么样"的事，
+    // 而壁纸是内容底色。选中值直接读 .state，所以改完立刻生效并立刻存盘。
+    val guiScalePercent = AllSettings.launcherGuiScale.state
+    // 存储里的值可能来自旧版本或手改的备份，落不到档位上就退回 100%
+    val guiScaleSelected = if (guiScalePercent in OxideGuiScaleSteps) {
+        guiScalePercent
+    } else {
+        OxideGuiScaleDefaultPercent
+    }
+
+    Group(index = 1, title = stringResource(R.string.oxide_set_section_interface), metrics = metrics) {
+        OxideEnumRow(
+            label = stringResource(R.string.oxide_set_gui_scale),
+            hint = stringResource(R.string.oxide_set_gui_scale_detail),
+            metrics = metrics,
+            entries = OxideGuiScaleSteps,
+            selected = guiScaleSelected,
+            nameOf = { stringResource(R.string.oxide_set_gui_scale_value, it) },
+            onSelect = { AllSettings.launcherGuiScale.save(it) },
+        )
+    }
+
+    Group(index = 2, title = stringResource(R.string.oxide_set_section_background), metrics = metrics) {
         OxideActionRow(
             label = stringResource(R.string.settings_launcher_background_title),
             hint = stringResource(R.string.settings_launcher_background_summary),
