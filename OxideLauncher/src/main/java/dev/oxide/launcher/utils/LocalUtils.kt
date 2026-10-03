@@ -58,6 +58,14 @@ private const val TAG = "LocalUtils"
 
 val GSON = GsonBuilder().setPrettyPrinting().create()
 
+/**
+ * 不缩进的 Gson
+ *
+ * 用于启动时生成的合并清单字符串：它会以字符串形式跨进程传递（Intent extra），
+ * 缩进会平白把体积放大一到两倍，而缩进对这份数据没有任何意义。
+ */
+val COMPACT_GSON = GsonBuilder().create()
+
 const val DEFAULT_DATE_PATTERN = "yyyy-MM-dd HH:mm:ss"
 
 /**

@@ -22,6 +22,7 @@ import android.content.Context
 import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.game.path.getGameHome
+import dev.oxide.launcher.game.prepare.TrustedFiles
 import dev.oxide.launcher.game.versioninfo.models.GameManifest
 import dev.oxide.launcher.game.versioninfo.models.VersionManifest
 import dev.oxide.launcher.ui.androidText
@@ -54,7 +55,11 @@ class MinecraftDownloader(
     private val onCompletion: suspend (Task) -> Unit = {},
     private val onError: (message: String) -> Unit = {},
     private val onThrowable: ((throwable: Throwable) -> Unit)? = null,
-    private val maxDownloadThreads: Int = DEFAULT_DOWNLOAD_THREADS
+    private val maxDownloadThreads: Int = DEFAULT_DOWNLOAD_THREADS,
+    /** 上一次成功准备时记录的文件身份；只对 [DownloadMode.VERIFY_AND_REPAIR] 有意义 */
+    private val trustedFiles: TrustedFiles? = null,
+    /** 本次真正通过校验的文件；只在准备完全成功后回调一次 */
+    private val onPrepared: (verifiedFiles: List<File>) -> Unit = {}
 ) {
     private var allDownloadTasks = mutableListOf<DownloadTask>()
 
@@ -103,8 +108,12 @@ class MinecraftDownloader(
                                 snapshot.downloadedFiles, snapshot.totalFiles,
                                 formatFileSize(snapshot.downloadedBytes), formatFileSize(snapshot.totalBytes)
                             ))
-                        }
+                        },
+                        trusted = if (mode == DownloadMode.VERIFY_AND_REPAIR) trustedFiles else null
                     )
+                }
+                if (mode == DownloadMode.VERIFY_AND_REPAIR) {
+                    onPrepared(allDownloadTasks.mapNotNull { if (it.verifiedStamp != null) it.targetFile else null })
                 }
                 //清除任务信息
                 task.updateProgress(1f)

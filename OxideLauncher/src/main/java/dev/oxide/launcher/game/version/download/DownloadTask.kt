@@ -52,6 +52,14 @@ class DownloadTask(
 
     var fileDownloadedTask: (suspend () -> Unit)? = null
 
+    /**
+     * 本次运行中这个文件被确认可用的依据：[大小, 修改时间]
+     *
+     * 只有在拿到**正面证据**时才会被写入——要么完整校验通过，要么与上一次成功准备时
+     * 记录的身份完全一致。没有它就说明这个文件没有被确认过。
+     */
+    internal var verifiedStamp: LongArray? = null
+
     internal fun toRequest(): DownloadRequest = DownloadRequest(
         urls = urls,
         targetFile = targetFile,
@@ -67,20 +75,39 @@ class DownloadTask(
     }
 
     /** 目标已存在且校验可用时返回 true */
-    fun existingFileValid(): Boolean {
+    fun existingFileValid(trusted: dev.oxide.launcher.game.prepare.TrustedFiles? = null): Boolean {
         val file = targetFile
         if (!file.exists()) return false
         if (!verifyIntegrity) return true
 
-        if (sha1.isNullOrBlank()) {
-            //排除目标无法被下载的情况，比如Forge的client
-            if (!isDownloadable) return true
-            return archiveOrPlainValid(file)
+        // 与上一次成功准备时记录的身份完全一致，可以跳过完整校验。
+        // 大小或修改时间只要有一点不同，就退回真实的校验流程。
+        if (trusted != null && trusted.isTrusted(file)) {
+            verifiedStamp = longArrayOf(file.length(), file.lastModified())
+            return true
         }
 
-        if (compareSHA1(file, sha1)) return true
+        if (sha1.isNullOrBlank()) {
+            //排除目标无法被下载的情况，比如Forge的client
+            if (!isDownloadable) {
+                markVerified(file)
+                return true
+            }
+            val valid = archiveOrPlainValid(file)
+            if (valid) markVerified(file)
+            return valid
+        }
+
+        if (compareSHA1(file, sha1)) {
+            markVerified(file)
+            return true
+        }
         FileUtils.deleteQuietly(file)
         return false
+    }
+
+    private fun markVerified(file: File) {
+        verifiedStamp = longArrayOf(file.length(), file.lastModified())
     }
 
     private fun archiveOrPlainValid(file: File): Boolean = when (file.extension.lowercase()) {

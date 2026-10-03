@@ -97,6 +97,14 @@ private fun isLwjgl3ifyManifest(manifest: GameManifest): Boolean =
 /**
  * 从 mod 列表中取已启用且版本最高的 lwjgl3ify
  */
+/**
+ * 取已启用的 lwjgl3ify 版本，没有该模组时返回 null
+ *
+ * 启动准备状态的指纹需要知道它是否存在：lwjgl3ify 实例每次都要完整准备，
+ * 因为打补丁需要真实的 [LocalMod] 对象而不是文件身份。
+ */
+fun findEnabledLwjgl3ifyVersion(mods: List<LocalMod>): String? = findLwjgl3ifyMod(mods)?.version
+
 private fun findLwjgl3ifyMod(mods: List<LocalMod>): LocalMod? {
     return mods.asSequence()
         .filter { !it.notMod && it.id == "lwjgl3ify" && it.file.isEnabled() }

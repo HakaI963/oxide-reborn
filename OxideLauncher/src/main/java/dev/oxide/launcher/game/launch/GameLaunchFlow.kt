@@ -34,19 +34,14 @@ import dev.oxide.launcher.game.account.isReloginRequired
 import dev.oxide.launcher.game.account.microsoft.validateAccessToken
 import dev.oxide.launcher.game.account.refreshMicrosoft
 import dev.oxide.launcher.game.download.game.GameLibDownloader
-import dev.oxide.launcher.game.support.lwjgl3ify.patchLwjgl3ifyIfNeeded
 import dev.oxide.launcher.game.version.download.BaseMinecraftDownloader
 import dev.oxide.launcher.game.version.download.DownloadMode
 import dev.oxide.launcher.game.version.download.MinecraftDownloader
 import dev.oxide.launcher.game.version.installed.Version
-import dev.oxide.launcher.game.version.installed.VersionFolders
 import dev.oxide.launcher.game.version.installed.VersionInfoParser
-import dev.oxide.launcher.game.version.mod.AllModReader
-import dev.oxide.launcher.game.version.mod.isEnabled
-import dev.oxide.launcher.game.versioninfo.models.GameManifest
 import dev.oxide.launcher.ui.activities.runGame
 import dev.oxide.launcher.ui.androidText
-import dev.oxide.launcher.utils.GSON
+import dev.oxide.launcher.utils.COMPACT_GSON
 import dev.oxide.launcher.utils.network.isNetworkAvailable
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import kotlinx.coroutines.CancellationException
@@ -148,6 +143,9 @@ class GameLaunchFlow(scope: CoroutineScope) {
             version.offlineAccountLogin = true
         }
 
+        // 准备状态在模组扫描阶段判定，在文件校验阶段使用，最后统一写回
+        val prepare = PrepareRun(version)
+
         return buildPhase {
             if (hasNetwork && !skipAccountRefresh && AccountsManager.isLaunchCheckNeeded(account)) {
                 //账号管理页正在刷新该账号时，直接使用现有凭据启动
@@ -179,11 +177,13 @@ class GameLaunchFlow(scope: CoroutineScope) {
                 title = androidText(R.string.launch_check_mods),
                 dispatcher = Dispatchers.IO
             ) { task ->
-                val patchedManifest = checkMods(version)
+                val patchedManifest = prepare.scanModsAndPatch()
                 val manifest = patchedManifest ?: VersionInfoParser(version).setInheriting().build()
-                val manifestString = GSON.toJson(manifest)
+                // 这份字符串会跨进程传递，缩进只会平白放大体积
+                val manifestString = COMPACT_GSON.toJson(manifest)
 
                 version.launchManifest = manifestString
+                prepare.onManifestBuilt(manifest)
 
                 // 如果打了补丁，此处需要重新检索一下依赖库并下载
                 patchedManifest?.let {
@@ -193,6 +193,11 @@ class GameLaunchFlow(scope: CoroutineScope) {
                     )
                     libDownloader.schedule(task)
                     libDownloader.download(task)
+                }
+
+                // 没有文件校验这一步时，准备到模组扫描为止就结束了
+                if (version.skipGameIntegrityCheck()) {
+                    prepare.recordPrepared(emptyList())
                 }
             }
 
@@ -204,6 +209,7 @@ class GameLaunchFlow(scope: CoroutineScope) {
                     task = createGameDownloadTask(
                         context = context,
                         version = version,
+                        prepare = prepare,
                         submitError = submitError
                     )
                 )
@@ -249,6 +255,7 @@ class GameLaunchFlow(scope: CoroutineScope) {
     private fun createGameDownloadTask(
         context: Context,
         version: Version,
+        prepare: PrepareRun,
         submitError: (ErrorViewModel.ThrowableMessage) -> Unit
     ): Task {
         return MinecraftDownloader(
@@ -257,6 +264,8 @@ class GameLaunchFlow(scope: CoroutineScope) {
             customName = version.getVersionName(),
             gameHome = version.getGameHome(),
             mode = DownloadMode.VERIFY_AND_REPAIR,
+            trustedFiles = prepare.trustedFiles,
+            onPrepared = { verified -> prepare.recordPrepared(verified) },
             onError = { message ->
                 submitError(
                     ErrorViewModel.ThrowableMessage(
@@ -266,21 +275,5 @@ class GameLaunchFlow(scope: CoroutineScope) {
                 )
             }
         ).getDownloadTask()
-    }
-
-    /**
-     * 扫描模组列表并开启对应功能
-     * @return 经过补丁的游戏清单，为 null 则表示没什么补丁
-     */
-    private suspend fun checkMods(version: Version): GameManifest? {
-        val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
-        val mods = AllModReader(modsDir).readAllLocals()
-
-        if (mods.any { it.id == "touchcontroller" && it.file.isEnabled() }) {
-            version.enableTouchProxy = true
-        }
-
-        val patched = patchLwjgl3ifyIfNeeded(version, mods)
-        return patched
     }
 }

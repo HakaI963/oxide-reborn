@@ -621,10 +621,17 @@ fun getCacioJavaArgs(
     return argsList
 }
 
+/** 设备 SoC 名称在进程存活期间不会变化，因此只读取一次 */
+private var cachedSocName: String? = null
+
 /**
  * 获取设备 SoC 名称，在 API 31+ 读取系统属性 ro.soc.model，若失败则返回 Build.HARDWARE
+ *
+ * 这是一次真实的 fork + exec，而系统属性在整个进程生命周期内不会变，
+ * 所以结果缓存起来：它只被用作 `-Dcpu.name`，多读一次毫无意义。
  */
 fun getSocName(): String {
+    cachedSocName?.let { return it }
     return runCatching {
         ProcessBuilder("getprop", "ro.soc.model")
             .start()

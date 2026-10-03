@@ -118,25 +118,32 @@ object MCOptions {
     fun save() {
         synchronized(lock) {
             getOptionsFile().takeIf { it.exists() }?.let { file ->
-                try {
-                    fileObserver?.stopWatching()
-                    writeFileAtomically(file)
-                } finally {
-                    fileObserver?.startWatching()
+                val content = serialize()
+                // 绝大多数启动里这些参数都没有变化，没有必要为此重写一次文件
+                if (content != file.readTextOrNull()) {
+                    try {
+                        fileObserver?.stopWatching()
+                        writeFileAtomically(file, content)
+                    } finally {
+                        fileObserver?.startWatching()
+                    }
                 }
             }
         }
     }
 
-    private fun writeFileAtomically(targetFile: File) {
+    private fun serialize(): String =
+        parameterMap.entries.joinToString("\n") { "${it.key}:${it.value}" }
+
+    private fun File.readTextOrNull(): String? = runCatching { readText() }.getOrNull()
+
+    private fun writeFileAtomically(targetFile: File, content: String) {
         val tempFile = File(targetFile.parent, "${targetFile.name}.tmp").apply {
             deleteOnExit()
         }
 
         runCatching {
-            tempFile.writeText(
-                parameterMap.entries.joinToString("\n") { "${it.key}:${it.value}" }
-            )
+            tempFile.writeText(content)
             tempFile.renameTo(targetFile)
         }.onFailure {
             Logger.error(TAG, "Failed to save options.txt!", it)

@@ -21,6 +21,7 @@ package dev.oxide.launcher.game.version.download
 import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.game.download.engine.BatchDownloader
 import dev.oxide.launcher.game.download.engine.BatchProgress
+import dev.oxide.launcher.game.prepare.TrustedFiles
 import dev.oxide.launcher.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -41,16 +42,18 @@ private const val LOCAL_VERIFY_PARALLELISM = 4
  * message 内含失败文件路径。
  *
  * @param onSnapshot 每 100ms 收到一次引擎统计快照
+ * @param trusted 上一次成功准备时记录的文件身份，命中时跳过完整校验
  */
 suspend fun Task.runBatchDownloads(
     tasks: List<DownloadTask>,
     maxConnections: Int,
     retryRounds: Int = 1,
     onSnapshot: suspend (BatchProgress) -> Unit = {},
-    acceptFailure: ((task: DownloadTask, error: Throwable) -> Boolean)? = null
+    acceptFailure: ((task: DownloadTask, error: Throwable) -> Boolean)? = null,
+    trusted: TrustedFiles? = null
 ) {
     val verifyStarted = System.currentTimeMillis()
-    val (reusable, pending) = verifyExistingFilesConcurrently(tasks)
+    val (reusable, pending) = verifyExistingFilesConcurrently(tasks, trusted)
     Logger.info(TAG, "Local file check done: reusable=${reusable.size} pending=${pending.size}, took=${System.currentTimeMillis() - verifyStarted}ms")
 
     //清单里只要有未声明大小的文件，字节数就不能构成可靠的进度分母
@@ -105,12 +108,13 @@ suspend fun Task.runBatchDownloads(
  * 并行校验本地已存在的文件是否可复用
  */
 private suspend fun verifyExistingFilesConcurrently(
-    tasks: List<DownloadTask>
+    tasks: List<DownloadTask>,
+    trusted: TrustedFiles? = null
 ): Pair<List<DownloadTask>, List<DownloadTask>> =
     withContext(Dispatchers.IO.limitedParallelism(LOCAL_VERIFY_PARALLELISM)) {
         coroutineScope {
             tasks.map { task ->
-                async { task to task.existingFileValid() }
+                async { task to task.existingFileValid(trusted) }
             }.awaitAll()
         }.partition { it.second }
             .let { (reusable, pending) -> reusable.map { it.first } to pending.map { it.first } }
