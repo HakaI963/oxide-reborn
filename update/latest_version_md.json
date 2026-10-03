@@ -1,48 +1,48 @@
 {
-  "code": 100300,
-  "version": "1.3.0",
+  "code": 100400,
+  "version": "1.4.0",
   "created_at": "2026-10-03",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.3.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.3.0/OxideLauncher-1.3.0.apk",
+      "file_name": "OxideLauncher-1.4.0.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.4.0/OxideLauncher-1.4.0.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.3.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.3.0/OxideLauncher-1.3.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.4.0-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.4.0/OxideLauncher-1.4.0-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.3.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.3.0/OxideLauncher-1.3.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.4.0-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.4.0/OxideLauncher-1.4.0-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.3.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.3.0/OxideLauncher-1.3.0-x86.apk",
+      "file_name": "OxideLauncher-1.4.0-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.4.0/OxideLauncher-1.4.0-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.3.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.3.0/OxideLauncher-1.3.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.4.0-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.4.0/OxideLauncher-1.4.0-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Launcher 1.3.0\n\n**Oxide Launcher** — an independently maintained Android launcher for Minecraft: Java Edition.\n\n## New visual identity\n\n- A complete design system in `ui/theme/Oxide.kt`: an achromatic palette, the full type ramp, 15px card radii, the surface and rail gradients and every motion constant including the intro timings.\n- The Oxide mark is drawn natively as a 45 degree rotated rounded square with a smaller square inset inside it, beside the OX / IDE wordmark.\n- The intro now runs over the real interface instead of a separate splash: the UI is composed and rendering from the first frame, an opaque #050505 curtain covers it, and exactly one logo travels from the centre to the measured centre of the sidebar brand slot and stays there. The curtain starts fading at 2450ms of a 3150ms journey, so the interface is already visible while the logo is still in flight. The destination and the landing scale are read from the measured slot, so nothing is hard-coded to one screen size.\n\n## Fast launch: why the previous cache showed no benefit\n\nThe preparation cache shipped in 1.2.0 was missing on effectively every launch, and several pieces of repeated work were never cached at all.\n\n- `progressDownloadTasks` schedules the same asset objects twice for any version that still carries `inheritsFrom`. The recorded file count therefore never matched the deduplicated parsed count, so the cache reported itself unreadable on every launch. Counts are now taken after deduplicating by path, and a mismatch is logged with both numbers instead of being misreported.\n- The parent version JSON was read from the merged manifest, whose `inheritsFrom` is always null, so it sat outside the fingerprint entirely. It is now read from the raw version JSON.\n- `GameManifest.getAssetIndex` synthesises an index with a null sha1 for manifests without an `assetIndex` block, which is the normal case for Fabric, Forge and NeoForge. That made every launch hash the whole index, delete it and re-download it. An index with no declared hash is now reused and only re-downloaded when it fails to parse.\n- The merged manifest is cached under the same fingerprint, removing a rebuild and a re-serialise on every launch.\n- The APK's `unlist_versions.json` is parsed once per process instead of on every cold start.\n- The local file check runs at up to 8-way parallelism instead of a fixed 4, because all that remains is stat calls.\n\n## Measurement\n\nA device test could not previously tell a fast preparation phase from a phase that was never the bottleneck, because the launch path emitted exactly one duration. Added:\n- `LAUNCH T0` at the start of the launcher-side launch\n- `PREPARE EVAL` and `PREPARE phase` timings\n- `GAME PROCESS first frame` in the game process\n\nTogether they split a launch into \"launcher preparation\" and \"JVM plus Minecraft\", which is what tells you which one to work on next. Expect the preparation phase to be a small fraction of a launch; the rest is Minecraft's own bootstrap.\n\n## CurseForge\n\nThe CurseForge integration is configured with an API key through the project's existing `curseforge_api_key` build property. It is only sent as the `x-api-key` request header, never logged and never shown in the interface.\n\n## Branding\n\nThe splash notice and the About screen now present the product as Oxide Launcher. The upstream author's avatar, name card and sponsorship link have been replaced with the Oxide project. All legally required attribution is kept: the third-party acknowledgements, the credit for the account code adapted from ZalithLauncher2Plus, and every per-file copyright header.\n\nThis build was verified by CI only (compilation, unit tests, lint, R8, packaging, signing) and has not been validated on physical hardware by the project maintainers."
+    "markdown": "# Oxide Launcher 1.4.0\n\nA native Compose GUI for the whole launcher, plus a real fix for CurseForge.\n\n## The interface was rebuilt\n\nThe shell, Home, Instances, Discover and Settings are new. Native Kotlin and Compose throughout: no WebView, no HTML, no CSS runtime.\n\n- **Sidebar** with the OXIDE wordmark and numbered 01-04 navigation. The selected state is a sliding indicator that steps by nav item, not a Material pill.\n- **Page transitions** are a directional cross-slide: forward enters from +18dp and leaves to -12dp, backward reverses it, and enter runs 620ms against leave's 500ms so the two overlap briefly. No scale, bounce or overshoot.\n- **Intro** now runs over the real interface rather than a separate splash. The UI is composed and rendering from the first frame, a #050505 curtain covers it, and exactly one logo travels to the measured centre of the sidebar brand slot and stays there. The curtain starts fading at 2450ms of a 3150ms journey, so the UI is already visible while the logo is still in flight. The destination and the landing scale come from the measured slot, not from hard-coded coordinates.\n- **Nothing became unreachable.** Deep screens - account manager, the settings sub-sections, instance settings, log view, multiplayer - are still navigation entries and still have their own bar. The four main pages sit inside the new shell.\n\n## Sizes are derived, not assumed\n\nOxideMetrics buckets the available width into four classes and computes sidebar width, page padding, card minimum width, grid columns, drawer width and navigation step from it, treating height separately because landscape screens are short and vertical space is the scarce resource. Grid columns come from the real content width, so a split window or an unfolded foldable adjusts by itself. No screen size is hard-coded anywhere.\n\nLandscape is now enforced on all nine activities. ImportModpackActivity, ImportControlsActivity and FatalErrorActivity had no screenOrientation at all, so the launcher could still rotate to portrait from those entry points.\n\n## Real data only\n\nEvery page reads the live backend: versions, accounts, the real settings registry, and the existing download stack. Launching goes through the same event MainActivity already observes, so the launch path and its fast-loading instrumentation are untouched. Filesystem and package-manager reads are hoisted out of composition into cancellable background work. Nothing is a placeholder and no control is wired to nowhere.\n\nDropdowns use a real Popup with clipping disabled and a position provider that flips above the anchor and keeps a margin on both sides, so a menu opened from a button near a screen edge is never clipped by the card that opened it.\n\n## CurseForge was genuinely broken\n\nReproduced against the live API with the shipped key. The launcher was sending page sizes the server refuses and had no client-side bounds, because those limits exist only in the server's validator:\n\n```\n/v1/mods/search?...&pageSize=100  -> 400  PageSize must be between 1 and 50\n/v1/mods/search?...&index=-20     -> 400  Index must be between 0 and 10000\n/v1/mods/search?...&index=10000   -> 400  Index + PageSize cannot exceed 10000\n```\n\nFour defects: pageSize was never clamped; the version-list paginator walked past the server's 10000 cap until it got a 400 with an empty body; every failure was rendered as \"nothing found\" because the search swallowed the error and a mirror searcher swallowed cancellation, re-running searches after the user had left; and searchFilter was sent even when the query was blank, turning browsing into a meaningless filtered request.\n\nHost scoping for the key was correct but duplicated between the OkHttp interceptor and the Ktor pipeline; it now lives in one place with the leak cases covered, and a test enforces that the key is never in source.\n\n56 new offline tests, 260 in total.\n\n## Branding\n\nThe product is Oxide Launcher. The splash and About no longer present it as an unofficial build of another project, the upstream author's avatar and donation link are gone, and the post-game support entry now opens the Oxide repository instead of somebody else's page. Everything the GPL actually requires is kept: the third-party acknowledgements, the credit for the account code adapted from ZalithLauncher2Plus, and every per-file copyright header.\n\nVerified by CI only - compilation, 260 unit tests, lint, R8, packaging and signing. It has not been validated on physical hardware.\n"
   },
   "bodies": [
     {
       "language": "en",
-      "markdown": "New Oxide visual identity with the intro animation over the real UI, and the launch preparation cache fixed so it actually engages."
+      "markdown": "A rebuilt native Compose interface, and CurseForge fixed for real."
     }
   ]
 }
