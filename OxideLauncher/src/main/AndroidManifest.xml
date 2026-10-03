@@ -63,6 +63,8 @@
             android:label="@string/import_modpack"
             android:name="dev.oxide.launcher.ImportModpackActivity"
             android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
             android:targetActivity=".ui.activities.SplashActivity">
 
             <meta-data
@@ -87,6 +89,8 @@
             android:label="@string/control_manage_import"
             android:name="dev.oxide.launcher.ImportControlsActivity"
             android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
             android:targetActivity=".ui.activities.SplashActivity">
 
             <meta-data
@@ -126,6 +130,7 @@
             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
             android:screenOrientation="sensorLandscape" />
         <activity android:name=".ui.activities.FatalErrorActivity"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="keyboardHidden|orientation|screenSize|keyboard|navigation"
             android:theme="@style/Theme.Material3.DayNight.Dialog.Alert" />
 
