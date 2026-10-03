@@ -172,6 +172,7 @@ fun OxideVersionSettingsPage(
                         onGotoContent = { category ->
                             oxideInstanceTabForCategory(category)?.let { target -> tab = target }
                         },
+                        onDismiss = onDismiss,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }

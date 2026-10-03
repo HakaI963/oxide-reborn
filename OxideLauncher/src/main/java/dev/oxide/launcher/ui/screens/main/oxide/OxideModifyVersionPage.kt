@@ -1805,7 +1805,7 @@ private fun OxideModInstanceStep(
         contract = MediaPickerContract(allowImages = true, allowVideos = false, allowMultiple = false),
     ) { uris ->
         // The picker always hands back a list, even with allowMultiple = false.
-        uris.firstOrNull()?.let { picked -> iconViewModel.import(context, picked, iconFile) }
+        uris?.firstOrNull()?.let { picked -> iconViewModel.import(context, picked, iconFile) }
     }
 
     Column(
