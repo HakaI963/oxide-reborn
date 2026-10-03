@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.game.download.assets.platform.curseforge
 
+import dev.oxide.launcher.game.download.assets.platform.curseforge.models.isApproved
 import dev.oxide.launcher.path.GLOBAL_JSON
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals

@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.game.download.assets.platform.curseforge
 
+import dev.oxide.launcher.game.download.assets.platform.curseforge.models.CurseForgeFingerprintsMatches
 import dev.oxide.launcher.path.GLOBAL_JSON
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
