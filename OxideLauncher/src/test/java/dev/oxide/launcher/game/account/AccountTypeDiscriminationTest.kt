@@ -182,7 +182,7 @@ class AccountTypeDiscriminationTest {
         assertNotEquals(microsoft.uniqueUUID, local.uniqueUUID)
         assertNotEquals(microsoft.profileId, local.profileId)
         assertEquals(microsoft, microsoft.copy())
-        assertNotEquals<Account>(microsoft, microsoft.copy(username = "Alex"))
+        assertNotEquals(microsoft as Any, microsoft.copy(username = "Alex") as Any)
     }
 
     @Test

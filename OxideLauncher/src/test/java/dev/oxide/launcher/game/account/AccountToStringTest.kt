@@ -85,6 +85,6 @@ class AccountToStringTest {
         assertEquals(account.hashCode(), same.hashCode())
 
         val renamed = account.copy(username = "Alex")
-        assertNotEquals<Account>(account, renamed)
+        assertNotEquals(account as Any, renamed as Any)
     }
 }
