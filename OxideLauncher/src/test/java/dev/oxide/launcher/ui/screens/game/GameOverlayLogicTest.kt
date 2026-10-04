@@ -231,8 +231,8 @@ class GameOverlayLogicTest {
         val normal = gameOverlayBoundsFor(1080, 1920)
         assertDp(GameOverlayChromeHeight, normal.chromeHeight)
         assertDp(
-            normal.panelMaxHeight.value - normal.chromeHeight,
-            normal.contentMaxHeight.value,
+            normal.panelMaxHeight - normal.chromeHeight,
+            normal.contentMaxHeight,
         )
         assertDp(normal.panelMaxHeight, normal.totalHeight)
     }
@@ -418,7 +418,7 @@ class GameOverlayLogicTest {
         val plotHeight = 120.dp
         val cell = fpsLabelCellHeight(plotHeight)
         assertDp(20f, cell)
-        assertEquals(GameFpsAxisSegments + 1, (plotHeight / cell).value.toInt())
+        assertEquals(GameFpsAxisSegments + 1, (plotHeight / cell.value).value.toInt())
         val half = cell.value / 2f
         for (k in 0..GameFpsAxisSegments) {
             val rule = half + k * (plotHeight.value - half * 2f) / GameFpsAxisSegments
