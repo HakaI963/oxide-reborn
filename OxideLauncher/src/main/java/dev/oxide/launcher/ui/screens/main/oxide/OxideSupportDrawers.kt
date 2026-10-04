@@ -96,7 +96,9 @@ import dev.oxide.launcher.ui.components.toColorOrNull
 import dev.oxide.launcher.ui.components.toHex
 import dev.oxide.launcher.ui.control.HotbarRule
 import dev.oxide.launcher.ui.control.gamepad.JoystickMode
+import dev.oxide.launcher.ui.resolveAndroidString
 import dev.oxide.launcher.ui.theme.ColorThemeType
+import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.customResolutionRange
 import dev.oxide.launcher.utils.device.checkVulkanSupport
 import dev.oxide.launcher.utils.ensureCustomResolutionInitialized
@@ -1495,7 +1497,8 @@ fun OxideStorageDrawer(
         }
         if (cleanupRunning) {
             OxideLoadingRow(
-                text = cleanupTasks.lastOrNull()
+                // 任务标题在状态层存的是 AndroidStringText：只有组合里才解得开资源
+                text = cleanupTasks.lastOrNull()?.let { resolveAndroidString(it).text }
                     ?: stringResource(R.string.oxide_cap_storage_cleanup_running),
             )
             OxideButton(

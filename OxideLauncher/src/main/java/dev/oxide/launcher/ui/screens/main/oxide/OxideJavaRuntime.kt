@@ -135,7 +135,7 @@ private fun importJavaRuntime(
                     ?: throw IOException("Failed to read the selected file")
                 stream.use {
                     RuntimesManager.installRuntime(
-                        nativeLibDir = PathManager.DIR_NATIVE_LIB.absolutePath,
+                        nativeLibDir = PathManager.DIR_NATIVE_LIB,
                         inputStream = it,
                         name = fileName,
                         updateProgress = { textRes, textArg ->

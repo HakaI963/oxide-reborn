@@ -24,7 +24,7 @@ import androidx.lifecycle.viewModelScope
 import dev.oxide.launcher.game.path.GamePathManager
 import dev.oxide.launcher.game.version.installed.cleanup.CleanFailedException
 import dev.oxide.launcher.game.version.installed.cleanup.GameAssetCleaner
-import dev.oxide.launcher.ui.resolveAndroidString
+import dev.oxide.launcher.ui.AndroidStringText
 import dev.oxide.launcher.utils.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -132,18 +132,23 @@ internal class OxideStorageViewModel : ViewModel() {
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
-    private val _failed = MutableStateOf<List<String>>(emptyList())
+    private val _failed = MutableStateFlow<List<String>>(emptyList())
     val failed: StateFlow<List<String>> = _failed.asStateFlow()
 
     /** 清理结果：文件数与体积都是后端真实算出来的，不是界面估的 */
-    private val _result = MutableStateOf<OxideCleanupResult?>(null)
+    private val _result = MutableStateFlow<OxideCleanupResult?>(null)
     val result: StateFlow<OxideCleanupResult?> = _result.asStateFlow()
 
-    /** 正在跑的那一次的任务标题，供抽屉显示真实的阶段而不是一句假进度 */
-    val tasks: StateFlow<List<String>>
+    /**
+     * 正在跑的那一次的任务标题
+     *
+     * 这里存的是**还没有解析**的 [AndroidStringText]：资源 id 只有在组合里才解得开，
+     * 而收集发生在 [viewModelScope] 的协程里。因此标题由界面读 [tasks] 时解析。
+     */
+    val tasks: StateFlow<List<AndroidStringText>>
         get() = _tasks
 
-    private val _tasks = MutableStateFlow<List<String>>(emptyList())
+    private val _tasks = MutableStateFlow<List<AndroidStringText>>(emptyList())
 
     /**
      * 开始清理
@@ -158,8 +163,10 @@ internal class OxideStorageViewModel : ViewModel() {
         _failed.value = emptyList()
 
         viewModelScope.launch {
+            // 标题原样递出去：resolveAndroidString 是 @Composable，
+            // 在协程里调它编译不过，解析留给读 [tasks] 的那一层
             instance.tasksFlow.collect { tasks ->
-                _tasks.value = tasks.map { task -> resolveAndroidString(task.title).text }
+                _tasks.value = tasks.map { task -> task.title }
             }
         }
         instance.start(

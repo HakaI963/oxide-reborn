@@ -2111,8 +2111,11 @@ private fun DiscoverHeader(metrics: OxideMetrics, onRefresh: () -> Unit) {
 private fun DiscoverCategoryRail(
     selected: DiscoverCategory,
     onlyInstalled: Boolean,
+    favoritesMode: Boolean,
     onSelect: (DiscoverCategory) -> Unit,
     onSelectInstalled: () -> Unit,
+    onSelectFavorites: () -> Unit,
+    onGoInstances: () -> Unit,
     metrics: OxideMetrics,
     modifier: Modifier = Modifier
 ) {
@@ -2142,6 +2145,25 @@ private fun DiscoverCategoryRail(
                 selected = onlyInstalled,
                 metrics = metrics,
                 onClick = onSelectInstalled
+            )
+
+            Spacer(Modifier.height(metrics.cardGap))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = metrics.controlPadding)
+                    .height(1.dp)
+                    .background(Oxide.Line)
+            )
+            Spacer(Modifier.height(metrics.cardGap))
+
+            // 收藏与「已安装」一样只看本地，因此同样独占结果区：
+            // 两者都不与任何类别同时高亮，用户不会同时看着两份不同的列表
+            DiscoverCategoryTab(
+                text = stringResource(R.string.oxide_cap_dis_favorites),
+                selected = favoritesMode,
+                metrics = metrics,
+                onClick = onSelectFavorites
             )
 
             Spacer(Modifier.height(metrics.cardGap))
@@ -2569,7 +2591,7 @@ internal fun DiscoverResultsGrid(
                             },
                             onOpen = { onOpen(item) },
                             onInstall = { onInstall(item) },
-                            onToggleFavorite = { toggleFavorite(item) },
+                            onToggleFavorite = { onToggleFavorite(item) },
                         )
                     }
 

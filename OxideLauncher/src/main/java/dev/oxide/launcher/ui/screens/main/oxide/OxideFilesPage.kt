@@ -706,12 +706,16 @@ private fun OxideFilesBrowser(
                         null
                     } else {
                         val key = entryPathKey(entry)
-                        { onToggleActions(key) }
+                        // 显式标出类型，否则最后那个字面量会被当成块的尾随 lambda，
+                        // 整个 else 分支退化成 Unit
+                        val openActions: () -> Unit = { onToggleActions(key) }
+                        openActions
                     }
                     OxideFilesEntryRow(
                         entry = entry,
                         selected = entryPathKey(entry) in state.selection,
                         multiSelect = multiSelect,
+                        metrics = metrics,
                         onOpen = {
                             when {
                                 multiSelect -> viewModel.toggleSelection(entry)
@@ -975,6 +979,7 @@ private fun OxideFilesEntryRow(
     entry: FmEntry,
     selected: Boolean,
     multiSelect: Boolean,
+    metrics: OxideMetrics,
     onOpen: () -> Unit,
     onStageDelete: () -> Unit,
     onToggleActions: (() -> Unit)?,

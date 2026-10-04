@@ -61,12 +61,14 @@ internal fun <T> filterOxideInstances(
     lastRunOf: (T) -> Long,
 ): List<T> {
     val matched = items.filter { item -> oxideInstanceMatches(nameOf(item), query) }
-    // 类型必须写出来：when 分支不提供期望类型，Kotlin 无从推断 `it` 是哪一行
-    val comparator = when (sort) {
+    // 类型必须写出来：when 分支不提供期望类型，Kotlin 无从推断 `item` 是哪一行
+    val comparator: Comparator<T> = when (sort) {
         OxideInstanceSort.Name ->
             compareBy<T, String>(String.CASE_INSENSITIVE_ORDER) { item -> nameOf(item) }
 
-        OxideInstanceSort.RecentActivity -> compareBy<T, Long> { item -> lastRunOf(item) }
+        // 这里只给 T：K 由 selector 的返回值推出来。多写一个 `Long` 反而会让
+        // 重载解析在几个二元 `compareBy` 之间摇摆，最后一个都用不上
+        OxideInstanceSort.RecentActivity -> compareBy<T> { item: T -> lastRunOf(item) }
     }
     return matched.sortedWith(if (ascending) comparator else comparator.reversed())
 }

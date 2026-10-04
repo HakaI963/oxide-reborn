@@ -51,7 +51,7 @@ private const val TAG = "OxideModpackImport"
  * 整合包导入接受的后缀
  *
  * 系统选择器按 mime 过滤，而不同提供方对 `.mrpack` 的映射并不一致，
- * 因此这里给 `*/*`：漏掉一个真实存在的整合包比多显示几个无关文件糟糕得多。
+ * 因此这里给全通配 {@code *}{@code /}{@code *}：漏掉一个真实存在的整合包比多显示几个无关文件糟糕得多。
  * 真正能不能导入由 [dev.oxide.launcher.game.download.modpack.install.ModpackImporter] 判定，
  * 它报得出**为什么**不支持；界面上猜出来的拒绝只会让用户不知道该换什么文件。
  */

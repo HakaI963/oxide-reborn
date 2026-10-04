@@ -57,6 +57,7 @@ import dev.oxide.launcher.filemanager.viewmodel.DialogIntent
 import dev.oxide.launcher.filemanager.viewmodel.FileManagerViewModel
 import dev.oxide.launcher.filemanager.viewmodel.SearchHitView
 import dev.oxide.launcher.filemanager.viewmodel.SearchUiState
+import dev.oxide.launcher.ui.theme.Oxide
 import java.nio.file.Path
 
 private const val DIALOG_TAG = "OxideFilesActions"
