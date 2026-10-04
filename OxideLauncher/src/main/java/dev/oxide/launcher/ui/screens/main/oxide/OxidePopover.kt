@@ -18,6 +18,8 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -605,7 +607,12 @@ fun OxideDrawerTabs(
     }
 }
 
-/** 小图标按钮，抽屉和卡片上的齿轮、关闭都用它 */
+/**
+ * 小图标按钮，抽屉和卡片上的齿轮、关闭都用它
+ *
+ * [contentDescription] 不是可选项的摆设：图标按钮本身没有可见文字，
+ * 不给无障碍标签，读屏只会念出一个没有意义的符号。
+ */
 @Composable
 fun OxideIconButton(
     onClick: () -> Unit,
@@ -613,6 +620,7 @@ fun OxideIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     size: Dp = 24.dp,
+    contentDescription: String? = null,
 ) {
     Box(
         modifier = modifier
@@ -624,6 +632,13 @@ fun OxideIconButton(
                 indication = null,
                 enabled = enabled,
                 onClick = onClick
+            )
+            .then(
+                if (contentDescription != null) {
+                    Modifier.semantics { this.contentDescription = contentDescription }
+                } else {
+                    Modifier
+                }
             ),
         contentAlignment = Alignment.Center,
     ) {

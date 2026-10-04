@@ -150,6 +150,14 @@ data class OxideChrome(
     val bgToggleOn: Color,
     val drawerBg: Color,
     val drawerScrim: Color,
+    /**
+     * 二级面板背后的底幕
+     *
+     * 刻意不是纯黑，也不是全透明：全透明会让被盖住的首页继续在下面主导视觉，
+     * 纯黑则会把层级压平——面板、卡片、分组就再也分不出前后。
+     * 0xF2 足以把下面的内容压到读不出来，同时保留一点点纵深。
+     */
+    val panelBackdrop: Color,
     val popoverBg: Color,
     val toastBg: Color,
     val fg: Color,
@@ -193,6 +201,7 @@ data class OxideChrome(
             bgToggleOn = Color(0xFFDDDDDD),
             drawerBg = Color(0xFA0B0B0B),
             drawerScrim = Color(0x8C000000),
+            panelBackdrop = Color(0xF2050505),
             popoverBg = Color(0xFA0D0D0D),
             toastBg = Color(0xFF151515),
             fg = Color(0xFFEEEEEE),
@@ -231,6 +240,7 @@ data class OxideChrome(
             bgToggleOn = Color(0xFFDDDDDD),
             drawerBg = Color(0xFAFFFFFF),
             drawerScrim = Color(0x8C000000),
+            panelBackdrop = Color(0xF2050505),
             popoverBg = Color(0xFFFFFFFF),
             toastBg = Color(0xFFFFFFFF),
             fg = Color(0xFF141414),
@@ -397,6 +407,7 @@ object Oxide {
     val BgToggleOff: Color get() = chrome.bgToggleOff
     val BgToggleOn: Color get() = chrome.bgToggleOn
     val DrawerBg: Color get() = chrome.drawerBg
+    val PanelBackdrop: Color get() = chrome.panelBackdrop
     val DrawerScrim: Color get() = chrome.drawerScrim
     val PopoverBg: Color get() = chrome.popoverBg
     val ToastBg: Color get() = chrome.toastBg

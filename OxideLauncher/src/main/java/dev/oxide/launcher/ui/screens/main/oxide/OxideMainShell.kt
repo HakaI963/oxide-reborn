@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import androidx.compose.foundation.background
 import dev.oxide.launcher.coroutine.Task
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -335,7 +336,15 @@ fun OxideMainShell(
                         exit = fadeOut(tween(Oxide.Motion.PopoverFadeMs)),
                     ) {
                         val target = destination ?: return@AnimatedVisibility
-                        Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                // 二级面板必须先铺一层近不透明的底幕。
+                                // Account / Multiplayer / Files 这些页面本身是 fillMaxSize
+                                // 且不画自己的底，没有这层的话首页会直接透上来，
+                                // 面板读起来就像"旧页面从弹窗后面漏出来"。
+                                .background(Oxide.PanelBackdrop)
+                        ) {
                             when (target) {
                                 is OxideDestination.Account -> OxideAccountPage(
                                     metrics = metrics,

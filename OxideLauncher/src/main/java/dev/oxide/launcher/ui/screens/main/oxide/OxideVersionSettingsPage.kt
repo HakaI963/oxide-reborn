@@ -431,8 +431,11 @@ private fun OxideVersionOverviewTab(
     val versionInfo = remember(version) { version.getVersionInfo() }
     val gameDir = remember(version) { version.getGameDir() }
 
+    // 走 host 的 openFiles，而不是发 OpenFileManager 事件：
+    // 那个事件会启动旧的 FileManagerActivity，也就是旧的那套 Material 文件浏览器。
+    // v1.6.0 只改了 SupportDrawers 里的桥接，这两处自己定义 openFolder 的地方漏掉了。
     val openFolder: (File) -> Unit = { dir ->
-        eventViewModel.sendEvent(EventViewModel.Event.OpenFileManager(rootPath = dir.absolutePath))
+        LocalOxideHostActions.current.openFiles(dir.absolutePath)
     }
 
     Column(
