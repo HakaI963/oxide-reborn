@@ -64,7 +64,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.screens.main.oxide.Oxide
 import dev.oxide.launcher.ui.screens.main.oxide.OxideBadgeTone
 import kotlin.math.roundToInt
 

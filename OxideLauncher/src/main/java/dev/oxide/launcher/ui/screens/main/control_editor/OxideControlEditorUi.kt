@@ -90,7 +90,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.screens.main.oxide.Oxide
 import dev.oxide.launcher.ui.screens.main.oxide.lerpColor
 import kotlin.math.roundToInt
 

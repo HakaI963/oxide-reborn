@@ -57,7 +57,6 @@ import dev.oxide.layercontroller.utils.snap.SnapMode
 import dev.oxide.launcher.R
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.guide.GuideKeys
-import dev.oxide.launcher.ui.screens.main.oxide.Oxide
 import dev.oxide.launcher.ui.screens.main.oxide.OxideBadgeTone
 
 /**

@@ -53,7 +53,6 @@ import dev.oxide.colorpicker.components.TransparentChecker
 import dev.oxide.colorpicker.rememberColorPickerController
 import dev.oxide.launcher.R
 import dev.oxide.launcher.ui.components.ColorPickerDialog
-import dev.oxide.launcher.ui.screens.main.oxide.Oxide
 
 /**
  * 编辑器的信息行

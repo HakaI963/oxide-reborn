@@ -72,7 +72,6 @@ import dev.oxide.launcher.ui.screens.main.control_editor.edit_joystick.EditJoyst
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_style.EditButtonStyleDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_widget.EditWidgetDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_widget.SelectedWidgetData
-import dev.oxide.launcher.ui.screens.main.oxide.Oxide
 import dev.oxide.launcher.viewmodel.EditorViewModel
 import kotlinx.coroutines.flow.emptyFlow
 import java.io.File
@@ -186,11 +185,11 @@ fun BoxWithConstraintsScope.ControlEditor(
         // 没有选中层时给一份空的：这里不能顺手选一层出来，"哪一层被选中"
         // 是用户的状态，不该由渲染决定
         val normalButtons by (selectedLayer?.normalButtons ?: emptyFlow())
-            .collectAsStateWithLifecycle(initial = null)
+            .collectAsStateWithLifecycle(initialValue = null)
         val textBoxes by (selectedLayer?.textBoxes ?: emptyFlow())
-            .collectAsStateWithLifecycle(initial = null)
+            .collectAsStateWithLifecycle(initialValue = null)
         val joystickButtons by (selectedLayer?.joystickButtons ?: emptyFlow())
-            .collectAsStateWithLifecycle(initial = null)
+            .collectAsStateWithLifecycle(initialValue = null)
 
         val widgetsInLayer: List<ObservableWidget> =
             remember(normalButtons, textBoxes, joystickButtons) {

@@ -69,7 +69,6 @@ import dev.oxide.launcher.ui.screens.main.control_editor.edit_layer.EditSwitchLa
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_style.StyleListDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_translatable.EditTranslatableTextDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_widget.SelectLayers
-import dev.oxide.launcher.ui.screens.main.oxide.Oxide
 import dev.oxide.launcher.utils.string.getMessageOrToString
 import dev.oxide.launcher.viewmodel.EditorViewModel
 import kotlin.math.roundToInt
