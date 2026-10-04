@@ -18,6 +18,9 @@
 package dev.oxide.launcher.ui.screens.main.oxide
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -67,6 +70,7 @@ import dev.oxide.launcher.game.control.ControlManager
 import dev.oxide.launcher.game.multirt.Runtime
 import dev.oxide.launcher.game.multirt.RuntimesManager
 import dev.oxide.launcher.game.path.GamePath
+import dev.oxide.launcher.game.version.installed.VersionsManager
 import dev.oxide.launcher.game.path.GamePathManager
 import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.renderer.Renderers
@@ -668,7 +672,7 @@ fun OxideJavaDrawer(
         onImported = { refreshToken++ },
         onError = { runtimeError = it },
     )
-    val runJar = oxideJavaJarRunner(jarRuntimeChoice)
+    val runJar = oxideJavaJarRunner(runtimeProvider = { jarRuntimeChoice })
 
     OxideDrawerHost(
         visible = true,
@@ -818,7 +822,8 @@ fun OxideJavaDrawer(
                 OxideActionRow(
                     label = stringResource(R.string.oxide_cap_java_run_jar),
                     hint = stringResource(R.string.oxide_cap_java_run_jar_detail),
-                    value = jarRuntimeChoice?.name,
+                    value = jarRuntimeChoice?.name
+                        ?: stringResource(R.string.oxide_cap_java_run_jar_default),
                     onClick = { jarRuntimePicker = true },
                 )
                 if (jarRuntimePicker) {
@@ -1216,6 +1221,53 @@ fun OxideStorageDrawer(
     var deleteTarget by remember { mutableStateOf<GamePath?>(null) }
     var renameDraft by remember(renameTarget) { mutableStateOf(renameTarget?.title.orEmpty()) }
 
+    // 新增一个游戏目录：先用 SAF 挑一个真实文件夹，再起名字
+    var addPathStage by remember { mutableStateOf<OxideStorageAddStage?>(null) }
+    var addPathDraft by remember { mutableStateOf("") }
+    var addPathError by remember { mutableStateOf<String?>(null) }
+    var addPathPending by remember { mutableStateOf<String?>(null) }
+    val addScope = rememberCoroutineScope()
+    val treePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+        val picked = docId
+            ?.takeIf(::isPrimaryStorageDocument)
+            ?.let { id ->
+                oxideGamePathFromRelative(
+                    relative = Uri.decode(id.removePrefix(OXIDE_PRIMARY_DOCUMENT_PREFIX)),
+                    storageRoot = oxideExternalStorageRoot(),
+                )
+            }
+        if (picked.isNullOrBlank()) {
+            // 游戏目录后面全部按真实路径处理，因此只能覆盖这台设备主存储上的文件夹
+            addPathError = context.getString(R.string.oxide_cap_storage_game_dir_unsupported)
+            addPathStage = null
+        } else {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            addPathPending = picked
+            addPathDraft = File(picked).name.ifBlank { picked }
+            addPathStage = OxideStorageAddStage.Name
+        }
+    }
+
+    // 清理冗余游戏资源：与已安装的实例数量相关，
+    // 一个都没有时它会把整个 assets 删干净，因此那时不能让它跑
+    val storageViewModel: OxideStorageViewModel = viewModel(key = "OxideStorageViewModel") {
+        OxideStorageViewModel()
+    }
+    val cleanupRunning by storageViewModel.running.collectAsStateWithLifecycle()
+    val cleanupTasks by storageViewModel.tasks.collectAsStateWithLifecycle()
+    val cleanupFailed by storageViewModel.failed.collectAsStateWithLifecycle()
+    val installedVersions by VersionsManager.versions.collectAsStateWithLifecycle()
+    val cleanupNotice by storageViewModel.result.collectAsStateWithLifecycle()
+
     var sizes by remember { mutableStateOf(OxideStorageSizes()) }
     var measuring by remember { mutableStateOf(true) }
     LaunchedEffect(currentGamePath) {
@@ -1336,6 +1388,140 @@ fun OxideStorageDrawer(
                         },
                     )
                 }
+            }
+        }
+
+        // 新增一个游戏目录：先挑文件夹，再起名字，最后落到
+        // GamePathManager.addNewPath——旧界面对同一件事做的也是这一步
+        addPathError?.let { detail ->
+            OxideSecErrorRow(
+                metrics = metrics,
+                title = stringResource(R.string.generic_error),
+                detail = detail,
+                dismissText = stringResource(R.string.oxide_sec_accounts_dismiss),
+                onDismiss = { addPathError = null },
+            )
+        }
+        if (oxideStorageAddVisible(addPathStage != null)) {
+            OxideActionRow(
+                label = stringResource(R.string.oxide_cap_storage_add_game_dir),
+                hint = stringResource(R.string.versions_manage_game_path_storage_permissions),
+                onClick = {
+                    addPathError = null
+                    treePicker.launch(null)
+                },
+            )
+        }
+        if (addPathStage == OxideStorageAddStage.Name) {
+            OxideSecInput(
+                metrics = metrics,
+                value = addPathDraft,
+                onValueChange = { addPathDraft = it },
+                placeholder = stringResource(R.string.oxide_cap_storage_game_dir_name),
+                label = stringResource(R.string.oxide_cap_storage_game_dir_name),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(metrics.rowGap)) {
+                OxideButton(
+                    text = stringResource(R.string.generic_cancel),
+                    onClick = {
+                        addPathStage = null
+                        addPathDraft = ""
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                OxideButton(
+                    text = stringResource(R.string.generic_confirm),
+                    onClick = {
+                        val draft = addPathDraft.trim()
+                        val path = addPathPending
+                        if (draft.isEmpty() || path == null) return@OxideButton
+                        addScope.launch {
+                            // 落盘必须在 IO 上；GamePathManager.addNewPath 自己只是投纹理，
+                            // 回调下来刷新那一步在它自己的 IO 作用域里
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    GamePathManager.addNewPath(title = draft, path = path)
+                                }
+                            }.onSuccess {
+                                addPathStage = null
+                                addPathDraft = ""
+                                addPathPending = null
+                                bridge.showToast(R.string.oxide_cap_storage_game_dir_added)
+                            }.onFailure { error ->
+                                addPathError = if (storageViewModel.isDuplicatePathConflict(error)) {
+                                    context.getString(R.string.oxide_cap_storage_game_dir_conflict)
+                                } else {
+                                    error.getMessageOrToString()
+                                }
+                                addPathStage = null
+                            }
+                        }
+                    },
+                    enabled = addPathDraft.isNotBlank(),
+                    tone = OxideButtonTone.Primary,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        // 清理冗余游戏资源。GameAssetCleaner 会比对所有已安装版本需要的资源，
+        // 然后删掉其余的；它本身没有“一个版本都没有就别跑”这道保护，
+        // 所以按钮在那之前就已经拒绝可点了
+        cleanupNotice?.let { result ->
+            OxideSettingRow(
+                label = stringResource(R.string.versions_manage_cleanup),
+                value = stringResource(
+                    R.string.versions_manage_cleanup_success,
+                    result.files,
+                    result.size,
+                ),
+                trailing = {
+                    OxideIconAction(
+                        glyph = "\u2715",
+                        description = stringResource(R.string.generic_close),
+                        size = metrics.stepperButton,
+                    ) { storageViewModel.consumeResult() }
+                },
+            )
+        }
+        if (cleanupFailed.isNotEmpty()) {
+            OxideSecErrorRow(
+                metrics = metrics,
+                title = stringResource(R.string.versions_manage_cleanup_failed),
+                detail = cleanupFailed.take(8).joinToString(", "),
+                dismissText = stringResource(R.string.oxide_sec_accounts_dismiss),
+                onDismiss = { storageViewModel.cancel() },
+            )
+        }
+        if (cleanupRunning) {
+            OxideLoadingRow(
+                text = cleanupTasks.lastOrNull()
+                    ?: stringResource(R.string.oxide_cap_storage_cleanup_running),
+            )
+            OxideButton(
+                text = stringResource(R.string.generic_cancel),
+                onClick = { storageViewModel.cancel() },
+                tone = OxideButtonTone.Secondary,
+            )
+        } else {
+            OxideActionRow(
+                label = stringResource(R.string.versions_manage_cleanup),
+                hint = stringResource(R.string.oxide_cap_storage_cleanup_detail),
+                enabled = oxideStorageCleanupEnabled(installedVersions.size),
+                onClick = {
+                    storageViewModel.start(
+                        onFinished = { },
+                        onFailure = { bridge.showToast(R.string.versions_manage_cleanup_failed) },
+                    )
+                },
+            )
+            if (installedVersions.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.oxide_cap_storage_cleanup_needs_instance),
+                    color = Oxide.FgFaint,
+                    fontSize = Oxide.Type.MicroLabel.fontSize,
+                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                )
             }
         }
 

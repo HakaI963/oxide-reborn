@@ -194,8 +194,12 @@ fun OxideInstancesPage(
     var menuKey by remember { mutableStateOf<String?>(null) }
     // 重命名/复制/删除的真实对话框，与既有版本管理页共用同一套
     var operation by remember { mutableStateOf<VersionsOperation>(VersionsOperation.None) }
-    // 动作失败时在页面里就地报出来，而不是依赖另一个 Activity 上的错误弹窗
     var operationError by remember { mutableStateOf<ErrorViewModel.ThrowableMessage?>(null) }
+    // 名称搜索与排序：只影响网格里的顺序与哪些卡片出现，
+    // 不影响高亮落点，也不影响重命名、删除等任何对实例本身的操作
+    var instanceQuery by remember { mutableStateOf("") }
+    var instanceSort by remember { mutableStateOf(OxideInstanceSort.Name) }
+    var instanceSortAscending by remember { mutableStateOf(true) }
 
     val submitError: (ErrorViewModel.ThrowableMessage) -> Unit = { message ->
         operationError = message
@@ -237,6 +241,31 @@ fun OxideInstancesPage(
             probes.remove(key)
         }
         probes.putAll(measured)
+    }
+
+    // 网格里出现哪些卡片、什么顺序。探测结果里的上次运行时间是这里有
+    // 唯一可靠的时间面，因此“最近活跃”一档会跟着探测结果刷新。
+    //
+    // 用 derivedStateOf 而不是把 probes 写进 remember 的键：remember 里面读快照状态不会被重组合观察到，
+    // 探测结果后到时排序会永远停在旧值上。derivedStateOf 才会正确地跟踪这些读取。
+    val visibleVersions: List<Version> by remember(
+        versions,
+        instanceQuery,
+        instanceSort,
+        instanceSortAscending,
+    ) {
+        derivedStateOf {
+            filterOxideInstances(
+                items = versions,
+                query = instanceQuery,
+                sort = instanceSort,
+                ascending = instanceSortAscending,
+                nameOf = { version -> version.getVersionName() },
+                lastRunOf = { version ->
+                    probes[version.getVersionPath().absolutePath]?.lastRunAt ?: 0L
+                },
+            )
+        }
     }
 
     // 唯一的选中断言：真的写进后端，重启之后仍然是同一个
@@ -379,6 +408,66 @@ fun OxideInstancesPage(
                 },
             )
 
+            if (oxideInstanceQueryVisible(versions.size)) {
+                OxideSecInput(
+                    metrics = metrics,
+                    value = instanceQuery,
+                    onValueChange = { instanceQuery = it },
+                    placeholder = stringResource(R.string.oxide_cap_ins_search_hint),
+                )
+                Spacer(Modifier.height(metrics.secRowGap))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OxideButton(
+                        text = stringResource(
+                            R.string.oxide_cap_ins_sort,
+                            stringResource(
+                                if (instanceSortAscending) {
+                                    R.string.fm_sort_ascending
+                                } else {
+                                    R.string.oxide_sec_files_sort_desc
+                                }
+                            ),
+                        ),
+                        onClick = {
+                            val next = nextOxideInstanceSort(instanceSort, instanceSortAscending)
+                            instanceSort = next.first
+                            instanceSortAscending = next.second
+                        },
+                    )
+                    Text(
+                        text = stringResource(
+                            when (instanceSort) {
+                                OxideInstanceSort.Name -> R.string.oxide_cap_ins_sort_name
+                                OxideInstanceSort.RecentActivity -> R.string.oxide_cap_ins_sort_recent
+                            }
+                        ),
+                        color = Oxide.FgMuted,
+                        fontSize = Oxide.Type.Body.fontSize,
+                        lineHeight = Oxide.Type.Body.lineHeight,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // 搜索把列表缩小时必须说清楚看到了多少丛，
+                    // 否则“什么都没有”会被读成“实例别了”
+                    if (instanceQuery.isNotBlank()) {
+                        OxideBadge(
+                            text = stringResource(
+                                R.string.oxide_cap_ins_summary,
+                                visibleVersions.size,
+                                versions.size,
+                            ),
+                            tone = OxideBadgeTone.Active,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(metrics.secRowGap))
+            }
+
             Spacer(Modifier.height(metrics.sectionGap))
 
             operationError?.let { failure ->
@@ -446,6 +535,37 @@ fun OxideInstancesPage(
                     }
                 }
 
+                // 搜索把列表缩空与真的一个都没有是两件很不一样的事：
+                // 前者只说明这个关键字一个都没匹配，因此给一枚可以清掉的链接
+                visibleVersions.isEmpty() -> Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        OxideSurface(
+                            modifier = Modifier.widthIn(max = metrics.cardMinWidth * 1.5f),
+                            contentPadding = PaddingValues(all = metrics.cardGap),
+                        ) {
+                            OxideEmptyState(
+                                title = stringResource(R.string.generic_no_matching_items),
+                                detail = stringResource(R.string.oxide_cap_ins_search_hint),
+                                action = {
+                                    OxideButton(
+                                        text = stringResource(R.string.generic_clear),
+                                        onClick = { instanceQuery = "" },
+                                        tone = OxideButtonTone.Primary,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+
                 else -> {
                     BoxWithConstraints(
                         modifier = Modifier
@@ -457,7 +577,7 @@ fun OxideInstancesPage(
                         // 行数由真实存在的卡片决定：只有一张时不必占满两行的高度，
                         // 否则卡片下面会留下一整条空白
                         val visibleRows = instanceGridRows(
-                            itemCount = versions.size,
+                            itemCount = visibleVersions.size,
                             columns = columns,
                             maxRows = GRID_ROWS,
                         )
@@ -478,7 +598,7 @@ fun OxideInstancesPage(
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             items(
-                                items = versions,
+                                items = visibleVersions,
                                 key = { version -> version.getVersionPath().absolutePath },
                             ) { version ->
                                 val path = version.getVersionPath().absolutePath
@@ -550,7 +670,7 @@ private data class InstanceProbe(
 
 /** 动作失败时的一行提示，就地显示，不阻塞页面 */
 @Composable
-private fun OxideInstanceErrorRow(
+internal fun OxideInstanceErrorRow(
     message: ErrorViewModel.ThrowableMessage,
     onDismiss: () -> Unit,
 ) {

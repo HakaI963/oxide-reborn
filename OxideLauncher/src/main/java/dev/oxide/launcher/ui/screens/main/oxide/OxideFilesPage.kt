@@ -421,9 +421,12 @@ fun OxideFilesPage(
 
                                     OxideFilesRowAction.Delete -> {
                                         actionKey = null
-                                        // 删除走的是"选中集合"这一条既有链路，
-                                        // 因此先把这一条纳入选中再要确认
-                                        viewModel.toggleSelection(entry)
+                                        // 删除走的是“选中集合”这一条既有链路，
+                                        // 因此先把这一条纳入选中再要确认。已经在选中里时不再切一次：
+                                        // 反而切了会把它取消选中，确认条就永远不会出现。
+                                        if (entryPathKey(entry) !in state.selection) {
+                                            viewModel.toggleSelection(entry)
+                                        }
                                         deleteArmed = true
                                     }
                                 }
@@ -697,6 +700,14 @@ private fun OxideFilesBrowser(
                     // 路径字符串才是稳定键：Path 的 hashCode 会随实例变化
                     key = { entry -> entryPathKey(entry) },
                 ) { entry ->
+                    // 多选下不给“这一条的动作”：那一栏由选择动作条承担，
+                    // 两处同时给同一批动作只会让人不知道该按哪一个
+                    val rowActionOpener: (() -> Unit)? = if (multiSelect) {
+                        null
+                    } else {
+                        val key = entryPathKey(entry)
+                        { onToggleActions(key) }
+                    }
                     OxideFilesEntryRow(
                         entry = entry,
                         selected = entryPathKey(entry) in state.selection,
@@ -716,13 +727,7 @@ private fun OxideFilesBrowser(
                             viewModel.toggleSelection(entry)
                             onRequestDelete()
                         },
-                        // 多选下不给"这一条的动作"：那一栏由选择动作条承担，
-                        // 两处同时给同一批动作只会让人不知道该按哪一个
-                        onToggleActions = if (multiSelect) {
-                            null
-                        } else {
-                            { onToggleActions(entryPathKey(entry)) }
-                        },
+                        onToggleActions = rowActionOpener,
                     )
                     Spacer(Modifier.height(metrics.secRowGap))
                 }

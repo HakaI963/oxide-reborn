@@ -89,6 +89,7 @@ import dev.oxide.launcher.coroutine.TaskStage
 import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.coroutine.TitledTask
 import dev.oxide.launcher.game.download.assets.DependencyRequest
+import dev.oxide.launcher.game.download.assets.favorites.FavoriteProjectsRepository
 import dev.oxide.launcher.game.download.assets.downloadDependenciesForVersions
 import dev.oxide.launcher.game.download.assets.downloadSingleForVersions
 import dev.oxide.launcher.game.download.assets.mapExceptionToMessage
@@ -196,7 +197,7 @@ private val OxideMetrics.searchFieldWidth: Dp get() = cardMinWidth * 0.86f
  * 全部来自真实的 [PlatformClasses]，平台与加载器过滤能力也和资源搜索页一致：
  * 存档只有 CurseForge 一个平台，只有模组与整合包才按加载器过滤。
  */
-private enum class DiscoverCategory(
+internal enum class DiscoverCategory(
     @StringRes val labelRes: Int,
     val classes: PlatformClasses,
     @StringRes val typeLabelRes: Int,
@@ -412,6 +413,19 @@ private class OxideDiscoverViewModel : ViewModel() {
         private set
 
     /**
+     * 看收藏而不是看搜索结果
+     *
+     * 与 [onlyInstalled] 互斥：两者都是“不看网上那些”的另一种视角，
+     * 同时开着只会让用户不知道自己看的到底是哪辞。
+     */
+    var favoritesMode by mutableStateOf(false)
+        private set
+
+    /** 收藏数据已经装载完；未装载时不列出一个空列表骗用户 */
+    var favoritesLoaded by mutableStateOf(false)
+        private set
+
+    /**
      * 结果列表
      *
      * 无限滚动时结果是**累积**在这里的：换条件清空并回到 index 0，往下滚则接上新一页。
@@ -506,6 +520,91 @@ private class OxideDiscoverViewModel : ViewModel() {
 
     fun toggleOnlyInstalled(value: Boolean) {
         onlyInstalled = value
+        if (value) favoritesMode = false
+    }
+
+    fun toggleFavoritesMode(value: Boolean) {
+        favoritesMode = value
+        if (value) {
+            onlyInstalled = false
+            ensureFavoritesLoaded()
+        }
+    }
+
+    /**
+     * 确保收藏已装载
+     *
+     * [FavoriteProjectsRepository] 自己会在第一次 `isFavorite` 时异步装载，
+     * 这里显式调一次，避免列表先空一帧再自己长出来。
+     */
+    fun ensureFavoritesLoaded() {
+        if (favoritesLoaded) return
+        viewModelScope.launch {
+            FavoriteProjectsRepository.ensureLoaded()
+            favoritesLoaded = FavoriteProjectsRepository.initialized
+            // 仓库写入完成后推一次：新增的那些星开始时是按空读的
+            favoriteTick++
+        }
+    }
+
+    /** 切换一条搜索结果的收藏态：落到后端的 MMKV 里，重启仍在 */
+    fun toggleFavorite(item: DiscoverItem) {
+        FavoriteProjectsRepository.toggle(item.data, item.classes)
+        // 仓库里的写入是异步的，推一次让卡片重新回读一下真实态
+        favoriteTick++
+    }
+
+    /** 收藏切换的计数器；界面用它作为重读的键 */
+    var favoriteTick by mutableIntStateOf(0)
+        private set
+
+    /** 移出收藏 */
+    fun removeFavorite(platform: Platform, projectId: String) {
+        FavoriteProjectsRepository.unfavorite(platform, projectId)
+        favoriteTick++
+    }
+
+    /**
+     * 装一个收藏里的项目
+     *
+     * 收藏只存了缓存的元数据，文件版本仍必须向平台问一次；
+     * 这一次复用与搜索结果完全相同的取版本与提交路径。
+     */
+    fun installFavorite(key: String) {
+        if (install.busy()) return
+        val entry = FavoriteProjectsRepository.projects.values.firstOrNull {
+            discoverProjectKey(it.platform, it.project.projectId) == key
+        } ?: return
+        if (entry.invalid) return
+        if (VersionsManager.currentVersion.value == null) {
+            install = DiscoverInstall.NeedsInstance
+            return
+        }
+        resolveJob?.cancel()
+        resolveJob = viewModelScope.launch {
+            install = DiscoverInstall.Resolving
+            val versions = try {
+                getVersions(
+                    projectID = entry.project.projectId,
+                    platform = entry.platform,
+                ).initAll(entry.project.projectId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.warning(TAG, "Failed to load the files of a favourite project", e)
+                install = DiscoverInstall.Failed(mapExceptionToMessage(e))
+                return@launch
+            }
+            if (versions.isEmpty()) {
+                install = DiscoverInstall.NoFile
+                return@launch
+            }
+            submitFile(
+                version = pickVersionFor(versions, playableTarget()) ?: versions.first(),
+                classes = entry.project.classes,
+                projectId = entry.project.projectId,
+            )
+        }
     }
 
     fun selectPlatform(value: Platform) {
@@ -1760,6 +1859,11 @@ fun OxideDiscoverPage(
     val localVersions by VersionsManager.versions.collectAsStateWithLifecycle()
     val installedMods = installed.installedByProject
 
+    // 收藏只有在进入发现页时装载一次：否则第一次点星号时还会被当成未收藏
+    LaunchedEffect(Unit) {
+        viewModel.ensureFavoritesLoaded()
+    }
+
     // 条目标题要走 mcmod 译名，翻译表只有界面这一侧才有，所以把函数递进状态层
     LaunchedEffect(context) {
         viewModel.provideTitleResolver { data, mcmod ->
@@ -1812,6 +1916,23 @@ fun OxideDiscoverPage(
         }
     }
 
+    // 收藏只存了缓存的元数据，不是搜索结果；因此它自己一份列表，不跟着网上的分页走。
+    //
+    // 这里用 remember 而不是 derivedStateOf，是有意的：仓库里的读取发生在 remember 块里，
+    // 组合不会观察到它们。因此每一次收藏变动（装载完、切换、移出）
+    // 都由状态层推一次 favoriteTick，这里就会重算一次。
+    val favoriteRows = remember(viewModel.favoritesMode, viewModel.favoriteTick) {
+        if (!viewModel.favoritesMode) {
+            emptyList()
+        } else {
+            oxideFavoriteRows(
+                entries = FavoriteProjectsRepository.projects.values,
+                keyOf = { platform, projectId -> discoverProjectKey(platform, projectId) },
+                platformNameOf = { platform -> platform.displayName },
+            )
+        }
+    }
+
     OxidePageColumn(modifier = modifier, metrics = metrics) {
         DiscoverHeader(metrics = metrics, onRefresh = viewModel::search)
 
@@ -1829,8 +1950,11 @@ fun OxideDiscoverPage(
                     metrics = metrics,
                     selected = viewModel.category,
                     onlyInstalled = viewModel.onlyInstalled,
+                    favoritesMode = viewModel.favoritesMode,
                     onSelect = viewModel::selectCategory,
-                    onSelectInstalled = { viewModel.toggleOnlyInstalled(true) }
+                    onSelectInstalled = { viewModel.toggleOnlyInstalled(true) },
+                    onSelectFavorites = { viewModel.toggleFavoritesMode(true) },
+                    onGoInstances = { onNavigate(OxidePage.Instances) }
                 )
             }
 
@@ -1841,6 +1965,23 @@ fun OxideDiscoverPage(
                     .weight(1f)
                     .fillMaxHeight()
             ) {
+                // 收藏不走网上搜索，因此这一屏的筛选条整体不出现：
+                // 留着它只会让用户误以为收藏可以按平台筛选
+                if (viewModel.favoritesMode) {
+                    OxideFavoritesPanel(
+                        metrics = metrics,
+                        rows = favoriteRows,
+                        loading = !viewModel.favoritesLoaded,
+                        busy = viewModel.install.busy(),
+                        onInstall = { row -> viewModel.installFavorite(row.key) },
+                        onRemove = { row ->
+                            viewModel.removeFavorite(row.platform, row.projectId)
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    return@Column
+                }
+
                 DiscoverFilterBar(
                     modifier = Modifier.fillMaxWidth(),
                     metrics = metrics,
@@ -1873,7 +2014,9 @@ fun OxideDiscoverPage(
                             onRetry = viewModel::retry,
                             onLoadMore = viewModel::loadMore,
                             onOpen = viewModel::openDetail,
-                            onInstall = viewModel::install
+                            onInstall = viewModel::install,
+                            favoritesTick = viewModel.favoriteTick,
+                            onToggleFavorite = viewModel::toggleFavorite,
                         )
                     }
                 }
@@ -1978,7 +2121,7 @@ private fun DiscoverCategoryRail(
             DiscoverCategory.entries.forEach { category ->
                 DiscoverCategoryTab(
                     text = stringResource(category.labelRes),
-                    selected = category == selected && !onlyInstalled,
+                    selected = category == selected && !onlyInstalled && !favoritesMode,
                     metrics = metrics,
                     onClick = { onSelect(category) }
                 )
@@ -1999,6 +2142,25 @@ private fun DiscoverCategoryRail(
                 selected = onlyInstalled,
                 metrics = metrics,
                 onClick = onSelectInstalled
+            )
+
+            Spacer(Modifier.height(metrics.cardGap))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = metrics.controlPadding)
+                    .height(1.dp)
+                    .background(Oxide.Line)
+            )
+            Spacer(Modifier.height(metrics.cardGap))
+
+            // 从这台设备导入一个整合包。启动器能导出四种格式，
+            // 而旧界面里的整合包导入入口在 Oxide 下已经不可达：
+            // 导出在实例抽屉里，导入不在任何地方。
+            OxideModpackImport(
+                metrics = metrics,
+                onFinished = { onGoInstances() },
+                modifier = Modifier.padding(horizontal = metrics.controlPadding),
             )
         }
     }
@@ -2041,7 +2203,7 @@ private fun DiscoverCategoryTab(
 
 /** 结果区顶部：条数 + 已翻页数 + 已安装扫描状态 */
 @Composable
-private fun DiscoverResultsHeader(
+internal fun DiscoverResultsHeader(
     count: Int,
     pages: Int,
     scanningInstalled: Boolean,
@@ -2294,7 +2456,7 @@ internal fun discoverResultColumns(metrics: OxideMetrics, contentWidth: Dp): Int
  * 失败永远带着重试，而且**不会**被渲染成一个空列表。
  */
 @Composable
-private fun DiscoverResultsGrid(
+internal fun DiscoverResultsGrid(
     feed: DiscoverFeed,
     visible: List<DiscoverItem>,
     category: DiscoverCategory,
@@ -2305,6 +2467,8 @@ private fun DiscoverResultsGrid(
     onLoadMore: () -> Unit,
     onOpen: (DiscoverItem) -> Unit,
     onInstall: (DiscoverItem) -> Unit,
+    favoritesTick: Int,
+    onToggleFavorite: (DiscoverItem) -> Unit,
     metrics: OxideMetrics,
     modifier: Modifier = Modifier
 ) {
@@ -2395,8 +2559,17 @@ private fun DiscoverResultsGrid(
                             category = category,
                             installed = item.data.platformId() in installedIds,
                             busy = busy,
+                            // 收藏态读一次快照：切换会推一次 favoritesTick，
+                            // 下一次刷新回读真实值，因此不会回读到一个被缓存的旧值
+                            favorite = remember(item.key, favoritesTick) {
+                                FavoriteProjectsRepository.isFavorite(
+                                    platform = item.data.platform(),
+                                    projectId = item.data.platformId(),
+                                )
+                            },
                             onOpen = { onOpen(item) },
-                            onInstall = { onInstall(item) }
+                            onInstall = { onInstall(item) },
+                            onToggleFavorite = { toggleFavorite(item) },
                         )
                     }
 
@@ -2506,8 +2679,10 @@ private fun DiscoverResultCard(
     category: DiscoverCategory,
     installed: Boolean,
     busy: Boolean,
+    favorite: Boolean,
     onOpen: () -> Unit,
     onInstall: () -> Unit,
+    onToggleFavorite: () -> Unit,
     metrics: OxideMetrics,
     modifier: Modifier = Modifier
 ) {
@@ -2574,7 +2749,28 @@ private fun DiscoverResultCard(
 
         Spacer(Modifier.height(metrics.cardGap * 0.7f))
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 收藏是这一牌上唯一与安装无关的动作：它只改 MMKV 里的一条记录，
+            // 不下载任何东西，因此它不受安装忙影响；且它必须带一句读屏文字，
+            // 不能只靠一个星号表达
+            OxideIconButton(
+                onClick = onToggleFavorite,
+                glyph = if (favorite) "\u2605" else "\u2606",
+                modifier = Modifier.oxideIconDescription(
+                    stringResource(
+                        if (favorite) {
+                            R.string.oxide_cap_dis_fav_remove
+                        } else {
+                            R.string.oxide_cap_dis_fav_add
+                        }
+                    )
+                ),
+            )
+            Spacer(Modifier.width(metrics.cardGap * 0.6f))
             OxideButton(
                 text = stringResource(R.string.oxide_dis_action_install),
                 onClick = onInstall,
@@ -3512,7 +3708,7 @@ private fun DiscoverTaskRow(task: TitledTask, metrics: OxideMetrics) {
 
 /** 移动网络确认：安装器会在这里挂起 */
 @Composable
-private fun DiscoverMobileDataDialog(
+internal fun DiscoverMobileDataDialog(
     metrics: OxideMetrics,
     onDeny: () -> Unit,
     onAllow: () -> Unit
