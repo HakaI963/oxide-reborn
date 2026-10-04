@@ -164,6 +164,5 @@ private fun TaskCaption(text: String) {
         color = Oxide.FgMuted,
         fontSize = Oxide.Type.Label.fontSize,
         lineHeight = Oxide.Type.Label.lineHeight,
-        modifier = Modifier.padding(0.dp),
     )
 }

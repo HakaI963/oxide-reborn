@@ -599,7 +599,7 @@ private fun GameMenuTrack(
 
     Canvas(
         modifier = modifier
-            .height(knobRadius * 2)
+            .height(knobRadius * 2f)
             .then(
                 if (enabled) {
                     Modifier.pointerInput(valueRange) {
@@ -630,7 +630,7 @@ private fun GameMenuTrack(
                 } else Modifier
             )
             .semantics {
-                progressBarRangeInfo = ProgressBarRangeInfo(value = fraction, range = 0f..1f)
+                progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
                 contentDescription = "$label: $stateText"
                 setProgress { requested ->
                     val target = requested.coerceIn(0f, 1f)

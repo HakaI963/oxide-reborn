@@ -154,12 +154,13 @@ fun gameMenuMetricsFor(
 
     // 宽度先按比例给，再夹进夹紧区间，最后无论如何都不超过窗口
     val panelWidth = (
-        (widthDp.value * GameMenuPanelWidthFraction).coerceIn(GameMenuPanelMinWidth, GameMenuPanelMaxWidth) * scale
-        ).coerceAtMost((widthDp - edgeMargin * 2).coerceAtLeast(1.dp))
+        (widthDp.value * GameMenuPanelWidthFraction)
+            .coerceIn(GameMenuPanelMinWidth, GameMenuPanelMaxWidth) * scale
+        ).dp.coerceAtMost((widthDp - edgeMargin * 2f).coerceAtLeast(1.dp))
 
     // 高度同理：窗口特别矮时不能出现"下限比上限还大"的区间，
     // 那会让 coerceIn 直接抛异常，于是面板反而在最小窗口上打不开
-    val availableHeight = (heightDp - edgeMargin * 2).coerceAtLeast(1.dp)
+    val availableHeight = (heightDp - edgeMargin * 2f).coerceAtLeast(1.dp)
     val panelHeight = availableHeight.coerceAtLeast(GameMenuPanelMinHeight.dp.coerceAtMost(availableHeight))
 
     val controlHeight = 26.dp * scale
@@ -172,7 +173,7 @@ fun gameMenuMetricsFor(
         controlHeight = controlHeight,
         contentPadding = contentPadding,
         // 选项列表最多占面板高度的 45%，至少装得下三行
-        optionListMaxHeight = (panelHeight * 0.45f).coerceAtLeast(controlHeight * 3),
+        optionListMaxHeight = (panelHeight * 0.45f).coerceAtLeast(controlHeight * 3f),
         guiScale = scale,
     )
 }

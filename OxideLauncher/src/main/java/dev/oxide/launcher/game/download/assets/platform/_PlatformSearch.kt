@@ -346,7 +346,8 @@ suspend fun getVersionById(
                 searchers = mirroredCurseForgeSource(),
                 printLog = printLog
             ) { searcher ->
-                searcher.getVersion(projectID = pid, fileID = versionId)
+                // CurseForgeSearcher 返回的是外层包装，真正实现 PlatformVersion 的是 data
+                searcher.getVersion(projectID = pid, fileID = versionId).data
             }
         }
     }
