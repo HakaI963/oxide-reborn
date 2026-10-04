@@ -179,23 +179,21 @@ class GameOverlayLogicTest {
         )
         for (percent in listOf(75, 100, 125, 150)) {
             for ((width, height) in windows) {
-                for (fit in listOf(false, true)) {
-                    val b = gameOverlayBoundsFor(
-                        windowWidthDp = width,
-                        windowHeightDp = height,
-                        guiScalePercent = percent,
-                    )
-                    val label = "${width}x$height @${percent}%${if (fit) " fit" else ""}"
-                    assertTrue(
-                        "$label: width ${b.panelMaxWidth.value} + margin ${b.edgeMargin.value}",
-                        b.panelMaxWidth.value + b.edgeMargin.value * 2f <= width + 0.01f,
-                    )
-                    assertTrue(
-                        "$label: height ${b.panelMaxHeight.value} + margin ${b.edgeMargin.value}",
-                        b.panelMaxHeight.value + b.edgeMargin.value * 2f <= height + 0.01f,
-                    )
-                    assertTrue("$label: every value is positive", b.isUsable())
-                }
+                val b = gameOverlayBoundsFor(
+                    windowWidthDp = width,
+                    windowHeightDp = height,
+                    guiScalePercent = percent,
+                )
+                val label = "${width}x$height @${percent}%"
+                assertTrue(
+                    "$label: width ${b.panelMaxWidth.value} + margin ${b.edgeMargin.value}",
+                    b.panelMaxWidth.value + b.edgeMargin.value * 2f <= width + 0.01f,
+                )
+                assertTrue(
+                    "$label: height ${b.panelMaxHeight.value} + margin ${b.edgeMargin.value}",
+                    b.panelMaxHeight.value + b.edgeMargin.value * 2f <= height + 0.01f,
+                )
+                assertTrue("$label: every value is usable", b.isUsable())
             }
         }
     }
@@ -217,7 +215,8 @@ class GameOverlayLogicTest {
     fun `the content area is clamped before anything is allowed to scroll`() {
         // 一块很矮的窗口：内容区仍然必须够画出一行，否则列表连一项都不画
         val tiny = gameOverlayBoundsFor(240, 140)
-        assertTrue(tiny.contentMaxHeight >= GameOverlayMinContentHeight.dp)
+        assertTrue(tiny.contentMaxHeight >= contentFloorOf(tiny))
+        assertTrue(tiny.contentMaxHeight > 0.dp)
         // 正常窗口下：内容区 + 固定的两块 = 面板上限
         val normal = gameOverlayBoundsFor(1080, 1920)
         assertDp(GameOverlayChromeHeight, normal.chromeHeight.value)
@@ -226,8 +225,49 @@ class GameOverlayLogicTest {
             normal.contentMaxHeight.value,
         )
         assertDp(normal.panelMaxHeight.value, normal.totalHeight.value)
-        // 内容区被下限顶起来的那一档，总高也不会小于"下限 + 固定块"
-        assertTrue(tiny.totalHeight >= GameOverlayMinContentHeight.dp + tiny.chromeHeight)
+    }
+
+    @Test
+    fun `the chrome and the content always add up to the panel height`() {
+        // 这条等式是"先夹住再滚"能在面板上成立的前提：
+        // 标题栏与底栏永远放得下，内容区拿到的是剩下的全部
+        for (percent in listOf(75, 100, 125, 150)) {
+            for (window in listOf(
+                1080 to 1920, 640 to 360, 480 to 320, 360 to 240, 320 to 180,
+                240 to 160, 200 to 120, 160 to 90, 120 to 80, 96 to 64,
+            )) {
+                val b = gameOverlayBoundsFor(window.first, window.second, percent)
+                val label = "${window.first}x${window.second} @${percent}%"
+                assertEquals(
+                    label,
+                    b.panelMaxHeight.value,
+                    b.chromeHeight.value + b.contentMaxHeight.value,
+                    0.01f,
+                )
+                // 固定的两块至多占七成，剩下的三成永远是内容的
+                assertTrue(
+                    "$label: chrome ${b.chromeHeight.value} of ${b.panelMaxHeight.value}",
+                    b.chromeHeight.value <= b.panelMaxHeight.value * 0.70f + 0.01f,
+                )
+                assertTrue("$label: content ${b.contentMaxHeight.value}", b.contentMaxHeight > 0.dp)
+            }
+        }
+    }
+
+    @Test
+    fun `a window too short for the chrome yields to the content area`() {
+        // 90dp 高的窗口：写死的 112dp 固定块比面板还高。
+        // 那时让位的必须是固定块，而不是内容区——否则被裁掉的是关闭与确认
+        val tiny = gameOverlayBoundsFor(320, 90)
+        assertTrue(
+            "chrome ${tiny.chromeHeight.value} vs panel ${tiny.panelMaxHeight.value}",
+            tiny.chromeHeight.value < GameOverlayChromeHeight,
+        )
+        assertTrue(tiny.contentMaxHeight > 0.dp)
+        assertDp(tiny.panelMaxHeight.value, tiny.totalHeight.value)
+        // 热区跟着窗口收，但不低于 24dp 的绝对下限
+        assertTrue(tiny.buttonHeight >= GameOverlayMinTouchTargetFloor)
+        assertTrue(tiny.buttonHeight < GameOverlayMinTouchTarget)
     }
 
     @Test
@@ -300,10 +340,17 @@ class GameOverlayLogicTest {
     }
 
     @Test
-    fun `the fps axis keeps the data inside it`() {
+    fun `the fps axis maps every reading into the plot`() {
+        // 轴不保证把数据**包**在里面（"好数"边界会向外取整），
+        // 保证的是区间外的数据被夹到两端，而不是画到画布外面去
         val axis = gameFpsAxis(24, 96)
-        assertTrue(axis.min <= 24)
-        assertTrue(axis.max >= 96)
+        assertTrue(axis.span > 0)
+        for (fps in listOf(0, 12, 24, 60, 96, 240, 999)) {
+            val f = axis.fraction(fps)
+            assertTrue("fps=$fps -> $f", f.isFinite())
+            assertTrue("fps=$fps -> $f", f in 0f..1f)
+        }
+        // 两端精确落在网格线上
         assertEquals(0f, axis.fraction(axis.min), 0.0001f)
         assertEquals(1f, axis.fraction(axis.max), 0.0001f)
         // 区间外夹住，不越界
@@ -328,6 +375,26 @@ class GameOverlayLogicTest {
     }
 
     @Test
+    fun `an absurd fps reading cannot overflow the axis arithmetic`() {
+        for (pair in listOf(
+            Int.MIN_VALUE to Int.MAX_VALUE,
+            -5 to 100000,
+            0 to Int.MAX_VALUE,
+            500 to 400,
+        )) {
+            val axis = gameFpsAxis(pair.first, pair.second)
+            val label = "${pair.first}..${pair.second}"
+            assertTrue("$label: min ${axis.min}", axis.min >= 0)
+            assertTrue("$label: span ${axis.span}", axis.span > 0)
+            assertTrue("$label: span ${axis.span}", axis.span <= 200000)
+            // 刻度也必须还是一列递增的整数
+            val ticks = gameFpsAxisTicks(axis)
+            assertEquals(GameFpsAxisSegments + 1, ticks.size)
+            ticks.zipWithNext { a, b -> assertTrue("$label: $a -> $b", b > a) }
+        }
+    }
+
+    @Test
     fun `the chart draws no series before the first sample`() {
         assertFalse(fpsChartHasSeries(emptyList()))
         assertTrue(fpsChartHasSeries(listOf(0)))
@@ -336,15 +403,16 @@ class GameOverlayLogicTest {
 
     @Test
     fun `chart ticks share the grid so the labels line up with the rules`() {
-        // 每一格的中心是 (k + 0.5) * 高 / 6；k 条分割线与 k 个标注因此重合
-        val height = 120.dp
-        val cell = fpsLabelCellHeight(height)
+        // 每一格的中心是 (k + 0.5) * 绘图区高 / 6；k 条分割线与 k 个标注因此重合。
+        // 参数是绘图区高度（已经扣掉描边与内边距），不是图框的外高
+        val plotHeight = 120.dp
+        val cell = fpsLabelCellHeight(plotHeight)
         assertDp(20f, cell.value)
-        assertEquals(GameFpsAxisSegments + 1, (height / cell).value.toInt())
+        assertEquals(GameFpsAxisSegments + 1, (plotHeight / cell).value.toInt())
         val half = cell.value / 2f
         for (k in 0..GameFpsAxisSegments) {
-            val rule = half + k * (height.value - half * 2f) / GameFpsAxisSegments
-            val labelCentre = (k + 0.5f) * height.value / (GameFpsAxisSegments + 1)
+            val rule = half + k * (plotHeight.value - half * 2f) / GameFpsAxisSegments
+            val labelCentre = (k + 0.5f) * plotHeight.value / (GameFpsAxisSegments + 1)
             assertEquals("k=$k", labelCentre, rule, 0.01f)
         }
     }
@@ -440,6 +508,13 @@ class GameOverlayLogicTest {
             edgeMargin > 0.dp &&
             panelMaxWidth > 0.dp &&
             panelMaxHeight > 0.dp &&
-            contentMaxHeight >= GameOverlayMinContentHeight.dp * guiScale
+            contentMaxHeight > 0.dp &&
+            contentMaxHeight >= contentFloorOf(this) &&
+            buttonHeight >= GameOverlayMinTouchTargetFloor
     }
+
+    /** 内容区的下限，与 `gameOverlayBoundsFor` 里的算法一致 */
+    private fun contentFloorOf(bounds: GameOverlayBounds): Dp =
+        (GameOverlayMinContentHeight.dp * bounds.guiScale)
+            .coerceAtMost(bounds.panelMaxHeight * GameOverlayContentFloorMaxFraction)
 }

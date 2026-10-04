@@ -58,10 +58,22 @@ const val GameOverlayPanelMaxWidth: Float = 420f
 const val GameOverlayPanelMaxHeight: Float = 520f
 
 /** 标题栏与底部按钮栏这两块**固定**高度之和（未乘界面缩放，单位 dp） */
-const val GameOverlayChromeHeight: Float = 92f
+const val GameOverlayChromeHeight: Float = 112f
+
+/**
+ * 固定的两块最多能占面板的多少
+ *
+ * 极小的窗口上按写死的 112dp 去留白，留白本身就比面板还高，内容区会被压成 0，
+ * 而被裁掉的会正好是「关闭」与「确认」那两个按钮。这里给固定的两块一个比例上限，
+ * 剩下的高度全给内容区。
+ */
+const val GameOverlayChromeMaxFraction: Float = 0.70f
 
 /** 滚动内容区的高度下限：说明文字与按钮永远看得见，也因此不会有 0 高的列表 */
 const val GameOverlayMinContentHeight: Float = 48f
+
+/** 内容区的下限最多占面板的多少：窗口小到装不下时，让位的是下限而不是按钮 */
+const val GameOverlayContentFloorMaxFraction: Float = 0.30f
 
 /**
  * 退化窗口（容器量到 0，也就是面板刚创建还没布局的那一帧）的兜底值
@@ -71,8 +83,19 @@ const val GameOverlayMinContentHeight: Float = 48f
  */
 val GameOverlayAbsoluteMin: Dp = 1.dp
 
-/** 弹窗里可点的动作至少这么高。再小也还是能按到，而不必瞄准 4dp 的字 */
-val GameOverlayMinTouchTarget: Dp = 40.dp
+/** 弹窗里可点的动作至少这么高。与启动器自己的 `OxideDialogMinTouchTarget` 取同一个数 */
+val GameOverlayMinTouchTarget: Dp = 32.dp
+
+/**
+ * 再小的窗口也不把热区压到这以下
+ *
+ * 32dp 是这套界面自己的下限；窗口小到连它都放不下时也不该给一个 4dp 的按钮——
+ * WCAG 2.2 的最小目标尺寸是 24dp，再小就既点不准、也不该出现在无障碍树里。
+ */
+val GameOverlayMinTouchTargetFloor: Dp = 24.dp
+
+/** 热区在窗口里最多能占的高度比例：剩下的一大半要留给内容 */
+private const val GameOverlayTouchHeightMaxFraction = 0.26f
 
 /**
  * 一组已经算好的游戏内浮层尺寸
@@ -104,10 +127,10 @@ data class GameOverlayBounds(
     /**
      * 面板实际用掉的高度
      *
-     * 恒等于 `max(panelMaxHeight, minContent + chrome)`：
-     * 正常窗口下就是面板上限；窗口矮到连标题栏加按钮栏都装不下时，
-     * 由内容区那个下限把总高顶起来，代价是内容区会被面板裁掉一截——
-     * 但它绝不会变成 0，因此列表至少还能画出一项、还能滚。
+     * 由 [gameOverlayBoundsFor] 保证**恰好等于** [panelMaxHeight]：
+     * 固定的两块至多占七成，内容区拿到剩下的三成，因此标题栏与底栏永远放得下，
+     * 而内容区至少还有三成——足够画出一行、也足够滚。
+     * 退化窗口（0×0）那一档是例外：那里没有窗口可装，面板本来就是 1dp。
      */
     val totalHeight: Dp get() = chromeHeight + contentMaxHeight
 }
@@ -129,7 +152,13 @@ data class GameOverlayBounds(
  * 1. 面板加左右留白**永远不超过窗口**；
  * 2. 每个数都是正的、有限的——`coerceIn` 在上下界颠倒时不会抛异常，
  *    但也不会换掉那个值，于是 NaN 会一路传到 `heightIn`，在布局阶段崩掉；
- * 3. 内容区**先**被夹住，因此它恒不小于 [GameOverlayMinContentHeight]。
+ * 3. 内容区**先**被夹住，而它的下限是
+ *    `min(MinContentHeight × 缩放, 面板高度的 30%)`：窗口小到装不下那个固定的
+ *    下限时，让位的是下限本身，而不是标题栏与底栏那两个按钮。
+ *
+ * 由此还有一条更强的等式：`chromeHeight + contentMaxHeight == panelMaxHeight`
+ * 恒成立（退化窗口那一档除外）。也就是说标题栏与底栏**永远**放得下，
+ * 而内容区拿到的是剩下的全部——这正是"先夹住再滚"这件事能在面板上成立的前提。
  */
 fun gameOverlayBoundsFor(
     windowWidthDp: Int,
@@ -166,15 +195,21 @@ fun gameOverlayBoundsFor(
     val panelMaxWidth = minOf(GameOverlayPanelMaxWidth.dp * scale, availableWidth)
     val panelMaxHeight = minOf(GameOverlayPanelMaxHeight.dp * scale, availableHeight)
 
-    val chromeHeight = GameOverlayChromeHeight.dp * scale
-    // 先减、再兜底：内容区被压到 0 时，LazyColumn 连一项都不会画，更谈不上滚动
-    val contentMaxHeight =
-        (panelMaxHeight - chromeHeight).coerceAtLeast(GameOverlayMinContentHeight.dp * scale)
+    val chromeHeight = (GameOverlayChromeHeight.dp * scale)
+        .coerceAtMost(panelMaxHeight * GameOverlayChromeMaxFraction)
+    // 内容区的下限本身也要在极小的窗口上让一步：先减、再兜底，
+    // 内容区被压到 0 时 LazyColumn 连一项都不会画，更谈不上滚动
+    val contentFloor = (GameOverlayMinContentHeight.dp * scale)
+        .coerceAtMost(panelMaxHeight * GameOverlayContentFloorMaxFraction)
+    val contentMaxHeight = (panelMaxHeight - chromeHeight).coerceAtLeast(contentFloor)
 
     // 与窗口无关的那一半才乘界面缩放
     val pad = (minOf(width.value, 400f) * 0.03f).coerceIn(7f, 13f).dp * scale
     val rowGap = (pad * 0.6f).coerceAtLeast(2f.dp * scale)
-    val buttonHeight = GameOverlayMinTouchTarget * scale
+    // 热区也跟着窗口收：窗口小到装不下 32dp 时，让位的是热区而不是「关闭」按钮
+    val buttonHeight = (GameOverlayMinTouchTarget * scale)
+        .coerceAtMost((availableHeight * GameOverlayTouchHeightMaxFraction).coerceAtLeast(GameOverlayMinTouchTargetFloor))
+        .coerceAtLeast(GameOverlayMinTouchTargetFloor)
 
     return GameOverlayBounds(
         edgeMargin = edgeMargin,
@@ -310,9 +345,11 @@ data class GameFpsAxis(val min: Int, val max: Int) {
  * 纯函数，可直接单测。
  */
 fun gameFpsAxis(fpsMin: Int, fpsMax: Int): GameFpsAxis {
-    val low = minOf(fpsMin, fpsMax).coerceAtLeast(0)
-    val high = maxOf(fpsMin, fpsMax)
-    val range = (high - low).coerceAtLeast(0)
+    // 先夹进一个说得通的帧率范围：原始值可能是任何 Int（甚至负的），
+    // 而下面要算 low + span 与 high + step - 1，两处都会溢出
+    val low = minOf(fpsMin, fpsMax).coerceIn(0, GameFpsReasonableCeiling)
+    val high = maxOf(fpsMin, fpsMax).coerceIn(low, GameFpsReasonableCeiling)
+    val range = high - low
     for (step in GAME_FPS_AXIS_STEPS) {
         val span = step * GameFpsAxisSegments
         if (span < range) continue
@@ -338,6 +375,9 @@ fun gameFpsAxis(fpsMin: Int, fpsMax: Int): GameFpsAxis {
         GameFpsAxisSegments * GameFpsAxisSegments
     return GameFpsAxis(low, low + span)
 }
+
+/** 说得通的帧率上限：十万帧已经远超任何设备，再大只会把算术撑爆 */
+private const val GameFpsReasonableCeiling = 100_000
 
 /**
  * 纵轴刻度：含两端，从下往上递增，最后一个正好是轴的上界

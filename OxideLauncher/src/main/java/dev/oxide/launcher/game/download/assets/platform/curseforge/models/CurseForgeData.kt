@@ -331,7 +331,9 @@ class CurseForgeData(
 
     override fun platformDescription(): String = summary
 
-    override fun platformAuthor(): String? = authors.firstOrNull()?.name
+    // PlatformSearchData.platformAuthor() 声明的是非空 String，不能改成可空。
+    // 作者列表为空时这里返回空串，由调用方按“无作者”处理。
+    override fun platformAuthor(): String = authors.firstOrNull()?.name.orEmpty()
 
     override fun platformAuthors(): List<String> = authors.map { it.name }
 

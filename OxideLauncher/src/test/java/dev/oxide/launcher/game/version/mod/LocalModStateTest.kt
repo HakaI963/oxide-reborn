@@ -71,7 +71,6 @@ class LocalModStateTest {
         val mod = localMod(modFile(dir))
         assertTrue(mod.file.isEnabled())
         assertFalse(mod.file.isDisabled())
-        assertEquals(true, mod.file.isEnabled())
     }
 
     @Test
@@ -208,7 +207,7 @@ class LocalModStateTest {
         val disabled = File(dir, "sodium-0.5.jar.disabled")
         assertTrue(disabled.exists())
 
-        assertTrue("the live path is the .disabled one", mod.delete())
+        assertTrue("要删的必须是磁盘上此刻真实存在的那个路径", mod.delete())
         assertFalse(disabled.exists())
         assertFalse(File(dir, "sodium-0.5.jar").exists())
     }
@@ -223,15 +222,18 @@ class LocalModStateTest {
     }
 
     @Test
-    fun aDeletedModCanStillBeEnabledAndIsReportedEnabled() {
-        // 删除之后同一个对象还攥着一个已经不存在的路径：它必须报告禁用态之外的
-        // 事实，而不是继续拿旧路径上的布尔值说事。
+    fun aDeletedModLeavesNothingOnDiskToEnable() {
+        // 删除之后不存在"再启用"这件事：文件已经没有了。
+        // 状态仍然是从路径读出来的，所以报告的就是"路径上那个文件已经不在"。
         val dir = modsDir()
-        val mod = localMod(modFile(dir))
+        val file = modFile(dir)
+        val mod = localMod(file)
         mod.disable()
-        assertFalse(mod.file.isEnabled())
+
         assertTrue(mod.delete())
-        assertFalse(mod.file.isDisabled())
+        assertFalse(mod.file.exists())
+        assertFalse("再删一次必须如实说没删掉", mod.delete())
+        assertTrue(dir.listFiles()?.isEmpty() ?: false)
     }
 
     // ---- 后缀常量的自洽 ------------------------------------------------------

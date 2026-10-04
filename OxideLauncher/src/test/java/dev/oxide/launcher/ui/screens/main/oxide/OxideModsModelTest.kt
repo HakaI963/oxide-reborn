@@ -60,6 +60,7 @@ class OxideModsModelTest {
         key: String = "sodium-0.5.jar",
         enabled: Boolean = true,
         fileName: String = if (enabled) key else "$key$DISABLED",
+        path: String = "/tmp/mods/$fileName",
         displayName: String = "Sodium",
         modVersion: String? = "0.5.3",
         authors: List<String> = listOf("JellySquid"),
@@ -74,7 +75,7 @@ class OxideModsModelTest {
         notMod: Boolean = false,
     ) = OxideModRow(
         key = key,
-        path = "/tmp/mods/$fileName",
+        path = path,
         fileName = fileName,
         displayName = displayName,
         modVersion = modVersion,

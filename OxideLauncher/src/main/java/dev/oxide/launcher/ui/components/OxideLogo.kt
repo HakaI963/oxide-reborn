@@ -331,8 +331,9 @@ fun OxideMark(
         val side = this.size.minDimension
         val geometry = oxideMarkGeometry(side)
         val left = (side - side * OxideMarkHalfDiagonalRatio * 2f) / 2f
+        // horizontalGradient 的色标是 vararg：数组必须展开（*），不能传成一个 List
         val brush = Brush.horizontalGradient(
-            OxideMarkGradientStops.map { (stop, color) -> stop to color },
+            *OxideMarkGradientStops,
             startX = left,
             endX = side - left,
         )

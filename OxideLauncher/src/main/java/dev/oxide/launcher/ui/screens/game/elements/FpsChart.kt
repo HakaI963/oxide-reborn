@@ -99,7 +99,10 @@ fun FpsChart(
         }
     }
 
-    val labelCell = fpsLabelCellHeight(chartSize.height)
+    // 格子按**绘图区**的高度算，也就是去掉 1px 描边与内边距之后的那一块。
+    // 按外框算的话 6 个格子会正好铺满外框，而外框还要再减去描边与内边距，
+    // 最后一行就会被裁掉半格
+    val labelCell = fpsLabelCellHeight(chartSize.height - FpsChartFrameInset * 2)
 
     Row(
         modifier = modifier
@@ -161,14 +164,23 @@ fun FpsChart(
 private val FpsLabelStyle: TextStyle get() = Oxide.Type.Mono
 
 /**
+ * 图框每边让出多少：1px 描边加 2dp 内边距
+ *
+ * 绘图区因此是 `chartSize.height − 这个值 × 2`，标注格子与网格线都按绘图区算。
+ */
+private val FpsChartFrameInset: Dp = 3.dp
+
+/**
  * 一格标注框的高度
+ *
+ * 参数是**绘图区**的高度（已经扣掉描边与内边距），不是图框的外高。
  *
  * [GameFpsAxisSegments] 条分割线因此把高度分成 6 格，标注框也正好 6 个；
  * 每一格的中心 `(k + 0.5) * 高 / 6` 同时是第 k 条分割线的位置与第 k 个标注的
- * 中心，两者精确重合。
+ * 中心，两者精确重合——改造前这两者是差着 1.2dp 的，误差一路累积到最后一行。
  */
-internal fun fpsLabelCellHeight(chartHeight: Dp): Dp =
-    chartHeight / (GameFpsAxisSegments + 1)
+internal fun fpsLabelCellHeight(plotHeight: Dp): Dp =
+    plotHeight / (GameFpsAxisSegments + 1)
 
 /**
  * 绘制帧率图表
