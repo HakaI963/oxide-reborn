@@ -169,6 +169,29 @@ class GameOverlayLogicTest {
         assertFalse(gameOverlayListOverflows(1, Dp.Infinity, row))
     }
 
+    /**
+     * 回归：退化上限一律不算溢出，**无论有多少行**
+     *
+     * `gameOverlayScrollHeight` 把不可用的上限兜到 [GameOverlayAbsoluteMin] 只是为了让
+     * `verticalScroll` 永远拿不到 Infinity；那是"容器量到 0×0 那一帧"的兜底，
+     * 不是真的只有 1dp 可用。若拿分到的高度去比自然高度，一个 900 行的列表在那一帧
+     * 与一个 1 行的列表会被同样对待，而后者会被塞进 1dp 高的滚动区里。
+     */
+    @Test
+    fun `a degenerate cap is never an overflow, however many rows there are`() {
+        val row = 44.dp
+        for (cap in listOf(Dp.Infinity, Dp.Unspecified, 0.dp, (-5).dp)) {
+            for (count in listOf(0, 1, 4, 900)) {
+                assertFalse(
+                    "cap=$cap count=$count",
+                    gameOverlayListOverflows(count, cap, row),
+                )
+            }
+        }
+        // 真实的上限仍然照常判定
+        assertTrue(gameOverlayListOverflows(900, 200.dp, row))
+    }
+
     // -------------------------------------------------------------------------
     // 面板的有界高度
     // -------------------------------------------------------------------------

@@ -270,12 +270,18 @@ fun gameOverlayListHeight(itemCount: Int, maxHeight: Dp, rowHeight: Dp): Dp =
 /**
  * 这个列表会不会溢出、也就是需不需要挂滚动
  *
- * 定义成"分到的高度比自然高度小"，而不是直接比自然高度和上限：
- * 那样的话上限退化时也会被算成溢出，于是一个只有一行的列表也挂上一条滚动条。
+ * 定义成"自然高度比上限高"，而不是"分到的高度比自然高度小"：
+ * 后者会把**退化**的上限也算成溢出——[gameOverlayScrollHeight] 把未指定或非正的上限
+ * 兜到 [GameOverlayAbsoluteMin] 只是为了不让 `verticalScroll` 拿到 Infinity，
+ * 那是容器量到 0×0 时那一帧的兜底，不是真的只有 1dp 可用。
+ * 按分到的高度去比，于是容器刚创建、只有一行内容的那一帧也会被算成溢出：
+ * 一行的列表被塞进一个 1dp 高的滚动区，什么都看不见。
+ * 因此上限不可用时一律按"没有上限"处理，也就是不溢出。
  */
-fun gameOverlayListOverflows(itemCount: Int, maxHeight: Dp, rowHeight: Dp): Boolean =
-    gameOverlayListHeight(itemCount, maxHeight, rowHeight) <
-        gameOverlayListContentHeight(itemCount, rowHeight)
+fun gameOverlayListOverflows(itemCount: Int, maxHeight: Dp, rowHeight: Dp): Boolean {
+    if (!maxHeight.isUsableBound()) return false
+    return gameOverlayListContentHeight(itemCount, rowHeight) > maxHeight
+}
 
 // ---------------------------------------------------------------------------
 // 帧率图

@@ -65,12 +65,19 @@ class OxideMarkGeometryTest {
 
     @Test
     fun outerStrokeAtTheSidebarRestSize() {
-        // 37dp 静止尺寸（Oxide.MarkSize）下：外环描边 1.228px，内环描边 0.953px。
+        // 37dp 静止尺寸（Oxide.MarkSize）下：外环描边 1.228dp，内环描边 0.953dp。
         // 内环是亚像素的，这是美术稿自己的比例（描边只有外接菱形宽度的 2.58%），
         // 靠抗锯齿仍然读得出来；侧栏里不额外加粗，否则就和图标对不上了。
+        //
+        // 两个数都是 `半对角线 × 描边比例`，直接算：
+        //   外环 37 × 0.5 × 0.06639 = 1.228215
+        //   内环 37 × 0.5 × 0.61243 × 0.08411 = 0.952962
+        // （这里原本写 0.95286，那是把内环描边比例截断成 0.0841 之后算出来的；
+        //   常量本身是 0.08411，与实测 (139.512 - 124.672) / 176.456 = 0.0841003
+        //   在另一条测试给的 1e-5 容差之内。）
         val g = oxideMarkGeometry(37f)
         assertEquals(1.22822f, g.outer.strokeWidth, 1e-4f)
-        assertEquals(0.95286f, g.inner.strokeWidth, 1e-4f)
+        assertEquals(0.95296f, g.inner.strokeWidth, 1e-4f)
     }
 
     // ---- 圆角：这是圆角**正方形**转 45°，不是正八边形，也不是圆 ----------
@@ -114,7 +121,8 @@ class OxideMarkGeometryTest {
     @Test
     fun rotatedTipsLandOnTheBoxAxes() {
         // 正方形的角本来在自身坐标的对角线上，转 45° 后就落在方框的四条轴上：
-        // 上/下/左/右四个尖端正好在方框四边的中点上。这就是菱形。
+        // 上/下/左/右四个尖端各在一条轴上（离中心一个半对角线减去半个描边）。
+        // 这就是菱形。
         val side = 100f
         val g = oxideMarkGeometry(side)
         for (ring in listOf(g.outer, g.inner)) {
@@ -133,8 +141,21 @@ class OxideMarkGeometryTest {
                 )
             }
         }
-        // 外环的尖端正好够到方框边长的一半
-        assertEquals(side * OxideMarkHalfDiagonalRatio, g.outer.centreLineHalfDiagonal, 1e-2f)
+        // 尖端落在**描边中心线**上，因此它到中心的距离比半对角线少半个描边：
+        // 100 × 0.5 − 100 × 0.5 × 0.06639 / 2 = 50 − 1.65975 = 48.34025。
+        // 够到方框边长一半的是**外缘**（中心线再加半个描边），不是中心线本身——
+        // 这里原本把这两件事数成了同一件，于是差了一个半个描边。
+        assertEquals(
+            side * OxideMarkHalfDiagonalRatio - g.outer.strokeWidth / 2f,
+            g.outer.centreLineHalfDiagonal,
+            1e-2f,
+        )
+        assertEquals(
+            "外缘必须正好落在方框边长的一半",
+            side * OxideMarkHalfDiagonalRatio,
+            g.outer.outerHalfDiagonal,
+            1e-2f,
+        )
     }
 
     @Test

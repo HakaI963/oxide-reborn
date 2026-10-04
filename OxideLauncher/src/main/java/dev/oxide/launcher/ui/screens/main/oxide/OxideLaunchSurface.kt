@@ -69,6 +69,12 @@ internal fun oxideLaunchSurface(
     operation: OxidePreflightOperation,
 ): OxideLaunchSurface = when {
     !oxideLaunchVisible(flowActive, operation) -> OxideLaunchSurface.Hidden
+    // 流程在跑时阶段列表就是全部真相。operation 只在 pre-flight 那几帧里被写成
+    // "要问用户"的那几条，而 [dev.oxide.launcher.viewmodel.LaunchGameViewModel] 在
+    // 写入它之后立刻 cancel()，因此"流程还在跑 + 停在一条 pre-flight 上"只是
+    // 一次赋值与一次清空之间的残帧。让它盖住阶段列表只会在那一帧里换掉整块内容，
+    // 并且顺带把取消键也一起换掉（见 [oxideLaunchCancelSupported]）。
+    flowActive -> OxideLaunchSurface.Progress
     oxidePreflightAsks(operation) -> OxideLaunchSurface.Preflight
     else -> OxideLaunchSurface.Progress
 }
@@ -114,6 +120,13 @@ internal enum class OxideLaunchPhase {
  *
  * 判据的顺序就是"更靠前的那一段优先"：任何一条要人拿主意的检查都还是 Checking，
  * 因为那时阶段列表还可能被取消（凭据被拒与刷新失败都会 `cancel()` 掉整条流程）。
+ *
+ * [OxidePreflightOperation.RealLaunch] **不在**这份名单里：它是"检查全部通过、
+ * 流程已经起步"，此后就由阶段读数说了算。它与 [OxidePreflightOperation.Idle]
+ * （[dev.oxide.launcher.viewmodel.LaunchGameViewModel] 在启动流程的那一帧会把
+ * operation 复位成 None，因此跑起来的整个过程里读到的都是 Idle）一样，
+ * 阶段读数才是唯一的真相来源——把 RealLaunch 一律钉成 Checking 会让
+ * "正在跑"与"已经交接"这两段在面板上永远看不见。
  */
 internal fun oxideLaunchPhase(
     operation: OxidePreflightOperation,
@@ -123,8 +136,9 @@ internal fun oxideLaunchPhase(
     val completed = stages.count { it.stage == TaskStage.COMPLETED }
     return when {
         operation == OxidePreflightOperation.Checking -> OxideLaunchPhase.Checking
-        operation == OxidePreflightOperation.RealLaunch -> OxideLaunchPhase.Checking
         oxidePreflightAsks(operation) -> OxideLaunchPhase.Checking
+        // 还没有任何一条阶段可读：按下 Play 到第一条阶段出现之间的那段空窗，
+        // 以及 [OxidePreflightOperation.RealLaunch] 与第一条阶段之间的那一帧
         stages.isEmpty() -> OxideLaunchPhase.Checking
         running > 0 -> OxideLaunchPhase.Running
         completed >= stages.size -> OxideLaunchPhase.Handoff

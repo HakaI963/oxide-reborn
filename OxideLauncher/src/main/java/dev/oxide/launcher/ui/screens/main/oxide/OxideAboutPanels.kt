@@ -82,8 +82,6 @@ import dev.oxide.launcher.path.URL_PROJECT
 import dev.oxide.launcher.path.URL_WEBLATE
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.activities.startEditorActivity
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
-import dev.oxide.launcher.ui.components.SimpleEditDialog
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.file.shareFile
 import dev.oxide.launcher.utils.logging.Logger
@@ -960,9 +958,10 @@ fun OxideControlLayoutsPanel(
 
         val deleting = pendingDelete
         if (deleting != null) {
-            SimpleAlertDialog(
+            OxideConfirmDialog(
+                confirmText = stringResource(R.string.generic_delete),
                 title = stringResource(R.string.generic_warning),
-                text = stringResource(
+                message = stringResource(
                     R.string.control_manage_delete_message,
                     if (deleting.isSupport) {
                         deleting.controlLayout.info.name.translate(locale)
@@ -980,17 +979,17 @@ fun OxideControlLayoutsPanel(
 
         // 新建布局：三次就地确认，顺序与旧界面那一组对话框一致
         when (draft) {
-            ControlLayoutDraftStep.Name -> SimpleEditDialog(
+            ControlLayoutDraftStep.Name -> OxideTextEntryDialog(
                 title = stringResource(R.string.control_manage_create_new_title),
                 value = draftName,
                 onValueChange = { draftName = it },
-                label = { Text(stringResource(R.string.control_manage_create_new_name)) },
-                isError = draftName.isBlank() || draftName.length > NAME_LENGTH,
-                supportingText = {
-                    Text(stringResource(R.string.generic_input_length, draftName.length, NAME_LENGTH))
-                },
+                label = stringResource(R.string.control_manage_create_new_name),
+                isValid = { it.isNotBlank() && it.length <= NAME_LENGTH },
+                supportText = stringResource(R.string.generic_input_length, draftName.length, NAME_LENGTH),
                 singleLine = true,
-                onDismissRequest = { draft = null },
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
+                onDismiss = { draft = null },
                 onConfirm = {
                     if (draftName.isNotBlank() && draftName.length <= NAME_LENGTH) {
                         draft = ControlLayoutDraftStep.Author
@@ -998,32 +997,32 @@ fun OxideControlLayoutsPanel(
                 },
             )
 
-            ControlLayoutDraftStep.Author -> SimpleEditDialog(
+            ControlLayoutDraftStep.Author -> OxideTextEntryDialog(
                 title = stringResource(R.string.control_manage_create_new_title),
                 value = draftAuthor,
                 onValueChange = { draftAuthor = it },
-                label = { Text(stringResource(R.string.control_manage_create_new_author)) },
-                isError = draftAuthor.length > AUTHOR_NAME_LENGTH,
-                supportingText = {
-                    Text(stringResource(R.string.generic_input_length, draftAuthor.length, AUTHOR_NAME_LENGTH))
-                },
+                label = stringResource(R.string.control_manage_create_new_author),
+                isValid = { it.isNotBlank() && it.length <= NAME_LENGTH },
+                supportText = stringResource(R.string.generic_input_length, draftAuthor.length, AUTHOR_NAME_LENGTH),
                 singleLine = true,
-                onDismissRequest = { draft = null },
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
+                onDismiss = { draft = null },
                 onCancel = { draft = null },
                 onConfirm = { draft = ControlLayoutDraftStep.Version },
             )
 
-            ControlLayoutDraftStep.Version -> SimpleEditDialog(
+            ControlLayoutDraftStep.Version -> OxideTextEntryDialog(
                 title = stringResource(R.string.control_manage_create_new_title),
                 value = draftVersion,
                 onValueChange = { draftVersion = it },
-                label = { Text(stringResource(R.string.control_manage_create_new_version_name)) },
-                isError = draftVersion.length > VERSION_NAME_LENGTH,
-                supportingText = {
-                    Text(stringResource(R.string.generic_input_length, draftVersion.length, VERSION_NAME_LENGTH))
-                },
+                label = stringResource(R.string.control_manage_create_new_version_name),
+                isValid = { it.isNotBlank() && it.length <= NAME_LENGTH },
+                supportText = stringResource(R.string.generic_input_length, draftVersion.length, VERSION_NAME_LENGTH),
                 singleLine = true,
-                onDismissRequest = { draft = null },
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
+                onDismiss = { draft = null },
                 onCancel = { draft = null },
                 onConfirm = {
                     val name = draftName

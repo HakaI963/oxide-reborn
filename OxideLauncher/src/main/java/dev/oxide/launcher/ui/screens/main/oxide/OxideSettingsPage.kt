@@ -76,7 +76,6 @@ import dev.oxide.launcher.setting.enums.MirrorSourceType
 import dev.oxide.launcher.setting.enums.applyLanguage
 import dev.oxide.launcher.setting.unit.floatRange
 import dev.oxide.launcher.ui.androidText
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
 import dev.oxide.launcher.ui.theme.ColorThemeType
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.ui.theme.ProvideOxideChrome
@@ -980,9 +979,10 @@ private fun AppearanceCategory(
     }
 
     if (confirmReset) {
-        SimpleAlertDialog(
+        OxideConfirmDialog(
             title = stringResource(R.string.generic_reset),
-            text = stringResource(R.string.settings_launcher_background_reset_message),
+            message = stringResource(R.string.settings_launcher_background_reset_message),
+            confirmText = stringResource(R.string.generic_reset),
             onConfirm = {
                 confirmReset = false
                 scope.launch { backgroundViewModel?.delete() }

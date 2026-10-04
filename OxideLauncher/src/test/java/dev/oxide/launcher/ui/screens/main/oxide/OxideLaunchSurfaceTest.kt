@@ -78,6 +78,33 @@ class OxideLaunchSurfaceTest {
         }
     }
 
+    /**
+     * 回归：流程在跑时，一条还没被复位掉的 pre-flight 不得盖住阶段列表
+     *
+     * `LaunchGameViewModel.onReloginRequired` / `onRefreshFailed` 是"先写 operation、
+     * 再 cancel()"，因此存在一帧 `flow != null` 与"要问用户"的 operation 同时成立。
+     * 那一帧里 pre-flight 若优先，面板会整块换掉阶段列表，取消键也跟着消失
+     * （`oxideLaunchCancelSupported` 要求 Progress 表面）。operation 一复位，
+     * 同一件事仍然是 Preflight——两种呈现不会同时出现。
+     */
+    @Test
+    fun aLiveFlowOutranksALeftoverPreflightOperation() {
+        val asking = OxidePreflightOperation.entries.filter { oxidePreflightAsks(it) }
+        assertTrue(asking.isNotEmpty())
+        asking.forEach { operation ->
+            assertEquals(
+                "流程在跑时不该换成 pre-flight：$operation",
+                OxideLaunchSurface.Progress,
+                oxideLaunchSurface(flowActive = true, operation = operation),
+            )
+            assertEquals(
+                "流程一停，同一个 operation 立刻变成 pre-flight：$operation",
+                OxideLaunchSurface.Preflight,
+                oxideLaunchSurface(flowActive = false, operation = operation),
+            )
+        }
+    }
+
     /** 按下 Play 到第一条阶段出现之间有一段真实空窗（检查里有挂起的 ensureVulkanSupported） */
     @Test
     fun theCheckingWindowShowsTheProgressSurfaceBeforeAnyStageExists() {
@@ -187,6 +214,39 @@ class OxideLaunchSurfaceTest {
                 stages(TaskStage.COMPLETED to 1f, TaskStage.COMPLETED to 1f),
             ),
         )
+    }
+
+    /**
+     * 回归：跑起来之后读到的是 `Idle`，因此准备状态只能由阶段读数决定
+     *
+     * `LauncherElements` 在 `LaunchGameViewModel.start()` 之后立刻把 operation 复位成
+     * `None`，所以整个阶段列表期间 operation 都是 [OxidePreflightOperation.Idle]。
+     * 这一条把"没有任何一条 pre-flight 时，阶段说什么就是什么"钉死：
+     * Idle 与 RealLaunch 得到的准备状态必须完全一致。
+     */
+    @Test
+    fun thePhaseFollowsTheStagesOnceTheOperationHasBeenReset() {
+        assertEquals(
+            OxideLaunchPhase.Running,
+            oxideLaunchPhase(OxidePreflightOperation.Idle, stages(TaskStage.RUNNING to 0.4f)),
+        )
+        assertEquals(
+            OxideLaunchPhase.Handoff,
+            oxideLaunchPhase(OxidePreflightOperation.Idle, stages(TaskStage.COMPLETED to 1f)),
+        )
+        // 与 RealLaunch 走的是同一条判据：两条 operation 只差在 pre-flight 上
+        for (list in listOf(
+            stages(TaskStage.RUNNING to 0.4f),
+            stages(TaskStage.PREPARING to -1f),
+            stages(TaskStage.COMPLETED to 1f),
+            emptyList(),
+        )) {
+            assertEquals(
+                "RealLaunch 与 Idle 在阶段上必须一致",
+                oxideLaunchPhase(OxidePreflightOperation.RealLaunch, list),
+                oxideLaunchPhase(OxidePreflightOperation.Idle, list),
+            )
+        }
     }
 
     @Test

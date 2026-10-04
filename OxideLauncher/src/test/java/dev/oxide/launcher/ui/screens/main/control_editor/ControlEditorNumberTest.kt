@@ -105,7 +105,12 @@ class ControlEditorNumberTest {
         assertEquals("49.83%", formatEditorValue(49.83f, suffix = "%", decimals = 2))
         assertEquals("49.8%", formatEditorValue(49.83f, suffix = "%", decimals = 1))
         assertEquals("50dp", formatEditorValue(50f, suffix = "dp", decimals = 0))
-        assertEquals("50", formatEditorValue(50f, suffix = null, decimals = 2))
+        // 两位就是两位：50 × 100 = 5000，整数部分 50、余数 00 补零，因此是 "50.00"。
+        // 这里原本写 "50"，那与下一条用例（-3.5 在两位下必须是 "-3.50"）自相矛盾：
+        // 补零是"按位数拼"的定义，不是负数才有的特例。
+        assertEquals("50.00", formatEditorValue(50f, suffix = null, decimals = 2))
+        // 没有单位就没有单位：末尾不留任何字符
+        assertEquals("50", formatEditorValue(50f, suffix = null, decimals = 0))
     }
 
     @Test

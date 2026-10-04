@@ -154,7 +154,7 @@ class LocalModStateTest {
     @Test
     fun theReportedStateAlwaysFollowsTheFilesystem() {
         // 另一个人从外面把文件改了之后，本地报告的值必须立刻跟着变：
-        // 状态是从路径读出来的，因此不存在"缓存下来的旧状态"。
+        // 状态是从**磁盘上此刻存在的那个路径**读出来的，因此不存在"记下来的旧路径"。
         val dir = modsDir()
         val file = modFile(dir)
         val mod = localMod(file)
@@ -165,6 +165,30 @@ class LocalModStateTest {
 
         assertTrue(File(dir, "sodium-0.5.jar.disabled").renameTo(file))
         assertTrue(mod.file.isEnabled())
+    }
+
+    /**
+     * 回归：外部改名之后，操作必须落在磁盘上真实存在的那个路径上
+     *
+     * 记下来的路径会过时。若仍然拿它去 `Files.move`，源不存在时抛出的
+     * `NoSuchFileException` 会被 `renameToSafely` 吞掉——一次没发生的改名被当成
+     * 什么也没发生，界面上就是"再启用没反应"。
+     */
+    @Test
+    fun anExternallyRenamedFileIsTheOneWeOperateOn() {
+        val dir = modsDir()
+        val file = modFile(dir)
+        val mod = localMod(file)
+
+        // 外部把启用的那一份禁用掉了
+        assertTrue(file.renameTo(File(dir, "sodium-0.5.jar.disabled")))
+        // 磁盘上已经是禁用态：再点一次禁用必须是彻底的空操作，而不是搬一个不存在的源
+        assertFalse(mod.disable())
+        assertFalse(mod.file.isEnabled())
+        // 而"再启用"必须真的搬回那个文件——搬的是磁盘上存在的那一个
+        assertTrue(mod.enable())
+        assertTrue(File(dir, "sodium-0.5.jar").exists())
+        assertFalse(File(dir, "sodium-0.5.jar.disabled").exists())
     }
 
     @Test

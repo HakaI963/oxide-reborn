@@ -70,8 +70,29 @@ class LocalMod(
      */
     val checkRemote: Boolean = true,
 ) {
-    var file by mutableStateOf(modFile)
-        private set
+    /**
+     * 记下来的路径：上一次**看到**这个文件时它在哪里
+     *
+     * 它本身不是答案，答案由 [file] 每次重新落到磁盘上给出。改名仍然要写回这里，
+     * 这样启用/禁用本身也能触发重组。
+     */
+    private var path by mutableStateOf(modFile)
+
+    /**
+     * 此刻磁盘上真实存在的那个文件
+     *
+     * 直接读记下来的路径是不够的：模组目录随时可能被外部改过——文件管理器改了名、
+     * 模组更新换掉了那一份、用户把它删了——而这些改动都不会更新本对象。
+     * 于是"报告出来的启用态"会与磁盘脱节，而下一次操作会拿着一个不存在的源路径
+     * 去 `Files.move`，失败被吞掉，看起来就是"点了没反应"
+     * （`OxideModsViewModel.toggle` 特意"再按磁盘上此刻的真实状态筛一次"，
+     * 那一筛必须真的读得到磁盘）。
+     *
+     * 因此每次读都重新解析：记下来的路径还在就用它（改名都是本类自己做的），
+     * 不在就看它带/不带 [DISABLED_SUFFIX] 的兄弟路径在不在；两个都不在时返回
+     * 记下来的那个——于是 [delete] 如实汇报"什么也没删掉"，而不是去删一个兄弟路径。
+     */
+    val file: File get() = path.resolveOnDisk()
 
     /**
      * 禁用模组
@@ -83,7 +104,7 @@ class LocalMod(
         val newFile = File("${file.absolutePath}$DISABLED_SUFFIX")
         if (!file.renameToSafely(newFile)) return false
 
-        file = newFile
+        path = newFile
         return true
     }
 
@@ -104,7 +125,7 @@ class LocalMod(
         val newFile = enabledMod(file)
         if (!file.renameToSafely(newFile)) return false
 
-        file = newFile
+        path = newFile
         return true
     }
 
@@ -156,6 +177,13 @@ class LocalMod(
             Logger.warning(TAG, "Failed to rename file {$this} to $dest!", e)
             false
         }
+    }
+
+    /** [file] 的实现：记下来的路径没了就看它换过名的那一个，见 [file] 的说明 */
+    private fun File.resolveOnDisk(): File {
+        if (exists()) return this
+        val sibling = if (isEnabled()) File("$absolutePath$DISABLED_SUFFIX") else enabledMod(this)
+        return if (sibling.exists()) sibling else this
     }
 }
 

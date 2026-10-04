@@ -51,8 +51,6 @@ import dev.oxide.launcher.setting.enums.GestureActionType
 import dev.oxide.launcher.setting.enums.MouseControlMode
 import dev.oxide.launcher.setting.unit.ParcelableSettingUnit
 import dev.oxide.launcher.setting.unit.floatRange
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
-import dev.oxide.launcher.ui.components.SimpleEditDialog
 import dev.oxide.launcher.ui.control.GamepadBindingKeyboard
 import dev.oxide.launcher.ui.control.gamepad.GamepadMap
 import dev.oxide.launcher.ui.control.gamepad.JoystickMode
@@ -875,26 +873,25 @@ private fun OxideGamepadBindingsDrawer(
         val duplicate = remember(draft) {
             draft.isNotBlank() && gamepad.containsConfig(draft.take(GAMEPAD_CONFIG_NAME_LENGTH))
         }
-        SimpleEditDialog(
+        OxideTextEntryDialog(
             title = stringResource(R.string.settings_gamepad_config_create),
+            label = "${stringResource(R.string.settings_gamepad_config_create_name)} " +
+                "(${draft.length}/$GAMEPAD_CONFIG_NAME_LENGTH)",
             value = draft,
             onValueChange = { draft = it.take(GAMEPAD_CONFIG_NAME_LENGTH) },
-            label = {
-                Text(
-                    text = "${stringResource(R.string.settings_gamepad_config_create_name)} " +
-                        "(${draft.length}/$GAMEPAD_CONFIG_NAME_LENGTH)"
-                )
+            maxLength = GAMEPAD_CONFIG_NAME_LENGTH,
+            // 重名与空名都不给提交，提示与旧实现一致
+            isValid = { !duplicate(it) && it.isNotBlank() },
+            errorText = if (duplicate(draft)) {
+                stringResource(R.string.settings_gamepad_config_create_contains)
+            } else {
+                null
             },
-            isError = duplicate || draft.isBlank(),
-            supportingText = {
-                if (duplicate) {
-                    Text(text = stringResource(R.string.settings_gamepad_config_create_contains))
-                }
-            },
-            singleLine = true,
-            onDismissRequest = { createProfile = false },
+            confirmText = stringResource(R.string.generic_confirm),
+            cancelText = stringResource(R.string.generic_cancel),
+            onDismiss = { createProfile = false },
             onConfirm = {
-                if (!duplicate && draft.isNotBlank()) {
+                if (!duplicate(draft) && draft.isNotBlank()) {
                     gamepad.createNewConfig(
                         name = draft,
                         onContainsConfig = {
@@ -914,9 +911,10 @@ private fun OxideGamepadBindingsDrawer(
 
     if (deleteProfile) {
         val name = current?.name
-        SimpleAlertDialog(
+        OxideConfirmDialog(
             title = stringResource(R.string.settings_gamepad_config_delete),
-            text = stringResource(R.string.settings_gamepad_config_delete_message),
+            message = stringResource(R.string.settings_gamepad_config_delete_message),
+            confirmText = stringResource(R.string.generic_delete),
             onConfirm = {
                 // 与旧设置页一致：MMKV 是内存映射的，编码一次走的是内存，
                 // 放到 IO 上反而会让抽屉读 currentMapping 时跨线程
