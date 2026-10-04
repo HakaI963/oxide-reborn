@@ -795,8 +795,7 @@ fun OxideListDialog(
                         lineHeight = Oxide.Type.Body.lineHeight,
                     )
                 }
-                return@body
-            }
+            } else {
             val listState = rememberLazyListState()
             LazyColumn(
                 modifier = Modifier
@@ -822,6 +821,7 @@ fun OxideListDialog(
                         },
                     )
                 }
+            }
             }
         },
         actions = actions,

@@ -153,7 +153,7 @@ internal fun EditorPositionPad(
                                 }
                                 change.consume()
                             }
-                            if (moved) currentFinish(current)
+                            if (moved) currentFinish(editorPositionFromOffset(current))
                         }
                     }
                 } else {
@@ -646,7 +646,7 @@ internal fun EditorFooterRow(modifier: Modifier = Modifier, content: @Composable
 
 /** 底部那排按钮里的一个：等宽、按压有反馈、禁用时整块变灰 */
 @Composable
-internal fun EditorFooterButton(
+internal fun RowScope.EditorFooterButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,

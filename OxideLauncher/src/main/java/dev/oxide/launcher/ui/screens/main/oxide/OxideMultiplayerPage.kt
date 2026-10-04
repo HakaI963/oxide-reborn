@@ -242,7 +242,8 @@ fun OxideMultiplayerPage(
                     pickedVersionPath = version.getVersionPath().absolutePath
                 },
                 servers = servers,
-                phase = serverList?.phase ?: OxideServerListPhase.NoInstance,
+                phase = (serverList?.phase as? OxideServerListPhase)
+                    ?: OxideServerListPhase.NoInstance,
                 saving = serverList?.saving == true,
                 editor = editor,
                 onEditor = { editor = it },
@@ -538,7 +539,7 @@ internal class OxideServerListViewModel(gamePath: File) : ViewModel() {
                 withContext(Dispatchers.Main) { saving = true }
                 runCatching {
                     beforeSave()
-                    allServers.save(gamePath)
+                    allServers.save(dataFile)
                     if (reload) {
                         _servers.value = allServers.serverList
                     }

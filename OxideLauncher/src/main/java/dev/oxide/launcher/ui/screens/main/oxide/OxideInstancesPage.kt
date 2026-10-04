@@ -330,7 +330,7 @@ fun OxideInstancesPage(
                     if (refreshInline) {
                         Box(
                             modifier = Modifier.onSizeChanged { size ->
-                                refreshButtonWidth = with(LocalDensity.current) {
+                                refreshButtonWidth = with(density) {
                                     size.width.toDp().value
                                 }
                             },
@@ -348,7 +348,7 @@ fun OxideInstancesPage(
                     }
                     Box(
                         modifier = Modifier.onSizeChanged { size ->
-                            installButtonWidth = with(LocalDensity.current) {
+                            installButtonWidth = with(density) {
                                 size.width.toDp().value
                             }
                         },
