@@ -195,7 +195,7 @@ fun BoxWithConstraintsScope.ControlEditor(
             remember(normalButtons, textBoxes, joystickButtons) {
                 // 文本框先、普通按键后、摇杆最后：与画布上的层次一致，
                 // 因此网格里的次序与画布上的压盖关系是同一件事
-                textBoxes + normalButtons + joystickButtons
+                textBoxes.orEmpty() + normalButtons.orEmpty() + joystickButtons.orEmpty()
             }
 
         EditorDock(

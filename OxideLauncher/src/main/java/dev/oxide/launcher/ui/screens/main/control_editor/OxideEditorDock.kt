@@ -243,6 +243,9 @@ private fun EditorDockHeader(
 /** 面板里那一条唯一的滚动容器 */
 @Composable
 private fun EditorDockBody(
+    onSave: () -> Unit,
+    saveAndExit: () -> Unit,
+    onExit: () -> Unit,
     layers: List<ObservableControlLayer>,
     selectedLayer: ObservableControlLayer?,
     selectedWidget: ObservableWidget?,

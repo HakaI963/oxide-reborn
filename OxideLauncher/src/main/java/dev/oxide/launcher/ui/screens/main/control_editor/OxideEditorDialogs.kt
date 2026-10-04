@@ -137,8 +137,8 @@ internal fun EditorBall(
             modifier = Modifier
                 .offset {
                     IntOffset(
-                        x = anchored.x.toInt().coerceIn(0, maxX.toInt()),
-                        y = anchored.y.toInt().coerceIn(0, maxY.toInt()),
+                        x = anchored.x.toInt().coerceIn(0, maxX.value.toInt()),
+                        y = anchored.y.toInt().coerceIn(0, maxY.value.toInt()),
                     )
                 }
                 .size(ballSize)
@@ -223,13 +223,15 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
                 onMergeDownward = {
                     viewModel.observableLayout.mergeDownward(layer)
                 },
+                val defaultLayerName = stringResource(R.string.control_editor_edit_layer_default)
                 onCopy = {
                     // 复制出来的层拿一份打包后的内容，再挂到布局上。
-                    // 名字沿用"新建层"的默认名，与旧版一致
+                    // 名字沿用"新建层"的默认名，与旧版一致；这个回调不是 composable，
+                    // 所以文案在组合期取好再传进来，不能在这里调 stringResource。
                     val base = layer.pack()
                     val copied = viewModel.observableLayout.addLayer(
                         layer = createNewLayer(
-                            defaultLayerName = stringResource(R.string.control_editor_edit_layer_default)
+                            defaultLayerName = defaultLayerName
                         ).copy(
                             hide = base.hide,
                             hideWhenMouse = base.hideWhenMouse,
