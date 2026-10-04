@@ -42,8 +42,18 @@ import org.junit.Test
  */
 class GameOverlayLogicTest {
 
+    // 三种组合都用到了：常量是 Float 或 Dp，实参也可能是 Float 或 Dp。
+    // 全部走同一条比较与同一个容差，只是省掉调用点的 .value 噪声。
     private fun assertDp(expected: Float, actual: Dp) {
         assertEquals(expected, actual.value, 0.01f)
+    }
+
+    private fun assertDp(expected: Dp, actual: Dp) {
+        assertEquals(expected.value, actual.value, 0.01f)
+    }
+
+    private fun assertDp(expected: Float, actual: Float) {
+        assertEquals(expected, actual, 0.01f)
     }
 
     // -------------------------------------------------------------------------
@@ -219,12 +229,12 @@ class GameOverlayLogicTest {
         assertTrue(tiny.contentMaxHeight > 0.dp)
         // 正常窗口下：内容区 + 固定的两块 = 面板上限
         val normal = gameOverlayBoundsFor(1080, 1920)
-        assertDp(GameOverlayChromeHeight, normal.chromeHeight.value)
+        assertDp(GameOverlayChromeHeight, normal.chromeHeight)
         assertDp(
-            normal.panelMaxHeight.value - normal.chromeHeight.value,
+            normal.panelMaxHeight.value - normal.chromeHeight,
             normal.contentMaxHeight.value,
         )
-        assertDp(normal.panelMaxHeight.value, normal.totalHeight.value)
+        assertDp(normal.panelMaxHeight, normal.totalHeight)
     }
 
     @Test
@@ -264,7 +274,7 @@ class GameOverlayLogicTest {
             tiny.chromeHeight.value < GameOverlayChromeHeight,
         )
         assertTrue(tiny.contentMaxHeight > 0.dp)
-        assertDp(tiny.panelMaxHeight.value, tiny.totalHeight.value)
+        assertDp(tiny.panelMaxHeight, tiny.totalHeight)
         // 热区跟着窗口收，但不低于 24dp 的绝对下限
         assertTrue(tiny.buttonHeight >= GameOverlayMinTouchTargetFloor)
         assertTrue(tiny.buttonHeight < GameOverlayMinTouchTarget)
@@ -295,8 +305,8 @@ class GameOverlayLogicTest {
     @Test
     fun `a roomy window still gets a dialog and not a page`() {
         val b = gameOverlayBoundsFor(2560, 2560)
-        assertDp(GameOverlayPanelMaxWidth, b.panelMaxWidth.value)
-        assertDp(GameOverlayPanelMaxHeight, b.panelMaxHeight.value)
+        assertDp(GameOverlayPanelMaxWidth, b.panelMaxWidth)
+        assertDp(GameOverlayPanelMaxHeight, b.panelMaxHeight)
         // 对话框不是页面：理想上限之内不再随窗口继续长
         assertTrue(b.panelMaxWidth < 2560.dp)
         assertTrue(b.panelMaxHeight < 2560.dp)
@@ -407,7 +417,7 @@ class GameOverlayLogicTest {
         // 参数是绘图区高度（已经扣掉描边与内边距），不是图框的外高
         val plotHeight = 120.dp
         val cell = fpsLabelCellHeight(plotHeight)
-        assertDp(20f, cell.value)
+        assertDp(20f, cell)
         assertEquals(GameFpsAxisSegments + 1, (plotHeight / cell).value.toInt())
         val half = cell.value / 2f
         for (k in 0..GameFpsAxisSegments) {
@@ -437,8 +447,8 @@ class GameOverlayLogicTest {
         }
         // 正常窗口下仍是原来那块 180x120
         val normal = gameFpsChartSize(1080, 1920)
-        assertDp(GameFpsChartWidth, normal.width.value)
-        assertDp(GameFpsChartHeight, normal.height.value)
+        assertDp(GameFpsChartWidth, normal.width)
+        assertDp(GameFpsChartHeight, normal.height)
     }
 
     // -------------------------------------------------------------------------
