@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -225,21 +224,6 @@ internal fun GameOverlayHairline(modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .height(1.dp)
             .background(Oxide.Line)
-    )
-}
-
-/** 小节标题：6sp 大写宽字距 */
-@Composable
-internal fun GameOverlaySectionLabel(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text.uppercase(),
-        color = Oxide.FgDim,
-        fontSize = Oxide.Type.MicroLabel.fontSize,
-        lineHeight = Oxide.Type.MicroLabel.lineHeight,
-        letterSpacing = Oxide.Type.MicroLabel.letterSpacing,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier.fillMaxWidth(),
     )
 }
 
@@ -789,38 +773,3 @@ internal fun GameOverlayProgressBar(
 /** 不知道进度时的那句话，与启动器其余对话框同一句 */
 @Composable
 internal fun GameOverlayWorkingText(): String = stringResource(R.string.oxide_dlg_working)
-
-/**
- * 一层遮罩 + 居中内容
- *
- * 遮罩与面板是**兄弟**而不是父子：父子时点面板外的空白会落到面板自己身上，
- * 而兄弟关系下后面绘制的面板先被命中，空白自然落到遮罩上。
- *
- * [dismissByDialog] 为 false 时遮罩不可点：任务进行中、上传中这类面板
- * 不能让用户随手点掉。
- */
-@Composable
-internal fun GameOverlayScrimLayer(
-    dismissByDialog: Boolean,
-    onDismissRequest: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Oxide.DrawerScrim)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    enabled = dismissByDialog,
-                    onClick = onDismissRequest,
-                )
-        )
-        content()
-    }
-}

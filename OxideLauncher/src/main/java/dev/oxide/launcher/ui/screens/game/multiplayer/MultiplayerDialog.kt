@@ -150,8 +150,9 @@ fun MultiplayerDialog(
                 GameOverlayHairline()
 
                 // 面板高度按内容摆、只被 panelMaxHeight 夹住，因此这里不用 weight：
-// 每一片内容自己按 contentMaxHeight 夹住，超出的在**自己这一块**里滚。
-// 面板那点总高 = contentMaxHeight + 标题栏 + 底栏，正好不超过上限。
+                // 每一片内容自己按 contentMaxHeight 夹住，超出的在**自己这一块**里滚。
+                // 由 gameOverlayBoundsFor 保证 contentMaxHeight + 固定的两块
+                // 恰好等于面板上限，因此底栏永远放得下。
                 val contentModifier = Modifier.padding(
                     start = bounds.padding,
                     end = bounds.padding,
