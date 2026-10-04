@@ -1008,7 +1008,6 @@ fun OxideControlLayoutsPanel(
                 confirmText = stringResource(R.string.generic_confirm),
                 cancelText = stringResource(R.string.generic_cancel),
                 onDismiss = { draft = null },
-                onCancel = { draft = null },
                 onConfirm = { draft = ControlLayoutDraftStep.Version },
             )
 
@@ -1023,7 +1022,6 @@ fun OxideControlLayoutsPanel(
                 confirmText = stringResource(R.string.generic_confirm),
                 cancelText = stringResource(R.string.generic_cancel),
                 onDismiss = { draft = null },
-                onCancel = { draft = null },
                 onConfirm = {
                     val name = draftName
                     val author = draftAuthor

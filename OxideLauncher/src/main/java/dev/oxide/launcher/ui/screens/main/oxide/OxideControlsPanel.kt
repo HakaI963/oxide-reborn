@@ -868,11 +868,12 @@ private fun OxideGamepadBindingsDrawer(
         )
     }
 
+    // 重名判定要同时给输入框的 isValid 和提交时用，所以做成局部函数
+    fun isDuplicateProfile(value: String): Boolean =
+        value.isNotBlank() && gamepad.containsConfig(value.take(GAMEPAD_CONFIG_NAME_LENGTH))
+
     if (createProfile) {
         var draft by remember { mutableStateOf("") }
-        val duplicate = remember(draft) {
-            draft.isNotBlank() && gamepad.containsConfig(draft.take(GAMEPAD_CONFIG_NAME_LENGTH))
-        }
         OxideTextEntryDialog(
             title = stringResource(R.string.settings_gamepad_config_create),
             label = "${stringResource(R.string.settings_gamepad_config_create_name)} " +
@@ -881,8 +882,8 @@ private fun OxideGamepadBindingsDrawer(
             onValueChange = { draft = it.take(GAMEPAD_CONFIG_NAME_LENGTH) },
             maxLength = GAMEPAD_CONFIG_NAME_LENGTH,
             // 重名与空名都不给提交，提示与旧实现一致
-            isValid = { !duplicate(it) && it.isNotBlank() },
-            errorText = if (duplicate(draft)) {
+            isValid = { !isDuplicateProfile(it) && it.isNotBlank() },
+            errorText = if (isDuplicateProfile(draft)) {
                 stringResource(R.string.settings_gamepad_config_create_contains)
             } else {
                 null
@@ -891,7 +892,7 @@ private fun OxideGamepadBindingsDrawer(
             cancelText = stringResource(R.string.generic_cancel),
             onDismiss = { createProfile = false },
             onConfirm = {
-                if (!duplicate(draft) && draft.isNotBlank()) {
+                if (!isDuplicateProfile(draft) && draft.isNotBlank()) {
                     gamepad.createNewConfig(
                         name = draft,
                         onContainsConfig = {

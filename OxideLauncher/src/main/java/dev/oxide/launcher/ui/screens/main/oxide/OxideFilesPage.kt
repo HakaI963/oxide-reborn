@@ -23,6 +23,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +68,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.oxide.launcher.R
 import dev.oxide.launcher.filemanager.config.FmConfig
 import dev.oxide.launcher.filemanager.logic.entry.FmEntry
+import dev.oxide.launcher.filemanager.logic.task.TaskState
 import dev.oxide.launcher.filemanager.logic.trash.TrashItem
 import dev.oxide.launcher.filemanager.viewmodel.EditorUiState
 import dev.oxide.launcher.filemanager.viewmodel.FileManagerUiState
@@ -131,11 +134,17 @@ fun OxideFilesPage(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val initState by viewModel.initState.collectAsStateWithLifecycle()
     val editorUi by viewModel.editorUi.collectAsStateWithLifecycle()
+    val searchUi by viewModel.searchUi.collectAsStateWithLifecycle()
 
     var errorText by remember { mutableStateOf<String?>(null) }
     var createName by remember { mutableStateOf<String?>(null) }
     var deleteArmed by remember { mutableStateOf(false) }
     var editorPath by remember { mutableStateOf<Path?>(null) }
+    // 上下文动作挂在**某一条**上：这里记的是那一条的路径键，不是下标
+    var actionKey by remember { mutableStateOf<String?>(null) }
+    var renameTarget by remember { mutableStateOf<FmEntry?>(null) }
+    var renameDraft by remember { mutableStateOf("") }
+    var renameError by remember { mutableStateOf<String?>(null) }
 
     // 初始化只在第一次进入这一页时做一次，ViewModel 自己也会拒绝重复初始化
     LaunchedEffect(viewModel) {
@@ -147,6 +156,28 @@ fun OxideFilesPage(
     // 而不是留一个指向旧条目的条子
     LaunchedEffect(state.selection, state.visibleEntries) {
         if (deleteArmed && state.selection.isEmpty()) deleteArmed = false
+    }
+
+    // 换目录之后上下文动作指向的那一条已经不在这一屏里，动作条跟着收起：
+    // 动作是挂在这一条上的，指向别处的那一条毫无意义
+    LaunchedEffect(state.visibleEntries, actionKey) {
+        if (actionKey != null && actionKey !in state.visibleEntries.map(::entryPathKey)) {
+            actionKey = null
+        }
+    }
+
+    val actionEntry: FmEntry? = actionKey?.let { key ->
+        state.visibleEntries.firstOrNull { entry -> entryPathKey(entry) == key }
+    }
+    // 改名进行中时，被改名的这一条可能已经从列表里消失；确认之后这条状态要自己收掉
+    LaunchedEffect(renameTarget, state.visibleEntries) {
+        val target = renameTarget
+        if (target != null && state.visibleEntries.none { entry ->
+                entryPathKey(entry) == entryPathKey(target)
+            }
+        ) {
+            renameTarget = null
+        }
     }
 
     val trash = state.trashView as? TrashViewState.Opened
@@ -261,6 +292,41 @@ fun OxideFilesPage(
                         }
                     }
 
+                    renameTarget?.let { target ->
+                        OxideSecSurface(
+                            metrics = metrics,
+                            title = stringResource(R.string.generic_rename),
+                            error = renameError,
+                            modifier = Modifier.padding(vertical = metrics.rowGap),
+                            content = {
+                                OxideSecInput(
+                                    metrics = metrics,
+                                    value = renameDraft,
+                                    onValueChange = { value ->
+                                        renameDraft = value
+                                        renameError = viewModel.validateRename(target, value)
+                                    },
+                                    placeholder = stringResource(R.string.oxide_sec_files_new_name),
+                                    label = target.name,
+                                    isError = renameError != null,
+                                )
+                            },
+                            confirmText = stringResource(R.string.generic_confirm),
+                            dismissText = stringResource(R.string.generic_cancel),
+                            confirmEnabled = renameError == null && renameDraft.isNotBlank(),
+                            onConfirm = {
+                                val value = renameDraft
+                                renameTarget = null
+                                renameError = null
+                                viewModel.submitRename(target, value) { }
+                            },
+                            onDismiss = {
+                                renameTarget = null
+                                renameError = null
+                            },
+                        )
+                    }
+
                     if (deleteArmed && state.selection.isNotEmpty()) {
                         OxideSecConfirmBar(
                             metrics = metrics,
@@ -304,6 +370,7 @@ fun OxideFilesPage(
                             onClose = {
                                 viewModel.closeTrash()
                                 deleteArmed = false
+                                actionKey = null
                             },
                         )
                     } else {
@@ -314,15 +381,92 @@ fun OxideFilesPage(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f),
+                            actionEntry = actionEntry,
+                            onToggleActions = { key ->
+                                actionKey = if (actionKey == key) null else key
+                            },
+                            onRowAction = { action, entry ->
+                                when (action) {
+                                    OxideFilesRowAction.Rename -> {
+                                        renameDraft = entry.name
+                                        renameError = viewModel.validateRename(entry, entry.name)
+                                        renameTarget = entry
+                                        actionKey = null
+                                    }
+
+                                    OxideFilesRowAction.Copy -> {
+                                        viewModel.copyEntry(entry)
+                                        actionKey = null
+                                    }
+
+                                    OxideFilesRowAction.Cut -> {
+                                        viewModel.cutEntry(entry)
+                                        actionKey = null
+                                    }
+
+                                    OxideFilesRowAction.Compress -> {
+                                        actionKey = null
+                                        viewModel.compressEntry(entry)
+                                    }
+
+                                    OxideFilesRowAction.Extract -> {
+                                        actionKey = null
+                                        viewModel.showExtract(entry)
+                                    }
+
+                                    OxideFilesRowAction.Share -> {
+                                        actionKey = null
+                                        viewModel.showShare(entry)
+                                    }
+
+                                    OxideFilesRowAction.Delete -> {
+                                        actionKey = null
+                                        // 删除走的是"选中集合"这一条既有链路，
+                                        // 因此先把这一条纳入选中再要确认
+                                        viewModel.toggleSelection(entry)
+                                        deleteArmed = true
+                                    }
+                                }
+                            },
+                            onSelectionAction = { action ->
+                                when (action) {
+                                    OxideFilesSelectionAction.Copy -> {
+                                        viewModel.bulkCopy()
+                                        viewModel.clearSelection()
+                                    }
+
+                                    OxideFilesSelectionAction.Cut -> {
+                                        viewModel.bulkCut()
+                                        viewModel.clearSelection()
+                                    }
+
+                                    OxideFilesSelectionAction.Compress ->
+                                        viewModel.bulkCompress()
+
+                                    OxideFilesSelectionAction.Delete -> deleteArmed = true
+                                }
+                            },
                             onNewFolder = { createName = "" },
                             onRequestDelete = { deleteArmed = true },
                             onOpenTrash = { viewModel.loadTrashList() },
                             onOpenEditor = { path -> editorPath = path },
+                            onSearch = { viewModel.showSearchDialog() },
+                            onImportFiles = { viewModel.showImportFilesDialog() },
+                            onImportDir = { viewModel.showImportDirDialog() },
+                            onPaste = { viewModel.requestPaste() },
                         )
                     }
                 }
             }
         }
+
+        // 后端的对话流：粘贴 / 压缩 / 解压 / 搜索 / SAF 导入的冲突与设置
+        OxideFilesDialogs(
+            metrics = metrics,
+            viewModel = viewModel,
+            intent = state.dialogIntent,
+            searchUi = searchUi,
+        )
     }
 }
 
@@ -424,15 +568,26 @@ private fun OxideFilesBrowser(
     viewModel: FileManagerViewModel,
     crumbLimit: Int,
     modifier: Modifier = Modifier,
+    actionEntry: FmEntry?,
+    onToggleActions: (String) -> Unit,
+    onRowAction: (OxideFilesRowAction, FmEntry) -> Unit,
+    onSelectionAction: (OxideFilesSelectionAction) -> Unit,
     onNewFolder: () -> Unit,
     onRequestDelete: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenEditor: (Path) -> Unit,
+    onSearch: () -> Unit,
+    onImportFiles: () -> Unit,
+    onImportDir: () -> Unit,
+    onPaste: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val raw = state.rawList
     // 多选状态只有 [FileManagerUiState] 这一处真相
     val multiSelect = state.multiSelect
+    // 复制 / 移动 / 压缩共用一个任务队列：有任务在跑时不再给会立刻被拒的动作
+    val busy = state.taskState is TaskState.Busy
+    val writable = raw?.writable == true
 
     Column(modifier = modifier) {
         OxideFilesToolbar(
@@ -450,12 +605,58 @@ private fun OxideFilesBrowser(
             onToggleHidden = { viewModel.toggleHidden() },
             onOpenTrash = onOpenTrash,
             onNewFolder = onNewFolder,
+            onSearch = onSearch,
+            onImportFiles = onImportFiles,
+            onImportDir = onImportDir,
+            onPaste = onPaste,
             onStartSelect = { viewModel.selectAll() },
             onClearSelect = { viewModel.clearSelection() },
             onRequestDelete = onRequestDelete,
         )
 
         Spacer(Modifier.height(metrics.rowGap))
+
+        // 上下文动作只挂在一条上；这一条不在列表里时整条收掉
+        val rowActions = remember(actionEntry, busy) {
+            val entry = actionEntry
+            if (entry == null) {
+                emptyList()
+            } else {
+                oxideFilesRowActions(
+                    isDirectory = entry.isDirectory,
+                    writable = entry.writable,
+                    archiveType = entry.archiveType,
+                    busy = busy,
+                )
+            }
+        }
+        if (actionEntry != null && rowActions.isNotEmpty()) {
+            OxideFilesRowActionBar(
+                metrics = metrics,
+                entryName = actionEntry.name,
+                actions = rowActions,
+                onAction = { action -> onRowAction(action, actionEntry) },
+                onClose = { onToggleActions(entryPathKey(actionEntry)) },
+            )
+            Spacer(Modifier.height(metrics.rowGap))
+        }
+
+        val selectionActions = remember(state.selection.size, writable, busy) {
+            oxideFilesSelectionActions(
+                selectedCount = state.selection.size,
+                writable = writable,
+                busy = busy,
+            )
+        }
+        if (selectionActions.isNotEmpty()) {
+            OxideFilesSelectionBar(
+                metrics = metrics,
+                selectedCount = state.selection.size,
+                actions = selectionActions,
+                onAction = onSelectionAction,
+            )
+            Spacer(Modifier.height(metrics.rowGap))
+        }
 
         OxideContentSurface(
             modifier = Modifier
@@ -515,6 +716,13 @@ private fun OxideFilesBrowser(
                             viewModel.toggleSelection(entry)
                             onRequestDelete()
                         },
+                        // 多选下不给"这一条的动作"：那一栏由选择动作条承担，
+                        // 两处同时给同一批动作只会让人不知道该按哪一个
+                        onToggleActions = if (multiSelect) {
+                            null
+                        } else {
+                            { onToggleActions(entryPathKey(entry)) }
+                        },
                     )
                     Spacer(Modifier.height(metrics.secRowGap))
                 }
@@ -547,6 +755,10 @@ private fun OxideFilesToolbar(
     onToggleHidden: () -> Unit,
     onOpenTrash: () -> Unit,
     onNewFolder: () -> Unit,
+    onSearch: () -> Unit,
+    onImportFiles: () -> Unit,
+    onImportDir: () -> Unit,
+    onPaste: () -> Unit,
     onStartSelect: () -> Unit,
     onClearSelect: () -> Unit,
     onRequestDelete: () -> Unit,
@@ -619,6 +831,12 @@ private fun OxideFilesToolbar(
                 description = stringResource(R.string.oxide_sec_files_refresh),
                 onClick = onRefresh,
             )
+            // 搜索扫的是当前目录之下的整棵树，因此任何目录都给
+            OxideFilesNavButton(
+                glyph = "⌕",
+                description = stringResource(R.string.generic_search),
+                onClick = onSearch,
+            )
         }
 
         Spacer(Modifier.height(metrics.secRowGap))
@@ -675,6 +893,39 @@ private fun OxideFilesToolbar(
             }
         }
 
+        Spacer(Modifier.height(metrics.secRowGap))
+
+        // 这一行是"对**这个目录**做的事"，因此和选中无关：
+        // 导入要写当前目录（不可写就不给），粘贴只看剪贴板里有没有东西
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (oxideFilesImportVisible(raw?.writable == true)) {
+                OxideButton(
+                    text = stringResource(R.string.fm_import_file),
+                    onClick = onImportFiles,
+                )
+                OxideButton(
+                    text = stringResource(R.string.fm_import_dir),
+                    onClick = onImportDir,
+                )
+            }
+            if (oxideFilesPasteVisible(state.clipboard != null)) {
+                OxideButton(
+                    text = stringResource(
+                        R.string.oxide_cap_files_paste_with_count,
+                        state.clipboard?.sources?.size ?: 0,
+                    ),
+                    onClick = onPaste,
+                    tone = OxideButtonTone.Primary,
+                )
+            }
+        }
+
         // 只读目录与"正在显示隐藏项"都以文字给出，不靠一个符号或颜色暗示
         if (raw?.writable == false) {
             Text(
@@ -721,6 +972,7 @@ private fun OxideFilesEntryRow(
     multiSelect: Boolean,
     onOpen: () -> Unit,
     onStageDelete: () -> Unit,
+    onToggleActions: (() -> Unit)?,
 ) {
     val kindLabel = stringResource(
         if (entry.isDirectory) R.string.oxide_sec_files_folder else R.string.oxide_sec_files_file
@@ -752,17 +1004,34 @@ private fun OxideFilesEntryRow(
                 )
             }
         },
-        // 条目不可写时删除这一枚整个不出现，而不是留一枚点不动的叉；
-        // 单选与多选下都在：否则不进多选就删不掉单独一条
-        trailing = if (entry.writable) {
+        // 这一条的动作：点开的是**这一条**的动作条，
+        // 而不是一份与当前选中无关的通用菜单。两枚都不该出现时整个 trailing
+        // 都不给，而不是留一个空的横条占掉行尾的间距
+        trailing = if (onToggleActions != null || entry.writable) {
             {
-                OxideIconButton(
-                    onClick = onStageDelete,
-                    glyph = "✕",
-                    modifier = Modifier.oxideIconDescription(
-                        stringResource(R.string.generic_delete)
-                    ),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    onToggleActions?.let { toggle ->
+                        OxideIconButton(
+                            onClick = toggle,
+                            glyph = "⋯",
+                            modifier = Modifier.oxideIconDescription(
+                                stringResource(R.string.oxide_cap_files_row_actions)
+                            ),
+                        )
+                        Spacer(Modifier.width(metrics.secRowGap))
+                    }
+                    // 条目不可写时删除这一枚整个不出现，而不是留一枚点不动的叉；
+                    // 单选与多选下都在：否则不进多选就删不掉单独一条
+                    if (entry.writable) {
+                        OxideIconButton(
+                            onClick = onStageDelete,
+                            glyph = "✕",
+                            modifier = Modifier.oxideIconDescription(
+                                stringResource(R.string.generic_delete)
+                            ),
+                        )
+                    }
+                }
             }
         } else {
             null
@@ -1115,6 +1384,74 @@ private fun OxideFilesEditor(
                 floatingActionButton = {},
                 containerColor = Oxide.Bg,
                 contentColor = Oxide.Fg,
+            )
+        }
+    }
+}
+/**
+ * 一块就地展开的表单：标题 + 内容 + 取消 / 确认
+ *
+ * 与 [OxideSecConfirmBar] 同一个理由：不弹 Material 对话框。改名的输入框留在
+ * 列表上方，因此视线不需要离开正在做的事。校验没过时确认按钮不可点，并且
+ * 错误以文字给出，不只靠描边变色。
+ */
+@Composable
+private fun OxideSecSurface(
+    metrics: OxideMetrics,
+    title: String,
+    error: String?,
+    confirmText: String,
+    dismissText: String,
+    confirmEnabled: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    OxideContentSurface(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(
+            horizontal = metrics.cardGap,
+            vertical = metrics.secRowGap,
+        ),
+    ) {
+        Text(
+            text = title,
+            color = Oxide.FgStrong,
+            fontSize = Oxide.Type.BodyStrong.fontSize,
+            lineHeight = Oxide.Type.BodyStrong.lineHeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(metrics.secRowGap))
+        content()
+        if (error != null) {
+            Spacer(Modifier.height(metrics.secRowGap))
+            Text(
+                text = "⚠ $error",
+                color = Oxide.FgMuted,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.height(metrics.secRowGap))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
+        ) {
+            OxideButton(
+                text = dismissText,
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f),
+            )
+            OxideButton(
+                text = confirmText,
+                onClick = onConfirm,
+                enabled = confirmEnabled,
+                tone = OxideButtonTone.Primary,
+                modifier = Modifier.weight(1f),
             )
         }
     }

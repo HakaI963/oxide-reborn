@@ -12,6 +12,28 @@ plugins {
     id("kotlinx-serialization")
     id("kotlin-parcelize")
     id("com.movtery.buildkeys")
+    // Screenshot testing. Paparazzi runs Compose through layoutlib on the JVM, so these
+    // tests need no emulator and no device.
+    //
+    // Version rationale, from this project's actual toolchain (see gradle/libs.versions.toml):
+    //   Gradle 9.5.0 / AGP 9.3.0 / Kotlin 2.4.20 / Compose BOM 2026.09.00.
+    // Paparazzi 2.0.0-alpha05.1 is the newest release at all, and the first one whose notes
+    // say "[Gradle Plugin] Android Gradle Plugin 9.0.0". Its own build uses Gradle 9.3.1,
+    // Kotlin 2.3.0 and layoutlib 16.2.3. The deltas against us are all forward-compatible
+    // directions rather than breaking ones:
+    //   - AGP 9.0.0 -> 9.3.0 is a minor bump inside AGP 9. Every AGP API the plugin touches
+    //     was verified to still exist in 9.3.0's gradle-api: AndroidComponentsExtension,
+    //     HasUnitTest.unitTest, Component.instrumentation, FramesComputationMode,
+    //     InstrumentationScope, Sources.kotlin/res/assets, and TestOptions.targetSdk
+    //     (which is what the plugin reads to derive the render SDK).
+    //   - Gradle 9.3.1 -> 9.5.0 is untested-forward, but the plugin only reaches into
+    //     org.gradle internals for UnzipTransform and AbstractTestTask.setTestReporter.
+    //   - Kotlin 2.3.0 -> 2.4.20 does not matter for test compilation: Paparazzi's runtime
+    //     artifact declares no Compose dependency and no compiler, so test sources are
+    //     compiled by *our* Kotlin plugin against the Compose BOM we already ship.
+    // Anything older than alpha05 (1.3.5, alpha01..alpha04) targets AGP 8.x and will not
+    // configure against AGP 9 at all, so this is a floor rather than a choice.
+    alias(libs.plugins.paparazzi)
 }
 
 val oxidePackageName = "dev.oxide.launcher"
@@ -214,6 +236,12 @@ android {
             isIncludeAndroidResources = true
             //让 android.util.Log 等框架方法在本地单测中返回默认值而非抛出异常
             isReturnDefaultValues = true
+            // Paparazzi is happy with both of the above and neither needs changing for it:
+            // it installs layoutlib's android.* ahead of the mockable jar rather than instead
+            // of it, and it reads resources through its own PrepareResourcesTask pipeline
+            // rather than through AGP's merged-res path. The one thing Paparazzi *does* add
+            // on its own is preparePaparazzi<Variant>Resources, which is wired to the unit test
+            // task by the plugin.
         }
     }
 
@@ -414,11 +442,41 @@ dependencies {
     //Test
     testImplementation(libs.junit)
     testImplementation(libs.mockwebserver3)
+    // Screenshot tests (src/test/java/dev/oxide/launcher/ui/screens/main/oxide/paparazzi).
+    // Paparazzi is a JUnit 4 TestRule, so the junit line above is a hard requirement here.
+    testImplementation(libs.paparazzi)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
 }
+
+/*
+ * Paparazzi configuration
+ * -----------------------
+ * Paparazzi 2.x deliberately has **no `paparazzi { }` extension block** any more. Reading
+ * paparazzi-gradle-plugin 2.0.0-alpha05.1, the plugin's entire configuration surface is a set of
+ * `app.cash.paparazzi.*` Gradle properties which it forwards onto the unit test task as system
+ * properties (providers.gradlePropertiesPrefixedBy("app.cash.paparazzi") ->
+ * test.systemProperties.putAll(...)). The knobs are:
+ *
+ *   app.cash.paparazzi.reportType               legacy (default) | native
+ *   app.cash.paparazzi.nativeReportFrameworks   junit4 (default) | junit5 | both
+ *   app.cash.paparazzi.maxPercentDifference     tolerance used by verify
+ *   app.cash.paparazzi.overwriteOnMaxPercentDifference
+ *
+ * They are therefore declared in OxideLauncher/gradle.properties, next to this module's other
+ * properties, and *not* here: a block set on a non-existent extension would silently do nothing,
+ * and a plausible-looking no-op is worse than a comment.
+ *
+ * The plugin also injects app.cash.paparazzi:paparazzi into this module's testImplementation by
+ * itself. The explicit testImplementation(libs.paparazzi) above is redundant on purpose — it
+ * keeps the version pinned in libs.versions.toml rather than inside the plugin's VERSION constant.
+ *
+ * Recorded goldens land in OxideLauncher/src/test/snapshots/images (PaparazziPlugin.snapshotDir
+ * derives that from the unit test Kotlin source root) and the HTML report lands in
+ * OxideLauncher/build/reports/paparazzi/debug.
+ */
 
 /**
  * The vendored HMCL `GameVersionNumber` reads `assets/game/versions.txt` and

@@ -631,6 +631,22 @@ internal fun OxideContentPanel(
 
                     Spacer(Modifier.height(metrics.secRowGap))
 
+                    // 从设备导入：这一类不支持时连这一行都不出现（截图）
+                    val importAction = oxideContentImportAction(
+                        version = version,
+                        category = category,
+                        onImported = { refreshKey++ },
+                    )
+                    if (importAction != null) {
+                        OxideContentImportRow(
+                            metrics = metrics,
+                            category = category,
+                            enabled = !busy && !loading,
+                            onPick = importAction,
+                        )
+                        Spacer(Modifier.height(metrics.secRowGap))
+                    }
+
                     if (selection.isNotEmpty()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),

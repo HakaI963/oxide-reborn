@@ -102,6 +102,7 @@ import dev.oxide.launcher.utils.formatKeyCode
 import dev.oxide.launcher.utils.getRealScreenSize
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.platform.getMaxMemoryForSettings
+import dev.oxide.launcher.utils.string.getMessageOrToString
 import dev.oxide.launcher.utils.settings.SettingsExport
 import dev.oxide.launcher.utils.settings.SettingsTransferUtils
 import dev.oxide.launcher.viewmodel.EventViewModel
@@ -655,6 +656,20 @@ fun OxideJavaDrawer(
     // 内存分配没有默认值，所以下限要从设置单元自己取，写回时仍然走 AllSettings.ramAllocation.save(...)
     val minRam = AllSettings.ramAllocation.min
 
+    // 自定义运行时：导入、删除，以及用某一档运行时跑一个 .jar
+    val scope = rememberCoroutineScope()
+    var runtimeError by remember { mutableStateOf<String?>(null) }
+    var runtimeDeleteTarget by remember { mutableStateOf<Runtime?>(null) }
+    // 跑 jar 之前挑一档运行时；挑完立刻打开文件选择器
+    var jarRuntimePicker by remember { mutableStateOf(false) }
+    var jarRuntimeChoice by remember { mutableStateOf<Runtime?>(null) }
+
+    val importRuntime = oxideJavaRuntimeImportPicker(
+        onImported = { refreshToken++ },
+        onError = { runtimeError = it },
+    )
+    val runJar = oxideJavaJarRunner(jarRuntimeChoice)
+
     OxideDrawerHost(
         visible = true,
         metrics = metrics,
@@ -662,6 +677,34 @@ fun OxideJavaDrawer(
         modifier = modifier,
         title = stringResource(R.string.oxide_set_drawer_java),
     ) {
+        runtimeError?.let { detail ->
+            OxideSecErrorRow(
+                metrics = metrics,
+                title = stringResource(R.string.generic_error),
+                detail = detail,
+                dismissText = stringResource(R.string.oxide_sec_accounts_dismiss),
+                onDismiss = { runtimeError = null },
+            )
+        }
+
+        runtimeDeleteTarget?.let { target ->
+            OxideSecConfirmBar(
+                metrics = metrics,
+                text = stringResource(R.string.multirt_runtime_delete_message, target.name),
+                confirmText = stringResource(R.string.generic_delete),
+                dismissText = stringResource(R.string.generic_cancel),
+                onConfirm = {
+                    runtimeDeleteTarget = null
+                    scope.launch(Dispatchers.IO) {
+                        runCatching { RuntimesManager.removeRuntime(target.name) }
+                            .onFailure { runtimeError = it.getMessageOrToString() }
+                    }
+                    refreshToken++
+                },
+                onDismiss = { runtimeDeleteTarget = null },
+            )
+        }
+
         OxideSettingsGroup(
             title = stringResource(R.string.oxide_set_section_runtime),
             metrics = metrics,
@@ -721,6 +764,93 @@ fun OxideJavaDrawer(
             )
         }
 
+        // 自定义运行时：导入一个 tar.xz、删掉一个自己装的、用某一档跑一个 .jar。
+        // 清单与选择器是**两件事**：上面那一栏回答"用哪一档"，这一栏回答"装了哪些、
+        // 哪些能删"，因此这里只读、只给删除，不重复一次选择。
+        OxideSettingsGroup(
+            title = stringResource(R.string.oxide_cap_java_manage),
+            metrics = metrics,
+            trailing = {
+                OxideBadge(text = stringResource(R.string.oxide_set_count, runtimes.size))
+            },
+        ) {
+            if (runtimes.isEmpty()) {
+                OxideEmptyState(title = stringResource(R.string.oxide_set_no_runtime))
+            } else {
+                runtimes.forEach { runtime ->
+                    OxideSettingRow(
+                        label = runtime.name,
+                        hint = runtime.versionString
+                            ?: stringResource(R.string.multirt_runtime_corrupt),
+                        value = if (runtime.isProvidedByLauncher) {
+                            stringResource(R.string.multirt_runtime_provided_by_launcher)
+                        } else {
+                            null
+                        },
+                        // 自带的那几档不能删：不给出这一枚按钮，理由由这一行的
+                        // "Built-in" 徽标给出，而不是留一枚灰着的叉让人猜
+                        trailing = if (oxideJavaRuntimeDeleteVisible(runtime)) {
+                            {
+                                OxideIconAction(
+                                    glyph = "\u2715",
+                                    description = stringResource(R.string.generic_delete),
+                                    size = metrics.stepperButton,
+                                ) { runtimeDeleteTarget = runtime }
+                            }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+
+            OxideSecDivider()
+
+            OxideActionRow(
+                label = stringResource(R.string.oxide_cap_java_import),
+                hint = stringResource(R.string.oxide_cap_java_import_detail),
+                enabled = !scanning,
+                onClick = importRuntime,
+            )
+            // 跑 jar 要先定运行时：点这一行先挑一档，挑完立刻打开文件选择器。
+            // 挑完文件再问用哪个 Java 是更差的做法——用户已经选好了文件。
+            runJar?.let { launchJar ->
+                OxideActionRow(
+                    label = stringResource(R.string.oxide_cap_java_run_jar),
+                    hint = stringResource(R.string.oxide_cap_java_run_jar_detail),
+                    value = jarRuntimeChoice?.name,
+                    onClick = { jarRuntimePicker = true },
+                )
+                if (jarRuntimePicker) {
+                    OxideListDialog(
+                        title = stringResource(R.string.oxide_cap_java_run_jar_pick),
+                        options = listOf(
+                            OxideDialogOption(
+                                key = OXIDE_JAR_RUNTIME_AUTO,
+                                label = stringResource(R.string.oxide_cap_java_run_jar_default),
+                                detail = stringResource(
+                                    R.string.settings_game_auto_pick_java_runtime_summary
+                                ),
+                            )
+                        ) + compatible.map { runtime ->
+                            OxideDialogOption(
+                                key = runtime.name,
+                                label = runtime.name,
+                                detail = runtime.versionString,
+                            )
+                        },
+                        currentKey = jarRuntimeChoice?.name ?: OXIDE_JAR_RUNTIME_AUTO,
+                        confirmText = stringResource(R.string.generic_confirm),
+                        metrics = metrics,
+                        onOptionSelected = { key ->
+                            jarRuntimeChoice = compatible.firstOrNull { it.name == key }
+                            launchJar()
+                        },
+                        onDismiss = { jarRuntimePicker = false },
+                    )
+                }
+            }
+        }
         OxideSettingsGroup(
             title = stringResource(R.string.oxide_set_section_memory),
             metrics = metrics,

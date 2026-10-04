@@ -2574,4 +2574,53 @@
     <string name="oxide_ingame_folder_delete">Delete %1$s</string>
     <!-- 多人联机：房间还没有人时的说明（原来是一个空白列表） -->
     <string name="oxide_ingame_mp_no_players">Nobody has joined the room yet</string>
+    <!-- 补齐的后端能力：统一前缀 oxide_cap_，只在这份文件里定义 -->
+    <!-- 文件页：行内动作条、多选动作条、目录级导入与粘贴、搜索 -->
+    <string name="oxide_cap_files_actions_hint">Actions for this entry</string>
+    <string name="oxide_cap_files_actions_close">Close the actions of this entry</string>
+    <string name="oxide_cap_files_row_actions">Actions for this entry</string>
+    <string name="oxide_cap_files_paste_with_count">Paste (%1$d)</string>
+    <string name="oxide_cap_files_searching">Searching…</string>
+    <!-- 实例页：名称搜索与排序 -->
+    <string name="oxide_cap_ins_search_hint">Search instances by name</string>
+    <string name="oxide_cap_ins_sort">Sort: %1$s</string>
+    <string name="oxide_cap_ins_sort_recent">Recent activity</string>
+    <string name="oxide_cap_ins_sort_name">Name</string>
+    <string name="oxide_cap_ins_filter_label">Show: %1$s</string>
+    <string name="oxide_cap_ins_summary">Showing %1$d of %2$d instances</string>
+    <!-- 存储：新增游戏目录与清理冗余游戏资源 -->
+    <string name="oxide_cap_storage_add_game_dir">Add a game folder</string>
+    <string name="oxide_cap_storage_game_dir_name">Name of the game folder</string>
+    <string name="oxide_cap_storage_game_dir_added">Game folder added</string>
+    <string name="oxide_cap_storage_game_dir_conflict">This folder is already in the list.</string>
+    <string name="oxide_cap_storage_cleanup_detail">Delete asset files that no installed version needs any more. This cannot be undone.</string>
+    <string name="oxide_cap_storage_cleanup_running">Scanning installed versions…</string>
+    <string name="oxide_cap_storage_cleanup_done">%1$s</string>
+    <!-- Java：导入 / 删除自定义运行时，以及用指定运行时跑 jar -->
+    <string name="oxide_cap_java_manage">Manage runtimes</string>
+    <string name="oxide_cap_java_import">Import a runtime</string>
+    <string name="oxide_cap_java_import_detail">Install a Java runtime from a .xz archive on this device.</string>
+    <string name="oxide_cap_java_run_jar">Run a .jar</string>
+    <string name="oxide_cap_java_run_jar_detail">Launch a .jar from this device with a chosen Java runtime.</string>
+    <string name="oxide_cap_java_run_jar_pick">Which Java runtime?</string>
+    <string name="oxide_cap_java_run_jar_default">Let the launcher decide</string>
+    <string name="oxide_cap_java_builtin_only">Built-in runtimes can't be deleted.</string>
+    <!-- 内容管理器：从设备导入 -->
+    <string name="oxide_cap_mgr_import">Import from device</string>
+    <string name="oxide_cap_mgr_import_detail">Copy %1$s off this device into this instance.</string>
+    <string name="oxide_cap_mgr_imported">Imported %1$d file(s)</string>
+    <string name="oxide_cap_mgr_import_failed">Could not import that file</string>
+    <!-- Discover：收藏与本地整合包导入 -->
+    <string name="oxide_cap_dis_favorites">Favourites</string>
+    <string name="oxide_cap_dis_fav_empty">No favourites yet</string>
+    <string name="oxide_cap_dis_fav_empty_detail">Use the star on a search result to keep it here.</string>
+    <string name="oxide_cap_dis_fav_invalid">No longer available on %1$s</string>
+    <string name="oxide_cap_dis_fav_add">Keep this project</string>
+    <string name="oxide_cap_dis_fav_remove">Remove from favourites</string>
+    <string name="oxide_cap_dis_fav_removed">Removed from favourites</string>
+    <string name="oxide_cap_dis_import_modpack">Import a modpack</string>
+    <string name="oxide_cap_dis_import_modpack_detail">Install a modpack archive from this device.</string>
+    <string name="oxide_cap_dis_import_modpack_instance">Instance name</string>
+    <string name="oxide_cap_dis_import_modpack_mobile">This download needs mobile data. Continue?</string>
+    <string name="oxide_cap_dis_import_modpack_unavailable">That modpack could not be imported.</string>
 </resources>
