@@ -91,7 +91,7 @@ private fun InviteCodeInputDialog(
         }.also { text ->
             //根据是否检测出对应格式判断
             isError = text == null
-        } ?: R.string.terracotta_status_waiting_guest_prompt_invalid)
+        } ?: R.string.terracotta_status_waiting_guest_prompt_invalid
     }
 
     OxideTextEntryDialog(
