@@ -1101,7 +1101,9 @@ internal fun rememberOxideScreenBackStack(): ScreenBackStackViewModel? {
 @Composable
 internal fun rememberOxideEventViewModel(): EventViewModel {
     val context = LocalContext.current
-    val fromActivity = remember(context) { LocalMainActivity.current?.eventViewModel }
+    // 组合局部只能在 composable 作用域里读，remember 的计算块不是作用域，所以先取出来。
+    val activity = LocalMainActivity.current
+    val fromActivity = remember(activity) { activity?.eventViewModel }
     val fromStore: EventViewModel = viewModel()
     return fromActivity ?: fromStore
 }
