@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import dev.oxide.launcher.coroutine.Task
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -158,7 +159,7 @@ fun OxideMainShell(
     openLink: (String) -> Unit,
     openSettingsSection: (OxideSettingsSection) -> Unit,
     openDownloadCategory: (OxideDownloadCategory) -> Unit,
-    tasksRunning: Boolean,
+    tasks: List<Task>,
     tasksExpanded: Boolean,
     onToggleTasks: () -> Unit,
     modifier: Modifier = Modifier,
@@ -181,6 +182,10 @@ fun OxideMainShell(
     // 因此按 Play 之后这一屏显示的是真实启动阶段，取消按钮也作用在同一条链路上
     val launchViewModel: LaunchGameViewModel = viewModel()
     val launchFlow by launchViewModel.launchFlow.collectAsStateWithLifecycle()
+    // 启动前置检查发生在 launchFlow 出现**之前**：按下 Play 到第一个阶段之间有一段真实窗口
+    // （检查链里有挂起的 ensureVulkanSupported），旧对话框就正好在那段窗口里弹出来。
+    // 所以这一屏不能只看 launchFlow，否则前置阶段会掉回旧界面。
+    val launchOperation by launchViewModel.launchGameOperation.collectAsStateWithLifecycle()
 
     var destination by remember { mutableStateOf<OxideDestination?>(null) }
 
@@ -269,7 +274,7 @@ fun OxideMainShell(
             metrics = metrics,
             topBarTrailing = {
                 Row {
-                    if (tasksRunning || tasksExpanded) {
+                    if (tasks.isNotEmpty() || tasksExpanded) {
                         OxideButton(
                             text = stringResource(
                                 if (tasksExpanded) {
@@ -403,9 +408,25 @@ fun OxideMainShell(
             }
         }
 
-        // 启动演示层：只在真的有一条启动流程时出现，压在所有目的地之上，
+        // 任务抽屉：以前是 MainActivity 上那个 30% 宽的旧 Zalith 侧滑卡片，
+        // 直接压在外壳上面。现在是 Oxide 自己的抽屉，和目的地同一层级。
+        if (tasksExpanded) {
+            CompositionLocalProvider(LocalOxideHostActions provides actions) {
+                OxideTaskDrawer(
+                    tasks = tasks,
+                    metrics = metrics,
+                    onDismiss = onToggleTasks,
+                )
+            }
+        }
+
+        // 启动演示层：前置检查阶段或真的有一条启动流程时出现，压在所有目的地之上，
         // 因此无论当时停在哪个页面，按下 Play 之后看到的一定是这一屏
-        if (launchFlow != null) {
+        if (oxideLaunchVisible(
+                flowActive = launchFlow != null,
+                operation = oxidePreflightOperationOf(launchOperation),
+            )
+        ) {
             CompositionLocalProvider(LocalOxideHostActions provides actions) {
                 OxideLaunchPage(metrics = metrics)
             }

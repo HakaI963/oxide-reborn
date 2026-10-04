@@ -75,7 +75,6 @@ import dev.oxide.launcher.ui.screens.NormalNavKey
 import dev.oxide.launcher.ui.screens.content.elements.Background
 import dev.oxide.launcher.ui.screens.content.elements.LaunchGameOperation
 import dev.oxide.launcher.ui.screens.content.navigateToLogView
-import dev.oxide.launcher.ui.screens.content.navigateToWeb
 import dev.oxide.launcher.ui.screens.main.MainScreen
 import dev.oxide.launcher.ui.screens.main.crashlogs.LogShareMenu
 import dev.oxide.launcher.ui.screens.main.crashlogs.LogShareMenuOperation
@@ -355,6 +354,10 @@ class MainActivity : BaseAppCompatActivity() {
                     )
 
                     //启动游戏操作流程
+                    //这一层只推进状态机：检查跑完就换下一个 operation。
+                    //需要用户拿主意的那几步（版本名非法、渲染器/插件不支持、缺文件管理权限、
+                    //账号重新登录、账号刷新失败）现在由 Oxide 启动页就地承接，
+                    //因此这里不再弹任何 Modal——旧的那些弹窗已经从 LauncherElements 删掉。
                     LaunchGameOperation(
                         activity = this@MainActivity,
                         eventViewModel = eventViewModel,
@@ -380,15 +383,6 @@ class MainActivity : BaseAppCompatActivity() {
                             eventViewModel.sendEvent(
                                 EventViewModel.Event.ShowLauncherPage(SHOW_PAGE_INSTANCES)
                             )
-                        },
-                        navigateToWeb = { url ->
-                            screenBackStackModel.mainScreen.backStack.navigateToWeb(url)
-                        },
-                        backToMain = {
-                            screenBackStackModel.mainScreen.clearWith(NormalNavKey.LauncherMain)
-                        },
-                        checkIfInWebScreen = {
-                            screenBackStackModel.mainScreen.currentKey is NormalNavKey.WebScreen
                         }
                     )
 

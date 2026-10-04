@@ -119,12 +119,9 @@ fun LauncherScreen(
     navigateToVersions: (Version) -> Unit,
     onLaunchGame: (Version?) -> Unit,
     onOpenLink: (String) -> Unit,
-    startGuideOnce: (GuideKeys.Keys) -> Unit,
 ) {
-    LaunchedEffect(Unit) {
-        //发起新手引导
-        startGuideOnce(GuideKeys.Main)
-    }
+    // 旧主界面的首次引导重播已移除：每一帧都锚在旧主界面的节点上，
+    // 而旧主界面从新外壳起就不再被渲染，重播只会得到一串对不上位置的卡片。
 
     BaseScreen(
         screenKey = NormalNavKey.LauncherMain,

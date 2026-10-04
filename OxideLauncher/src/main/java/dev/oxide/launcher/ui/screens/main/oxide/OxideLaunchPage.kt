@@ -19,6 +19,7 @@
 package dev.oxide.launcher.ui.screens.main.oxide
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -39,7 +40,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,8 +57,10 @@ import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.TaskStage
 import dev.oxide.launcher.coroutine.TitledTask
 import dev.oxide.launcher.game.account.accountErrorText
+import dev.oxide.launcher.game.account.isMicrosoftAccount
 import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionsManager
+import dev.oxide.launcher.ui.components.LocalMainActivity
 import dev.oxide.launcher.ui.resolveAndroidString
 import dev.oxide.launcher.ui.screens.content.elements.LaunchGameOperation
 import dev.oxide.launcher.ui.theme.Oxide
@@ -75,6 +81,11 @@ import kotlinx.coroutines.launch
  * 这一页只读 [LaunchGameViewModel] 已经算出来的阶段列表与进度，
  * 并把 [LaunchGameViewModel.cancel] 交给界面上的取消按钮。
  * 换句话说：换掉的是**呈现**，不是启动。
+ *
+ * 这一屏同时也是**整段 pre-flight** 的宿主：实例名非法、渲染器或插件不支持、
+ * 缺文件管理权限、账号需要重新登录、账号刷新失败——这些以前各自弹一个 Modal，
+ * 现在都变成启动页上就地的一行说明加一组选择（见 [OxideLaunchPreflight]）。
+ * 没有实例与没有账号那两条本来就只弹一次 toast，因此这里不为它们闪一行。
  *
  * 因此界面上每一个数字都来自真实的阶段：
  * 阶段标题与顺序来自 [TitledTask]，进度、消息与速率来自任务自己的 `StateFlow`，
@@ -110,6 +121,27 @@ fun OxideLaunchPage(
         if (tasks.isNotEmpty()) listState.animateScrollToItem(tasks.lastIndex)
     }
 
+    // 这一段就是"启动已经被人按下，但还没跑出阶段"的全部形状
+    val preflightBranch = oxidePreflightBranchOf(oxidePreflightOperationOf(operation))
+    val preflightAsk = preflightBranch
+        ?.let { oxidePreflightAsk(it) }
+        // 这两条在旧实现里只弹一次 toast 并立刻复位，界面上不该闪一行
+        ?.takeIf { !oxidePreflightToastOnly(it.branch) }
+
+    // 密码只跟着"同一个账号的第三方重新登录"这一次走：
+    // 提交失败时 operation 会换成另一个实例，但密码不该被清掉（旧弹窗也没清）
+    val passwordKey = (operation as? LaunchGameOperation.AccountRelogin)
+        ?.takeIf { !it.account.isMicrosoftAccount() }
+        ?.account
+        ?.uniqueUUID
+    var password by rememberSaveable(passwordKey) { mutableStateOf("") }
+
+    // 后端需要的宿主引用都已经在这一层拿得到，因此不需要额外加宿主动作
+    val activity = LocalMainActivity.current
+    val eventViewModel = rememberOxideEventViewModel()
+    val errorViewModel = rememberOxideErrorViewModel()
+    val backStack = rememberOxideScreenBackStack()
+
     val stageLabel = launchStageLabel(operation, currentVersion)
     val errorText = launchStageError(operation)
 
@@ -125,6 +157,7 @@ fun OxideLaunchPage(
                         text = stringResource(R.string.oxide_sec_launch_cancel),
                         onClick = { launchViewModel.cancel() },
                         tone = OxideButtonTone.Secondary,
+                        // 还没跑出阶段时没有可取消的东西；那时要放弃的话用那一行自己的选择
                         enabled = flow != null,
                     )
                 },
@@ -136,7 +169,41 @@ fun OxideLaunchPage(
 
             Spacer(Modifier.height(metrics.sectionGap))
 
-            if (sideBySide) {
+            if (preflightAsk != null) {
+                // 等待一个决定时还没有任何真实阶段可列，
+                // 因此这一屏只讲清楚"哪一条没通过"和"接下来怎么办"，
+                // 而不是画一根 0% 的进度条加一句"正在准备"
+                val texts = launchPreflightTexts(operation)
+                if (texts != null) {
+                    // 面板自己铺满并滚动，因此这里只负责把标题与 kicker 让出来的那段
+                    // 高度交给它
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = metrics.pagePaddingH),
+                    ) {
+                        OxideLaunchPreflight(
+                            metrics = metrics,
+                            ask = preflightAsk,
+                            texts = texts,
+                            password = password,
+                            onPasswordChange = { password = it },
+                            onAction = { action ->
+                                performOxidePreflightAction(
+                                    action = action,
+                                    operation = operation,
+                                    password = password,
+                                    activity = activity,
+                                    eventViewModel = eventViewModel,
+                                    errorViewModel = errorViewModel,
+                                    launchGameViewModel = launchViewModel,
+                                    backStack = backStack,
+                                )
+                            },
+                        )
+                    }
+                }
+            } else if (sideBySide) {
                 Row(
                     modifier = Modifier
                         .fillMaxSize()

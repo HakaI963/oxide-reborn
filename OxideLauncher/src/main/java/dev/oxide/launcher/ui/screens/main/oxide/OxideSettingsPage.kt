@@ -72,15 +72,11 @@ import dev.oxide.launcher.setting.enums.ActionMenuSide
 import dev.oxide.launcher.setting.enums.AppLanguage
 import dev.oxide.launcher.setting.enums.BackgroundBlur
 import dev.oxide.launcher.setting.enums.DarkMode
-import dev.oxide.launcher.setting.enums.GamepadInputMode
-import dev.oxide.launcher.setting.enums.GestureActionType
 import dev.oxide.launcher.setting.enums.MirrorSourceType
-import dev.oxide.launcher.setting.enums.MouseControlMode
 import dev.oxide.launcher.setting.enums.applyLanguage
 import dev.oxide.launcher.setting.unit.floatRange
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.components.SimpleAlertDialog
-import dev.oxide.launcher.ui.control.gamepad.JoystickMode
 import dev.oxide.launcher.ui.theme.ColorThemeType
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.ui.theme.ProvideOxideChrome
@@ -425,7 +421,8 @@ private fun OxideSettingsPanel(
         when (category) {
             OxideSettingsCategory.General -> GeneralCategory(metrics, bridge)
             OxideSettingsCategory.Game -> GameCategory(metrics, onNavigate)
-            OxideSettingsCategory.Controls -> ControlsCategory(metrics, bridge)
+            // 控制这一类整块都在面板里展开，见 OxideControlsPanel
+            OxideSettingsCategory.Controls -> OxideControlsPanel(metrics = metrics, bridge = bridge)
             OxideSettingsCategory.Downloads -> DownloadsCategory(metrics, bridge, onNavigate)
             OxideSettingsCategory.Appearance -> AppearanceCategory(metrics, bridge, onOpenCustomColor)
             else -> {
@@ -610,11 +607,8 @@ private fun GeneralCategory(metrics: OxideMetrics, bridge: OxideLauncherBridge) 
             hint = stringResource(R.string.oxide_set_action_check_update_detail),
             onClick = bridge.checkUpdate,
         )
-        OxideActionRow(
-            label = stringResource(R.string.oxide_set_action_guides),
-            hint = stringResource(R.string.oxide_set_action_guides_detail),
-            onClick = bridge.replayGuide,
-        )
+        // 旧启动器主界面的重播引导已移除：它的每一帧都锚在旧主界面上，
+        // 而旧主界面从新外壳起就已经不可达，重播出来的只会是一串对不上位置的卡片。
         OxideActionRow(
             label = stringResource(R.string.settings_tab_info_about),
             hint = stringResource(R.string.oxide_set_action_about_detail),
@@ -688,266 +682,6 @@ private fun GameCategory(metrics: OxideMetrics, onNavigate: (OxidePage) -> Unit)
             step = 20,
             suffix = " ms",
             onValueChange = { AllSettings.logBufferFlushInterval.save(it) },
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 分类：控制
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun ControlsCategory(metrics: OxideMetrics, bridge: OxideLauncherBridge) {
-    val mouseMode = AllSettings.mouseControlMode.state
-    val gestureOn = AllSettings.gestureControl.state
-    val gyroOn = AllSettings.gyroscopeControl.state
-    val gyroSmoothing = AllSettings.gyroscopeSmoothing.state
-    val gamepadOn = AllSettings.gamepadControl.state
-
-    Group(index = 0, title = stringResource(R.string.oxide_set_section_mouse), metrics = metrics) {
-        OxideEnumRow(
-            label = stringResource(R.string.settings_control_mouse_control_mode_title),
-            hint = stringResource(R.string.settings_control_mouse_control_mode_summary),
-            metrics = metrics,
-            entries = MouseControlMode.entries,
-            selected = mouseMode,
-            nameOf = { oxideMouseControlModeName(it) },
-            onSelect = { AllSettings.mouseControlMode.save(it) },
-        )
-        OxideToggleRow(
-            label = stringResource(R.string.settings_control_mouse_physical_mouse_mode_title),
-            hint = stringResource(R.string.settings_control_mouse_physical_mouse_mode_summary),
-            checked = AllSettings.physicalMouseMode.state,
-            onCheckedChange = { AllSettings.physicalMouseMode.save(it) },
-        )
-        OxideToggleRow(
-            label = stringResource(R.string.settings_control_mouse_hide_title),
-            hint = stringResource(R.string.settings_control_mouse_hide_summary),
-            checked = AllSettings.hideMouse.state,
-            enabled = mouseMode == MouseControlMode.CLICK,
-            onCheckedChange = { AllSettings.hideMouse.save(it) },
-        )
-        OxideToggleRow(
-            label = stringResource(R.string.settings_control_mouse_enable_click_title),
-            hint = stringResource(R.string.settings_control_mouse_enable_click_summary),
-            checked = AllSettings.enableMouseClick.state,
-            enabled = mouseMode == MouseControlMode.SLIDE,
-            onCheckedChange = { AllSettings.enableMouseClick.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_control_mouse_size_title),
-            metrics = metrics,
-            value = AllSettings.mouseSize.state,
-            range = AllSettings.mouseSize.floatRange.toIntRange(),
-            suffix = " dp",
-            onValueChange = { AllSettings.mouseSize.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_control_mouse_sensitivity_title),
-            hint = stringResource(R.string.settings_control_mouse_sensitivity_summary),
-            metrics = metrics,
-            value = AllSettings.cursorSensitivity.state,
-            range = AllSettings.cursorSensitivity.floatRange.toIntRange(),
-            step = 5,
-            suffix = "%",
-            onValueChange = { AllSettings.cursorSensitivity.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_control_mouse_capture_sensitivity_title),
-            hint = stringResource(R.string.settings_control_mouse_capture_sensitivity_summary),
-            metrics = metrics,
-            value = AllSettings.mouseCaptureSensitivity.state,
-            range = AllSettings.mouseCaptureSensitivity.floatRange.toIntRange(),
-            step = 5,
-            suffix = "%",
-            onValueChange = { AllSettings.mouseCaptureSensitivity.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_control_mouse_long_press_delay_title),
-            hint = stringResource(R.string.settings_control_mouse_long_press_delay_summary),
-            metrics = metrics,
-            value = AllSettings.mouseLongPressDelay.state,
-            range = AllSettings.mouseLongPressDelay.floatRange.toIntRange(),
-            step = 20,
-            suffix = " ms",
-            onValueChange = { AllSettings.mouseLongPressDelay.save(it) },
-        )
-    }
-
-    Group(index = 1, title = stringResource(R.string.oxide_set_section_gestures), metrics = metrics) {
-        OxideToggleRow(
-            label = stringResource(R.string.settings_control_gesture_control_title),
-            hint = stringResource(R.string.settings_control_gesture_control_summary),
-            checked = gestureOn,
-            onCheckedChange = { AllSettings.gestureControl.save(it) },
-        )
-        OxideEnumRow(
-            label = stringResource(R.string.settings_control_gesture_tap_action_title),
-            hint = stringResource(R.string.settings_control_gesture_tap_action_summary),
-            metrics = metrics,
-            entries = GestureActionType.entries,
-            selected = AllSettings.gestureTapMouseAction.state,
-            enabled = gestureOn,
-            nameOf = { stringResource(it.nameRes) },
-            onSelect = { AllSettings.gestureTapMouseAction.save(it) },
-        )
-        OxideEnumRow(
-            label = stringResource(R.string.settings_control_gesture_long_press_action_title),
-            hint = stringResource(R.string.settings_control_gesture_long_press_action_summary),
-            metrics = metrics,
-            entries = GestureActionType.entries,
-            selected = AllSettings.gestureLongPressMouseAction.state,
-            enabled = gestureOn,
-            nameOf = { stringResource(it.nameRes) },
-            onSelect = { AllSettings.gestureLongPressMouseAction.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_control_gesture_long_press_delay_title),
-            metrics = metrics,
-            value = AllSettings.gestureLongPressDelay.state,
-            range = AllSettings.gestureLongPressDelay.floatRange.toIntRange(),
-            step = 20,
-            suffix = " ms",
-            enabled = gestureOn,
-            onValueChange = { AllSettings.gestureLongPressDelay.save(it) },
-        )
-    }
-
-    Group(index = 2, title = stringResource(R.string.oxide_set_section_gyroscope), metrics = metrics) {
-        OxideToggleRow(
-            label = stringResource(R.string.settings_control_gyroscope_title),
-            hint = stringResource(R.string.settings_control_gyroscope_summary),
-            checked = gyroOn,
-            onCheckedChange = { AllSettings.gyroscopeControl.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_control_gyroscope_sensitivity_title),
-            metrics = metrics,
-            value = AllSettings.gyroscopeSensitivity.state,
-            range = AllSettings.gyroscopeSensitivity.floatRange.toIntRange(),
-            step = 5,
-            suffix = "%",
-            enabled = gyroOn,
-            onValueChange = { AllSettings.gyroscopeSensitivity.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_control_gyroscope_sample_rate_title),
-            hint = stringResource(R.string.settings_control_gyroscope_sample_rate_summary),
-            metrics = metrics,
-            value = AllSettings.gyroscopeSampleRate.state,
-            range = AllSettings.gyroscopeSampleRate.floatRange.toIntRange(),
-            suffix = " ms",
-            enabled = gyroOn,
-            onValueChange = { AllSettings.gyroscopeSampleRate.save(it) },
-        )
-        OxideToggleRow(
-            label = stringResource(R.string.settings_control_gyroscope_smoothing_title),
-            hint = stringResource(R.string.settings_control_gyroscope_smoothing_summary),
-            checked = gyroSmoothing,
-            enabled = gyroOn,
-            onCheckedChange = { AllSettings.gyroscopeSmoothing.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_control_gyroscope_smoothing_window_title),
-            hint = stringResource(R.string.settings_control_gyroscope_smoothing_window_summary),
-            metrics = metrics,
-            value = AllSettings.gyroscopeSmoothingWindow.state,
-            range = AllSettings.gyroscopeSmoothingWindow.floatRange.toIntRange(),
-            enabled = gyroOn && gyroSmoothing,
-            onValueChange = { AllSettings.gyroscopeSmoothingWindow.save(it) },
-        )
-        OxideToggleRow(
-            label = stringResource(R.string.settings_control_gyroscope_invert_x_title),
-            hint = stringResource(R.string.settings_control_gyroscope_invert_x_summary),
-            checked = AllSettings.gyroscopeInvertX.state,
-            enabled = gyroOn,
-            onCheckedChange = { AllSettings.gyroscopeInvertX.save(it) },
-        )
-        OxideToggleRow(
-            label = stringResource(R.string.settings_control_gyroscope_invert_y_title),
-            hint = stringResource(R.string.settings_control_gyroscope_invert_y_summary),
-            checked = AllSettings.gyroscopeInvertY.state,
-            enabled = gyroOn,
-            onCheckedChange = { AllSettings.gyroscopeInvertY.save(it) },
-        )
-    }
-
-    Group(index = 3, title = stringResource(R.string.oxide_set_section_gamepad), metrics = metrics) {
-        OxideToggleRow(
-            label = stringResource(R.string.oxide_set_gamepad_control),
-            hint = stringResource(R.string.settings_gamepad_summary),
-            checked = gamepadOn,
-            onCheckedChange = { AllSettings.gamepadControl.save(it) },
-        )
-        OxideEnumRow(
-            label = stringResource(R.string.settings_gamepad_input_mode_title),
-            metrics = metrics,
-            entries = GamepadInputMode.entries,
-            selected = AllSettings.gamepadInputMode.state,
-            enabled = gamepadOn,
-            nameOf = { oxideGamepadInputModeName(it) },
-            onSelect = { AllSettings.gamepadInputMode.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_gamepad_deadzone_title),
-            hint = stringResource(R.string.settings_gamepad_deadzone_summary),
-            metrics = metrics,
-            value = AllSettings.gamepadDeadZoneScale.state,
-            range = AllSettings.gamepadDeadZoneScale.floatRange.toIntRange(),
-            step = 5,
-            suffix = "%",
-            enabled = gamepadOn,
-            onValueChange = { AllSettings.gamepadDeadZoneScale.save(it) },
-        )
-        OxideEnumRow(
-            label = stringResource(R.string.settings_gamepad_joystick_mode_title),
-            hint = stringResource(R.string.settings_gamepad_joystick_mode_summary),
-            metrics = metrics,
-            entries = JoystickMode.entries,
-            selected = AllSettings.joystickControlMode.state,
-            enabled = gamepadOn,
-            nameOf = { oxideJoystickModeName(it) },
-            onSelect = { AllSettings.joystickControlMode.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_gamepad_cursor_sensitivity_title),
-            hint = stringResource(R.string.settings_gamepad_cursor_sensitivity_summary),
-            metrics = metrics,
-            value = AllSettings.gamepadCursorSensitivity.state,
-            range = AllSettings.gamepadCursorSensitivity.floatRange.toIntRange(),
-            step = 5,
-            suffix = "%",
-            enabled = gamepadOn,
-            onValueChange = { AllSettings.gamepadCursorSensitivity.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_gamepad_camera_sensitivity_title),
-            hint = stringResource(R.string.settings_gamepad_camera_sensitivity_summary),
-            metrics = metrics,
-            value = AllSettings.gamepadCameraSensitivity.state,
-            range = AllSettings.gamepadCameraSensitivity.floatRange.toIntRange(),
-            step = 5,
-            suffix = "%",
-            enabled = gamepadOn,
-            onValueChange = { AllSettings.gamepadCameraSensitivity.save(it) },
-        )
-    }
-
-    Group(index = 4, title = stringResource(R.string.oxide_set_section_control_actions), metrics = metrics) {
-        OxideActionRow(
-            label = stringResource(R.string.settings_tab_control),
-            hint = stringResource(R.string.oxide_set_action_full_controls_detail),
-            onClick = { bridge.openSettingsSection(OxideSettingsSection.Control) },
-        )
-        OxideActionRow(
-            label = stringResource(R.string.settings_tab_gamepad),
-            hint = stringResource(R.string.oxide_set_action_full_gamepad_detail),
-            onClick = { bridge.openSettingsSection(OxideSettingsSection.Gamepad) },
-        )
-        OxideActionRow(
-            label = stringResource(R.string.settings_tab_control_manage),
-            hint = stringResource(R.string.oxide_set_action_control_layouts_detail),
-            onClick = { bridge.openSettingsSection(OxideSettingsSection.ControlManager) },
         )
     }
 }

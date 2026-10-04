@@ -23,23 +23,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Parcelable
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,16 +32,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -64,13 +46,8 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.SingletonImageLoader
 import dev.oxide.launcher.R
-import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.game.account.Account
 import dev.oxide.launcher.game.account.AccountsManager
-import dev.oxide.launcher.game.account.accountErrorText
-import dev.oxide.launcher.game.account.auth_server.AuthServerHelper
-import dev.oxide.launcher.game.account.isMicrosoftAccount
-import dev.oxide.launcher.game.account.microsoftLogin
 import dev.oxide.launcher.game.plugin.ApkPlugin
 import dev.oxide.launcher.game.plugin.natives.NativePluginManager
 import dev.oxide.launcher.game.plugin.renderer.RendererPluginManager
@@ -82,20 +59,10 @@ import dev.oxide.launcher.game.version.installed.utils.isBiggerVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerVer
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.enums.BackgroundBlur
-import dev.oxide.launcher.ui.AndroidStringText
 import dev.oxide.launcher.ui.androidText
-import dev.oxide.launcher.ui.components.ButtonPosition
-import dev.oxide.launcher.ui.components.MarqueeText
-import dev.oxide.launcher.ui.components.PositionButton
-import dev.oxide.launcher.ui.components.PositionFilledTonalButton
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
 import dev.oxide.launcher.ui.components.VideoPlayer
-import dev.oxide.launcher.ui.components.rememberDialogMaxHeight
 import dev.oxide.launcher.ui.screens.content.FirstLoginMenu
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.onCardColor
 import dev.oxide.launcher.utils.canHandlePermission
-import dev.oxide.launcher.utils.checkStoragePermissions
 import dev.oxide.launcher.utils.file.InvalidFilenameException
 import dev.oxide.launcher.utils.file.checkFilenameValidity
 import dev.oxide.launcher.utils.hasStoragePermission
@@ -183,6 +150,16 @@ sealed interface LaunchGameOperation {
     ) : LaunchGameOperation
 }
 
+/**
+ * 启动游戏的状态机
+ *
+ * 这里只负责**推进**流程：检查跑完就换下一个 operation，阶段跑完就交给
+ * [dev.oxide.launcher.viewmodel.LaunchGameViewModel]。
+ * 需要用户拿主意的那几步（版本名非法、渲染器或插件不支持、缺文件管理权限、
+ * 账号重新登录、账号刷新失败）现在由 Oxide 启动页就地承接，
+ * 对应 [dev.oxide.launcher.ui.screens.main.oxide.OxideLaunchPreflight]；
+ * 因此这里不再有任何弹窗，两种呈现不可能同时出现。
+ */
 @Composable
 fun LaunchGameOperation(
     activity: Activity,
@@ -192,10 +169,7 @@ fun LaunchGameOperation(
     ensureVulkanSupported: suspend (Version) -> Boolean,
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     toAccountManageScreen: (FirstLoginMenu) -> Unit = {},
-    toVersionManageScreen: () -> Unit = {},
-    navigateToWeb: (String) -> Unit = {},
-    backToMain: () -> Unit = {},
-    checkIfInWebScreen: () -> Boolean = { false }
+    toVersionManageScreen: () -> Unit = {}
 ) {
     val launchGameOperation by launchGameViewModel.launchGameOperation.collectAsStateWithLifecycle()
 
@@ -208,17 +182,8 @@ fun LaunchGameOperation(
                 launchGameViewModel.updateOperation(LaunchGameOperation.None)
             }
         }
-        is LaunchGameOperation.InvalidVersionName -> {
-            val th = operation.th
-            SimpleAlertDialog(
-                title = stringResource(R.string.versions_manage_invalid),
-                text = th.getInvalidSummary(),
-                confirmText = stringResource(R.string.generic_cancel),
-                onDismiss = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.None)
-                }
-            )
-        }
+        // 启动页上的一行说明 + 一个取消键，见 OxideLaunchPreflight
+        is LaunchGameOperation.InvalidVersionName -> {}
         is LaunchGameOperation.NoAccount -> {
             LaunchedEffect(Unit) {
                 eventViewModel.sendToast(androidText(R.string.game_launch_no_account))
@@ -226,57 +191,10 @@ fun LaunchGameOperation(
                 launchGameViewModel.updateOperation(LaunchGameOperation.None)
             }
         }
-        is LaunchGameOperation.RendererNoStoragePermission -> {
-            LaunchedEffect(Unit) {
-                val renderer = operation.renderer
-                val version = operation.version
-                val quickPlay = operation.quickPlay
-                withContext(Dispatchers.Main) {
-                    checkStoragePermissions(
-                        activity = activity,
-                        message = activity.getString(R.string.renderer_version_storage_permissions, renderer.getRendererName()),
-                        messageSdk30 = activity.getString(R.string.renderer_version_storage_permissions_sdk30, renderer.getRendererName()),
-                        onDialogCancel = {
-                            //用户拒绝授权，但仍然允许启动（不过这会导致配置无法读取）
-                            launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(version, quickPlay))
-                        }
-                    )
-                }
-                launchGameViewModel.updateOperation(LaunchGameOperation.None)
-            }
-        }
-        is LaunchGameOperation.UnsupportedRenderer -> {
-            val renderer = operation.renderer
-            val version = operation.version
-            val quickPlay = operation.quickPlay
-            SimpleAlertDialog(
-                title = stringResource(R.string.generic_warning),
-                text = stringResource(R.string.renderer_version_unsupported_warning, renderer.getRendererName()),
-                confirmText = stringResource(R.string.generic_anyway),
-                onConfirm = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(version, quickPlay))
-                },
-                onDismiss = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.None)
-                }
-            )
-        }
-        is LaunchGameOperation.UnsupportedPlugins -> {
-            val plugins = operation.plugins
-            val version = operation.version
-            val quickPlay = operation.quickPlay
-            SimpleAlertDialog(
-                title = stringResource(R.string.generic_warning),
-                text = stringResource(R.string.plugin_unsupported_warning, plugins.joinToString(", ") { it.appName }),
-                confirmText = stringResource(R.string.generic_anyway),
-                onConfirm = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(version, quickPlay))
-                },
-                onDismiss = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.None)
-                }
-            )
-        }
+        // 启动页上的一组选择（授权 / 仍然启动 / 取消），见 OxideLaunchPreflight
+        is LaunchGameOperation.RendererNoStoragePermission -> {}
+        is LaunchGameOperation.UnsupportedRenderer -> {}
+        is LaunchGameOperation.UnsupportedPlugins -> {}
         is LaunchGameOperation.TryLaunch -> {
             LaunchedEffect(Unit) {
                 val version = operation.version ?: run {
@@ -338,97 +256,11 @@ fun LaunchGameOperation(
                 launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(version, quickPlay))
             }
         }
-        is LaunchGameOperation.AccountRelogin -> {
-            if (operation.account.isMicrosoftAccount()) {
-                MicrosoftReloginDialog(
-                    onDismissRequest = {
-                        launchGameViewModel.updateOperation(LaunchGameOperation.None)
-                    },
-                    onConfirm = {
-                        launchGameViewModel.updateOperation(LaunchGameOperation.None)
-                        microsoftLogin(
-                            context = activity,
-                            toWeb = navigateToWeb,
-                            backToMain = backToMain,
-                            checkIfInWebScreen = checkIfInWebScreen,
-                            updateOperation = {},
-                            showToast = { text, duration -> eventViewModel.sendToast(text, duration) },
-                            submitError = submitError
-                        ) {
-                            activity.runOnUiThread {
-                                launchGameViewModel.updateOperation(
-                                    LaunchGameOperation.RealLaunch(
-                                        operation.version,
-                                        operation.quickPlay
-                                    )
-                                )
-                            }
-                        }
-                    }
-                )
-            } else {
-                OtherAccountReloginDialog(
-                    account = operation.account,
-                    logging = operation.logging,
-                    error = operation.error,
-                    onDismissRequest = {
-                        launchGameViewModel.updateOperation(LaunchGameOperation.None)
-                    },
-                    onConfirm = { password ->
-                        launchGameViewModel.updateOperation(operation.copy(logging = true, error = null))
-                        AuthServerHelper(
-                            baseUrl = operation.account.otherBaseUrl!!,
-                            serverName = operation.account.accountType!!,
-                            email = operation.account.otherAccount!!,
-                            password = password,
-                            onSuccess = { acc, _ ->
-                                AccountsManager.markSessionValidated(acc)
-                                AccountsManager.suspendSaveAccount(acc)
-                                activity.runOnUiThread {
-                                    launchGameViewModel.updateOperation(
-                                        LaunchGameOperation.RealLaunch(
-                                            operation.version,
-                                            operation.quickPlay)
-                                    )
-                                }
-                            },
-                            onFailed = { th ->
-                                activity.runOnUiThread {
-                                    launchGameViewModel.updateOperation(
-                                        operation.copy(
-                                            logging = false,
-                                            error = th
-                                        ))
-                                }
-                            }
-                        ).let { helper ->
-                            TaskSystem.submitTask(helper.justLogin(activity, operation.account))
-                        }
-                    }
-                )
-            }
-        }
-        is LaunchGameOperation.AccountRefreshFailed -> {
-            val state = operation
-            AccountRefreshFailedDialog(
-                error = state.error,
-                onSkip = {
-                    launchGameViewModel.updateOperation(
-                        LaunchGameOperation.RealLaunch(
-                            state.version,
-                            state.quickPlay,
-                            skipAccountRefresh = true
-                        )
-                    )
-                },
-                onRetry = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.RealLaunch(state.version, state.quickPlay))
-                },
-                onCancel = {
-                    launchGameViewModel.updateOperation(LaunchGameOperation.None)
-                }
-            )
-        }
+        // 微软账号：没有密码可填，重新走一遍设备码授权；第三方账号：重新填一次密码。
+        // 两者都改成启动页上的一组选择 + 一个密码输入框，见 OxideLaunchPreflight
+        is LaunchGameOperation.AccountRelogin -> {}
+        // 三个结局（重试 / 跳过刷新 / 取消）都在启动页上，见 OxideLaunchPreflight
+        is LaunchGameOperation.AccountRefreshFailed -> {}
         is LaunchGameOperation.RealLaunch -> {
             LaunchedEffect(Unit) {
                 val version = operation.version
@@ -446,91 +278,6 @@ fun LaunchGameOperation(
                     skipAccountRefresh = operation.skipAccountRefresh
                 )
                 launchGameViewModel.updateOperation(LaunchGameOperation.None)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccountRefreshFailedDialog(
-    error: Throwable,
-    onSkip: () -> Unit,
-    onRetry: () -> Unit,
-    onCancel: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onCancel
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .heightIn(max = rememberDialogMaxHeight())
-                .fillMaxHeight(),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
-                modifier = Modifier
-                    .padding(all = 6.dp)
-                    .heightIn(max = (maxHeight - 12.dp).coerceAtMost(rememberDialogMaxHeight()))
-                    .wrapContentHeight(),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = cardColor(false),
-                contentColor = onCardColor(),
-                shadowElevation = 6.dp
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.account_refresh_failed_title),
-                        style = MaterialTheme.typography.headlineSmall
-                    )
-                    Spacer(modifier = Modifier.size(12.dp))
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .verticalScroll(rememberScrollState())
-                            .fillMaxWidth()
-                    ) {
-                        AndroidStringText(
-                            text = accountErrorText(error),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text(
-                            text = stringResource(R.string.account_refresh_failed_skip_message),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    Spacer(modifier = Modifier.size(16.dp))
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        PositionButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            position = ButtonPosition.Top,
-                            onClick = onRetry
-                        ) {
-                            MarqueeText(text = stringResource(R.string.account_refresh_failed_retry))
-                        }
-                        PositionFilledTonalButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            position = ButtonPosition.Middle,
-                            onClick = onSkip
-                        ) {
-                            MarqueeText(text = stringResource(R.string.account_refresh_failed_skip))
-                        }
-                        PositionFilledTonalButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            position = ButtonPosition.Bottom,
-                            onClick = onCancel
-                        ) {
-                            MarqueeText(text = stringResource(R.string.generic_cancel))
-                        }
-                    }
-                }
             }
         }
     }

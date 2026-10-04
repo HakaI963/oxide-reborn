@@ -21,6 +21,11 @@ package dev.oxide.launcher.ui.screens.main
 import dev.oxide.launcher.ui.screens.main.oxide.OxideSettingsSection
 import dev.oxide.launcher.ui.screens.main.oxide.OxideMainShell
 import dev.oxide.launcher.ui.screens.main.oxide.OxideDownloadCategory
+import dev.oxide.launcher.ui.screens.main.oxide.OxideAboutPanel
+import dev.oxide.launcher.ui.screens.main.oxide.OxideControlLayoutsPanel
+import dev.oxide.launcher.ui.screens.main.oxide.rememberOxideMetrics
+import androidx.activity.compose.BackHandler
+import dev.oxide.launcher.ui.theme.ProvideOxideChrome
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Offset
@@ -62,7 +67,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,10 +95,7 @@ import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.AndroidStringText
 import dev.oxide.launcher.ui.androidText
-import dev.oxide.launcher.ui.components.BackgroundCard
-import dev.oxide.launcher.ui.components.CardTitleLayout
 import dev.oxide.launcher.ui.components.TextRailItem
-import dev.oxide.launcher.ui.guide.sendStartGuideOnce
 import dev.oxide.launcher.ui.screens.BackStackNavKey
 import dev.oxide.launcher.ui.screens.NestedNavKey
 import dev.oxide.launcher.ui.screens.NormalNavKey
@@ -120,7 +124,6 @@ import dev.oxide.launcher.ui.theme.onBackgroundColor
 import dev.oxide.launcher.ui.theme.onCardColor
 import dev.oxide.launcher.utils.animation.getAnimateTween
 import dev.oxide.launcher.utils.festival.LocalFestivals
-import dev.oxide.launcher.utils.file.formatFileSize
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
 import dev.oxide.launcher.viewmodel.LocalBackgroundViewModel
@@ -236,22 +239,11 @@ fun MainScreen(
                     modpackImportViewModel = modpackImportViewModel,
                     modifyVersionViewModel = modifyVersionViewModel,
                     submitError = submitError,
-                    tasksRunning = tasks.isNotEmpty(),
+                    tasks = tasks,
                     tasksExpanded = isTaskMenuExpanded,
                     onToggleTasks = ::changeTasksExpandedState,
                 )
 
-                TaskMenu(
-                    tasks = tasks,
-                    isExpanded = isTaskMenuExpanded,
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(0.3f)
-                        .align(Alignment.CenterStart)
-                        .padding(all = 6.dp)
-                ) {
-                    changeTasksExpandedState()
-                }
             }
         }
     }
@@ -503,7 +495,7 @@ private fun NavigationUI(
     modpackImportViewModel: ModpackImportViewModel,
     modifyVersionViewModel: ModifyVersionViewModel,
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
-    tasksRunning: Boolean,
+    tasks: List<Task>,
     tasksExpanded: Boolean,
     onToggleTasks: () -> Unit,
 ) {
@@ -513,6 +505,13 @@ private fun NavigationUI(
     LaunchedEffect(currentKey) {
         screenBackStackModel.mainScreen.currentKey = currentKey
     }
+
+    // 旧启动器主界面的首次引导重播已经移除。它只被 LauncherScreen 的
+    // LaunchedEffect 调过一次，而 LauncherScreen 自身在
+    // `entry<NormalNavKey.LauncherMain>` 换成 OxideMainShell 之后就已经不再
+    // 被任何地方渲染——它是一段只会指向旧主界面节点的引导，留着只能让
+    // "重播引导"这个入口看起来还能用，实际点开是一串对不上位置的卡片。
+    // 编辑器自己的引导与它无关，仍然保留。
 
     if (backStack.isNotEmpty()) {
         /** 导航至版本详细信息屏幕；只有既有的版本管理页还会用到它 */
@@ -541,32 +540,81 @@ private fun NavigationUI(
             popTransitionSpec = rememberTransitionSpec(),
             entryProvider = entryProvider {
                 entry<NormalNavKey.LauncherMain> {
-                    OxideMainShell(
-                        openLink = {
-                            eventViewModel.sendEvent(EventViewModel.Event.OpenLink(it))
-                        },
-                        openSettingsSection = { section ->
-                            screenBackStackModel.mainScreen.removeAndNavigateTo(
-                                removes = screenBackStackModel.clearBeforeNavKeys,
-                                screenKey = screenBackStackModel.settingsScreen
-                            )
-                            screenBackStackModel.settingsScreen.navigateOnce(section.navKey())
-                        },
-                        openDownloadCategory = { category ->
-                            if (category == OxideDownloadCategory.SearchId) {
-                                screenBackStackModel.navigateToDownload(NormalNavKey.SearchId)
-                            } else {
-                                screenBackStackModel.mainScreen.removeAndNavigateTo(
-                                    removes = screenBackStackModel.clearBeforeNavKeys,
-                                    screenKey = category.outerKey(screenBackStackModel),
-                                    useClassEquality = true
+                    // 由 Oxide 自己承接的整块设置面板（关于、控制布局管理）。
+                    // 状态挂在 LauncherMain 这一条目上：它本来就在栈底，
+                    // 因此面板一直开着直到用户主动关掉，返回键先关它。
+                    // 用 remember 而不是 rememberSaveable：面板是压在外壳之上的一层，
+                    // 与外壳自己那些整块表面（destination）一样属于临时状态，
+                    // 旋转之后回到设置页比回到一块盖住的旧界面更符合预期
+                    var oxidePanel by remember { mutableStateOf<OxideSettingsSection?>(null) }
+                    BackHandler(enabled = oxidePanel != null) { oxidePanel = null }
+                    // 面板由外壳同源的尺寸档位驱动，因此换档时它跟着一起缩放
+                    val oxideMetrics = rememberOxideMetrics()
+
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        OxideMainShell(
+                            openLink = {
+                                eventViewModel.sendEvent(EventViewModel.Event.OpenLink(it))
+                            },
+                            openSettingsSection = { section ->
+                                val key = section.navKey()
+                                val panel = section.oxidePanel()
+                                if (panel != null) {
+                                    // Oxide 已经为这一类准备了整块面板：在外壳里盖上去，
+                                    // 而不是把旧的 Zalith 设置栈推进来——那套界面带着它自己
+                                    // 上游的图标顶栏与粉色强调轨，和新界面不是同一种语言。
+                                    oxidePanel = panel
+                                } else {
+                                    oxidePanel = null
+                                    if (key != null) {
+                                        screenBackStackModel.mainScreen.removeAndNavigateTo(
+                                            removes = screenBackStackModel.clearBeforeNavKeys,
+                                            screenKey = screenBackStackModel.settingsScreen
+                                        )
+                                        screenBackStackModel.settingsScreen.navigateOnce(key)
+                                    }
+                                    // key 与 panel 都为 null 的几类（游戏、启动器，以及
+                                    // Java、渲染器、控制、手柄）都已经由设置页自己那一栏
+                                    // 展开，没有独立的整块面板，因此这里什么都不做
+                                }
+                            },
+                            openDownloadCategory = { category ->
+                                if (category == OxideDownloadCategory.SearchId) {
+                                    screenBackStackModel.navigateToDownload(NormalNavKey.SearchId)
+                                } else {
+                                    screenBackStackModel.mainScreen.removeAndNavigateTo(
+                                        removes = screenBackStackModel.clearBeforeNavKeys,
+                                        screenKey = category.outerKey(screenBackStackModel),
+                                        useClassEquality = true
+                                    )
+                                }
+                            },
+                            tasks = tasks,
+                            tasksExpanded = tasksExpanded,
+                            onToggleTasks = onToggleTasks,
+                        )
+
+                        // 面板盖在整块外壳之上，所以它自带底色与调色板：
+                        // 外壳里的 ProvideOxideChrome 只覆盖它自己的子树
+                        ProvideOxideChrome {
+                            when (oxidePanel) {
+                                OxideSettingsSection.About -> OxideAboutPanel(
+                                    metrics = oxideMetrics,
+                                    onDismiss = { oxidePanel = null },
+                                    // 协议全文走既有的 License 路由：那是启动器里唯一
+                                    // 一个真的能把 R.raw 读完并渲染出来的地方
+                                    openLicense = { raw -> backStack.navigateTo(NormalNavKey.License(raw)) },
                                 )
+
+                                OxideSettingsSection.ControlManager -> OxideControlLayoutsPanel(
+                                    metrics = oxideMetrics,
+                                    onDismiss = { oxidePanel = null },
+                                )
+
+                                else -> {}
                             }
-                        },
-                        tasksRunning = tasksRunning,
-                        tasksExpanded = tasksExpanded,
-                        onToggleTasks = onToggleTasks,
-                    )
+                        }
+                    }
                 }
                 entry<NestedNavKey.Settings> { key ->
                     SettingsScreen(
@@ -679,187 +727,42 @@ private fun NavigationUI(
     }
 }
 
-@Composable
-private fun TaskMenu(
-    tasks: List<Task>,
-    isExpanded: Boolean,
-    modifier: Modifier = Modifier,
-    changeExpandedState: () -> Unit = {}
-) {
-    val show = isExpanded && tasks.isNotEmpty()
-
-    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    AnimatedVisibility(
-        modifier = modifier,
-        enter = slideInHorizontally(
-            initialOffsetX = { if (isRtl) it else -it },
-            animationSpec = getAnimateTween()
-        ) + fadeIn(),
-        exit = slideOutHorizontally(
-            targetOffsetX = { if (isRtl) it else -it },
-            animationSpec = getAnimateTween()
-        ) + fadeOut(),
-        visible = show
-    ) {
-        BackgroundCard(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(all = 6.dp),
-            influencedByBackground = false,
-            shape = MaterialTheme.shapes.extraLarge,
-            colors = CardDefaults.cardColors(
-                containerColor = backgroundColor(),
-                contentColor = onBackgroundColor()
-            ),
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
-        ) {
-            Column {
-                CardTitleLayout(blur = 0) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(top = 8.dp, bottom = 4.dp)
-                    ) {
-                        IconButton(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .align(Alignment.CenterStart),
-                            onClick = changeExpandedState
-                        ) {
-                            Icon(
-                                modifier = Modifier.size(28.dp),
-                                painter = painterResource(R.drawable.ic_arrow_left_rounded),
-                                contentDescription = stringResource(R.string.generic_collapse)
-                            )
-                        }
-
-                        Text(
-                            modifier = Modifier.align(Alignment.Center),
-                            text = stringResource(R.string.main_task_menu)
-                        )
-                    }
-                }
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    items(tasks) { task ->
-                        val taskProgress by task.progress.collectAsStateWithLifecycle()
-                        val taskMessage by task.message.collectAsStateWithLifecycle()
-                        val rateBytesPerSec by task.rateBytesPerSec.collectAsStateWithLifecycle()
-
-                        TaskItem(
-                            taskProgress = taskProgress,
-                            taskMessage = taskMessage,
-                            rateBytesPerSec = rateBytesPerSec,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                        ) {
-                            //取消任务
-                            TaskSystem.cancelTask(task.id)
-                        }
-                    }
-                }
-            }
-        }
-    }
+/**
+ * 设置分类到已有导航键的映射
+ *
+ * 返回 null 的那几类不由旧的 Zalith 设置嵌套栈承接：一类是自己有面板（见
+ * [oxidePanel]），另一类是已经由 Oxide 自己的设置页某一栏就地展开（Java、渲染器、
+ * 控制与手柄）。不推进旧栈——那套界面带的是它自己上游的图标顶栏与粉色强调轨，
+ * 与新界面不搭，而且它描述的是旧产品，不是这个。返回 null 就是"不要推进旧栈"
+ * 这条决定本身，写在这里而不是在调用点判断，是为了让新增的分类必须当场表态。
+ */
+private fun OxideSettingsSection.navKey(): NormalNavKey.Settings? = when (this) {
+    // 这四类现在都由 Oxide 自己的设置页承接：Java 与渲染器各有抽屉（见
+    // OxideSettingsPage 的分类），控制与手柄整块在控制面板里展开
+    // （OxideControlsPanel）。它们不需要独立的整块面板，因此这里一律返回 null，
+    // 推进旧栈只会把用户从新设置页丢回旧界面
+    OxideSettingsSection.Renderer -> null
+    OxideSettingsSection.JavaManager -> null
+    OxideSettingsSection.Control -> null
+    OxideSettingsSection.Gamepad -> null
+    // Oxide 自己有面板：关于、控制布局管理
+    OxideSettingsSection.About -> null
+    OxideSettingsSection.ControlManager -> null
+    // 游戏与启动器两类就是设置页自己左栏里的分类，没有单独的整块面板；
+    // 它们的每一项都已经是设置页里的行，不必也不该再开一块旧界面
+    OxideSettingsSection.Game -> null
+    OxideSettingsSection.Launcher -> null
 }
 
-@Composable
-private fun TaskItem(
-    taskProgress: Float,
-    taskMessage: AndroidStringText?,
-    rateBytesPerSec: Long?,
-    modifier: Modifier = Modifier,
-    shape: Shape = MaterialTheme.shapes.large,
-    color: Color = cardColor(false),
-    contentColor: Color = onCardColor(),
-    onCancelClick: () -> Unit = {}
-) {
-    Surface(
-        modifier = modifier,
-        shape = shape,
-        color = color,
-        contentColor = contentColor,
-    ) {
-        Row(
-            modifier = Modifier.padding(all = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            IconButton(
-                modifier = Modifier
-                    .size(24.dp)
-                    .align(Alignment.CenterVertically),
-                onClick = onCancelClick
-            ) {
-                Icon(
-                    modifier = Modifier.size(20.dp),
-                    painter = painterResource(R.drawable.ic_close),
-                    contentDescription = stringResource(R.string.generic_cancel)
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .align(Alignment.CenterVertically)
-            ) {
-                taskMessage?.let { message ->
-                    AndroidStringText(
-                        text = message,
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
-
-                if (taskProgress < 0) { //负数则代表不确定
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        progress = { taskProgress },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    taskProgress.takeIf { it >= 0f }?.let { progress ->
-                        Text(
-                            text = "${(progress * 100).toInt()}%",
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                    rateBytesPerSec?.let { bytes ->
-                        val text = remember(bytes) { "${formatFileSize(bytes)}/s" }
-                        Text(
-                            text = text,
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-/** 设置分类到已有导航键的映射：外壳不新增深层页面，只是把已有的接上 */
-private fun OxideSettingsSection.navKey(): NormalNavKey.Settings = when (this) {
-    OxideSettingsSection.Renderer -> NormalNavKey.Settings.Renderer
-    OxideSettingsSection.Game -> NormalNavKey.Settings.Game
-    OxideSettingsSection.Control -> NormalNavKey.Settings.Control
-    OxideSettingsSection.Gamepad -> NormalNavKey.Settings.Gamepad
-    OxideSettingsSection.Launcher -> NormalNavKey.Settings.Launcher
-    OxideSettingsSection.JavaManager -> NormalNavKey.Settings.JavaManager
-    OxideSettingsSection.ControlManager -> NormalNavKey.Settings.ControlManager
-    OxideSettingsSection.About -> NormalNavKey.Settings.AboutInfo
+/**
+ * 由 Oxide 自己那块面板承接的分类
+ *
+ * 与 [navKey] 一样是一张写死的表：新增分类必须在这里或那里表态，
+ * 不会出现"既没有旧栈也没有面板"的第三种结果被悄悄忽略。
+ */
+private fun OxideSettingsSection.oxidePanel(): OxideSettingsSection? = when (this) {
+    OxideSettingsSection.About, OxideSettingsSection.ControlManager -> this
+    else -> null
 }
 
 /** 下载分类到已有的下载嵌套栈的映射，复用既有的分类入口 */

@@ -90,7 +90,6 @@ import dev.oxide.launcher.ui.components.toColorOrNull
 import dev.oxide.launcher.ui.components.toHex
 import dev.oxide.launcher.ui.control.HotbarRule
 import dev.oxide.launcher.ui.control.gamepad.JoystickMode
-import dev.oxide.launcher.ui.guide.GuideKeys
 import dev.oxide.launcher.ui.screens.content.navigateToLogView
 import dev.oxide.launcher.ui.theme.ColorThemeType
 import dev.oxide.launcher.utils.customResolutionRange
@@ -157,7 +156,6 @@ internal class OxideLauncherBridge(
     val openFileManager: (String) -> Unit,
     val showToast: (Int) -> Unit,
     val startEditor: (File) -> Unit,
-    val replayGuide: () -> Unit,
 )
 
 @Composable
@@ -182,7 +180,6 @@ internal fun rememberOxideLauncherBridge(): OxideLauncherBridge {
             openFileManager = { path -> host.openFiles(path) },
             showToast = { res -> events.sendToast(androidText(res)) },
             startEditor = { file -> startEditorActivity(context, file) },
-            replayGuide = { events.sendEvent(EventViewModel.Event.Guide.StartGuide(GuideKeys.Main)) },
         )
     }
 }
@@ -710,21 +707,6 @@ fun OxideJavaDrawer(
                 value = AllSettings.jvmArgs.state,
                 singleLine = false,
                 onSave = { AllSettings.jvmArgs.save(it) },
-            )
-        }
-
-        OxideSettingsGroup(
-            title = stringResource(R.string.oxide_set_section_runtime_actions),
-            metrics = metrics,
-        ) {
-            OxideActionRow(
-                label = stringResource(R.string.oxide_set_action_manage_runtimes),
-                hint = stringResource(R.string.oxide_set_action_manage_runtimes_detail),
-                value = stringResource(R.string.oxide_set_count, runtimes.size),
-                onClick = {
-                    onDismiss()
-                    bridge.openSettingsSection(OxideSettingsSection.JavaManager)
-                },
             )
         }
     }
@@ -1372,22 +1354,6 @@ private fun OxideAdvancedActions(
                 if (target != null) bridge.startEditor(target.file)
             },
         )
-        OxideActionRow(
-            label = stringResource(R.string.settings_tab_control),
-            hint = stringResource(R.string.oxide_set_action_full_controls_detail),
-            onClick = {
-                onDismiss()
-                bridge.openSettingsSection(OxideSettingsSection.Control)
-            },
-        )
-        OxideActionRow(
-            label = stringResource(R.string.settings_tab_gamepad),
-            hint = stringResource(R.string.oxide_set_action_full_gamepad_detail),
-            onClick = {
-                onDismiss()
-                bridge.openSettingsSection(OxideSettingsSection.Gamepad)
-            },
-        )
     }
 
     OxideSettingsGroup(
@@ -1430,11 +1396,6 @@ private fun OxideAdvancedActions(
                 onDismiss()
                 bridge.openSettingsSection(OxideSettingsSection.About)
             },
-        )
-        OxideActionRow(
-            label = stringResource(R.string.oxide_set_action_guides),
-            hint = stringResource(R.string.oxide_set_action_guides_detail),
-            onClick = bridge.replayGuide,
         )
         OxideActionRow(
             label = stringResource(R.string.oxide_set_action_community),

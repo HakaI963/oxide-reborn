@@ -160,18 +160,10 @@ fun AboutInfoScreen(
                     title = stringResource(R.string.about_acknowledgements_title)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ButtonIconItem(
-                            icon = painterResource(R.drawable.img_avatar_bangbang93),
-                            title = "bangbang93",
-                            text = stringResource(R.string.about_acknowledgements_bangbang93_text, BuildKeys.LAUNCHER_SHORT_NAME),
-                            button = {
-                                Button(
-                                    onClick = { openLink("https://ifdian.net/a/bangbang93") }
-                                ) {
-                                    Text(text = stringResource(R.string.about_sponsor))
-                                }
-                            }
-                        )
+                        // 这里原本是 bangbang93 的头像 + 名字 + 捐赠入口。
+                        // 那是旧产品的创作者展示，与本项目无关，因此整条移走；
+                        // 但 BMCL 镜像源本身仍然在用，它作为一行普通致谢保留在
+                        // `OxideAboutPanel` 里——移走的是创作者身份，不是镜像源署名。
                         LinkIconItem(
                             icon = painterResource(R.drawable.img_launcher_fcl),
                             title = "Fold Craft Launcher",
@@ -192,17 +184,13 @@ fun AboutInfoScreen(
                             text = stringResource(R.string.about_acknowledgements_mcmod_text, BuildKeys.LAUNCHER_SHORT_NAME),
                             openLink = { openLink(URL_MCMOD) }
                         )
-                        ButtonIconItem(
+                        // MCIM 这一行原本只有捐赠按钮：致谢却落在一个打不开的
+                        // 头像上。镜像源本身必须留着，因此改成走项目链接的普通致谢行
+                        LinkIconItem(
                             icon = painterResource(R.drawable.img_avatar_mcim),
                             title = "mcmod-info-mirror",
                             text = stringResource(R.string.about_acknowledgements_mcim_text, BuildKeys.LAUNCHER_SHORT_NAME),
-                            button = {
-                                Button(
-                                    onClick = { openLink("https://www.mcimirror.top/sponsor") }
-                                ) {
-                                    Text(text = stringResource(R.string.about_sponsor))
-                                }
-                            }
+                            openLink = { openLink("https://www.mcimirror.top/sponsor") }
                         )
                         LinkIconItem(
                             icon = painterResource(R.drawable.img_launcher_pcl2),

@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -44,10 +43,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -55,6 +57,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +83,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.TaskStage
+import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.coroutine.TitledTask
 import dev.oxide.launcher.game.download.assets.DependencyRequest
 import dev.oxide.launcher.game.download.assets.downloadDependenciesForVersions
@@ -96,12 +100,19 @@ import dev.oxide.launcher.game.download.assets.platform.PlatformSortField
 import dev.oxide.launcher.game.download.assets.platform.PlatformVersion
 import dev.oxide.launcher.game.download.assets.platform.curseforge.models.curseForgeModLoaderFilters
 import dev.oxide.launcher.game.download.assets.platform.getProjectByVersion
+import dev.oxide.launcher.game.download.assets.platform.getVersionById
 import dev.oxide.launcher.game.download.assets.platform.getVersions
 import dev.oxide.launcher.game.download.assets.platform.modrinth.models.modrinthModLoaderFilters
 import dev.oxide.launcher.game.download.assets.platform.searchAssets
+import dev.oxide.launcher.game.download.assets.utils.ModTranslations
 import dev.oxide.launcher.game.download.assets.utils.getMcmodTitle
 import dev.oxide.launcher.game.download.modpack.install.ModPackInfo
 import dev.oxide.launcher.game.download.modpack.install.ModPackInstaller
+import dev.oxide.launcher.game.path.getGameHome
+import dev.oxide.launcher.game.version.download.DOWNLOADER_TAG
+import dev.oxide.launcher.game.version.download.DownloadMode
+import dev.oxide.launcher.game.version.download.MinecraftDownloader
+import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionsManager
 import dev.oxide.launcher.game.versioninfo.MinecraftVersion
 import dev.oxide.launcher.game.versioninfo.MinecraftVersions
@@ -113,7 +124,6 @@ import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.components.imePanAnchor
 import dev.oxide.launcher.ui.screens.content.download.DownloadModViewModel
 import dev.oxide.launcher.ui.screens.content.download.assets.elements.AssetsIcon
-import dev.oxide.launcher.ui.screens.content.download.assets.elements.AssetsPage
 import dev.oxide.launcher.ui.screens.content.download.assets.elements.initAll
 import dev.oxide.launcher.ui.screens.content.elements.isFilenameInvalid
 import dev.oxide.launcher.ui.theme.Oxide
@@ -131,8 +141,8 @@ import kotlin.coroutines.resume
 
 private const val TAG = "OxideDiscoverPage"
 
-/** 一次搜索取回的结果条数，与资源搜索页保持一致 */
-private const val RESULT_LIMIT = 20
+/** 同时读取的依赖数量上限，防止异常元数据把确认界面撑爆 */
+private const val MAX_DISCOVER_DEPENDENCIES = 64
 
 // ---------------------------------------------------------------------------
 // 尺寸：一律由 metrics 推导，页面不写死任何一个用于布局的 dp
@@ -215,28 +225,6 @@ private enum class DiscoverCategory(
     )
 }
 
-/**
- * 一条搜索结果：字段都在搜索时取好，绘制时不再访问平台模型
- *
- * [classes] 是发起本次搜索时使用的类别，平台接口对一次搜索只返回这一类结果，
- * 因此它就是这条结果真实所属的类别，安装路径与详情标签都直接用它
- */
-private data class DiscoverItem(
-    val data: PlatformSearchData,
-    val title: String,
-    val classes: PlatformClasses,
-    val loaderLabel: String?
-) {
-    val key: String get() = "${data.platform().name}/${data.platformId()}"
-}
-
-/** 搜索结果的三种真实状态：加载中、成功（含空结果）、失败 */
-private sealed interface DiscoverResults {
-    data object Loading : DiscoverResults
-    data class Ready(val page: AssetsPage) : DiscoverResults
-    data class Failed(val message: AndroidStringText) : DiscoverResults
-}
-
 /** 安装动作的状态 */
 private sealed interface DiscoverInstall {
     data object Idle : DiscoverInstall
@@ -261,11 +249,19 @@ private sealed interface DiscoverInstall {
     data object Cancelled : DiscoverInstall
 }
 
+/** 项目全部文件版本的读取结果：失败必须与"没有文件"分开 */
+private sealed interface DiscoverFilesResult {
+    data class Ok(val versions: List<PlatformVersion>) : DiscoverFilesResult
+    data object Empty : DiscoverFilesResult
+    data class Failed(val message: AndroidStringText) : DiscoverFilesResult
+}
+
 /** 项目详情抽屉的状态 */
 private data class DiscoverDetail(
     val item: DiscoverItem,
     val project: DiscoverProjectState,
-    val files: DiscoverFilesState
+    val files: DiscoverFilesState,
+    val dependencies: DiscoverDependenciesState
 )
 
 private sealed interface DiscoverProjectState {
@@ -281,19 +277,66 @@ private sealed interface DiscoverFilesState {
     data class Failed(val message: AndroidStringText) : DiscoverFilesState
 }
 
-/** 整合包安装前的确认内容 */
-private data class ModpackDraft(
-    val item: DiscoverItem,
-    val version: PlatformVersion,
-    val instanceName: String
+/** 详情抽屉里依赖列表的状态 */
+private sealed interface DiscoverDependenciesState {
+    data object Loading : DiscoverDependenciesState
+    data object Empty : DiscoverDependenciesState
+    data class Loaded(val rows: List<DiscoverDependencyRow>) : DiscoverDependenciesState
+    data class Failed(val message: AndroidStringText) : DiscoverDependenciesState
+}
+
+/**
+ * 一个依赖在界面上的完整状态
+ *
+ * 每一条各自持有读取结果、勾选、下载错误与可重试的请求：其中一条失败不能把其余的
+ * 判死，所以状态是逐条的一行，而不是一份统一的"依赖安装失败"。
+ *
+ * @param request 已经解析出的真实依赖请求；重试直接复用它，不重新猜
+ */
+private data class DiscoverDependencyRow(
+    val dependency: DiscoverDependency,
+    val state: DiscoverDependencyState,
+    val selected: Boolean,
+    val request: DependencyRequest? = null,
+    val downloadError: AndroidStringText? = null,
 )
 
-/** 版本解析的结果 */
-private sealed interface ResolveResult {
-    data class Ok(val version: PlatformVersion) : ResolveResult
-    data object NoFile : ResolveResult
-    data class Failed(val message: AndroidStringText) : ResolveResult
+/** 安装前确认层的三种真实状态：解析中、可确认、失败 */
+private sealed interface DiscoverSheet {
+    val item: DiscoverItem
+
+    data class Resolving(override val item: DiscoverItem) : DiscoverSheet
+
+    data class Ready(val content: DiscoverInstallSheet) : DiscoverSheet {
+        override val item: DiscoverItem get() = content.item
+    }
+
+    data class Failed(
+        override val item: DiscoverItem,
+        val message: AndroidStringText,
+    ) : DiscoverSheet
 }
+
+/**
+ * 安装前确认的全部内容
+ *
+ * 打开这一层时一个字节都还没有下载：这里收集的是用户的三个决定——
+ * 装到哪个 Minecraft 版本、带哪些依赖、整合包叫什么名字。
+ *
+ * @param chosenVersionName 用户改过的目标版本；null 表示仍跟随自动检测
+ */
+private data class DiscoverInstallSheet(
+    val item: DiscoverItem,
+    /** 已为这个目标版本解析出的项目文件版本 */
+    val version: PlatformVersion,
+    val classes: PlatformClasses,
+    /** 自动检测到的目标版本，来自当前选中的实例 */
+    val detectedVersionName: String?,
+    val chosenVersionName: String?,
+    /** 整合包要创建的实例名 */
+    val instanceName: String,
+    val dependencies: List<DiscoverDependencyRow>,
+)
 
 /** 安装提示条的内容 */
 private data class DiscoverNotice(
@@ -305,8 +348,9 @@ private data class DiscoverNotice(
 /**
  * 发现页的状态持有者
  *
- * 只管状态与一次性动作：搜索、安装、把整合包交给 [ModPackInstaller]。
- * 所有网络调用都在 [viewModelScope] 里跑，切页不会中断搜索，正在进行的整合包安装也不会丢。
+ * 只管状态与一次性动作：翻页搜索、安装、把整合包交给 [ModPackInstaller]。
+ * 所有网络调用都在 [viewModelScope] 里跑；换条件时会取消上一次在途的请求——
+ * 否则旧关键词的响应会落进新列表。
  */
 private class OxideDiscoverViewModel : ViewModel() {
 
@@ -329,7 +373,16 @@ private class OxideDiscoverViewModel : ViewModel() {
     var onlyInstalled by mutableStateOf(false)
         private set
 
-    var results by mutableStateOf<DiscoverResults>(DiscoverResults.Loading)
+    /**
+     * 结果列表
+     *
+     * 无限滚动时结果是**累积**在这里的：换条件清空并回到 index 0，往下滚则接上新一页。
+     */
+    var feed by mutableStateOf(DiscoverFeed())
+        private set
+
+    /** 当前自动检测到的目标版本，即当前选中实例的版本名 */
+    var detectedVersionName by mutableStateOf<String?>(null)
         private set
 
     var install by mutableStateOf<DiscoverInstall>(DiscoverInstall.Idle)
@@ -342,7 +395,12 @@ private class OxideDiscoverViewModel : ViewModel() {
     var detail by mutableStateOf<DiscoverDetail?>(null)
         private set
 
-    var modpackDraft by mutableStateOf<ModpackDraft?>(null)
+    /** 安装前确认层，只有模组与整合包会打开 */
+    var sheet by mutableStateOf<DiscoverSheet?>(null)
+        private set
+
+    /** 整合包实例名的问题（空、已存在、非法文件名）；由状态层算，界面不读磁盘 */
+    var instanceNameProblem by mutableStateOf<AndroidStringText?>(null)
         private set
 
     var installer by mutableStateOf<ModPackInstaller?>(null)
@@ -351,16 +409,32 @@ private class OxideDiscoverViewModel : ViewModel() {
     var awaitingMobileData by mutableStateOf(false)
         private set
 
+    /** 本地已装的实例版本名 */
+    var installedVersions by mutableStateOf<List<String>>(emptyList())
+        private set
+
     private var searchJob: Job? = null
     private var resolveJob: Job? = null
+    private var sheetJob: Job? = null
     private var projectJob: Job? = null
     private var filesJob: Job? = null
+    private var dependenciesJob: Job? = null
     private var mobileDataContinuation: Continuation<Boolean>? = null
+
+    /** 上一次搜索用的条件，用来判断这次响应还该不该落地 */
+    private var lastQuery: DiscoverQuery? = null
+
+    /** 条目标题要按当前语言与 mcmod 译名解析，只有组合期做得到，所以由界面递进来 */
+    private var titleResolver: ((PlatformSearchData, ModTranslations.McMod?) -> String)? = null
 
     /** 当前是否有筛选条件生效 */
     val hasFilters: Boolean
         get() = query.isNotBlank() || gameVersion.isNotBlank() || modloader != null ||
                 sortField != PlatformSortField.RELEVANCE
+
+    fun provideTitleResolver(resolver: (PlatformSearchData, ModTranslations.McMod?) -> String) {
+        titleResolver = resolver
+    }
 
     fun updateQuery(value: String) {
         query = value
@@ -381,7 +455,6 @@ private class OxideDiscoverViewModel : ViewModel() {
         // 该类别不支持加载器过滤时，旧的加载器过滤不再有意义
         if (!value.loaderFilterable) modloader = null
         modloader = modloader?.takeIf { it in loadersFor(platform) }
-        search()
     }
 
     fun toggleOnlyInstalled(value: Boolean) {
@@ -394,29 +467,20 @@ private class OxideDiscoverViewModel : ViewModel() {
         modloader = modloader?.takeIf { it in loadersFor(value) }
         // 来源平台要落到设置里：设置页与资源搜索页读的是同一份
         category.platformSetting()?.save(value)
-        search()
     }
 
     fun selectGameVersion(value: String) {
-        if (gameVersion == value) return
         gameVersion = value
-        search()
     }
 
     fun selectModloader(value: PlatformDisplayLabel?) {
-        if (modloader == value) return
         // 只接受当前平台真实支持的加载器：两个平台的枚举是不同的类型，
         // 一个平台的加载器在另一个平台上无法转换成请求参数，发过去只会静默失效
-        val valid = value?.takeIf { it in loadersFor(platform) }
-        modloader = valid
-        if (valid != value) return
-        search()
+        modloader = value?.takeIf { it in loadersFor(platform) }
     }
 
     fun selectSort(value: PlatformSortField) {
-        if (sortField == value) return
         sortField = value
-        search()
     }
 
     fun clearFilters() {
@@ -424,31 +488,114 @@ private class OxideDiscoverViewModel : ViewModel() {
         gameVersion = ""
         modloader = null
         sortField = PlatformSortField.RELEVANCE
-        search()
     }
 
-    /** 发起当前条件下的搜索；取消上一次搜索，保证只有最后一次的结果会落地 */
+    // ---- 翻页 ------------------------------------------------------------
+
+    /** 当前这一次搜索的条件全集 */
+    private fun currentQuery() = DiscoverQuery(
+        platform = platform,
+        classes = category.classes,
+        searchName = query,
+        gameVersion = gameVersion,
+        modloader = modloader,
+        sortField = sortField,
+    )
+
+    /**
+     * 换条件就换一批结果：取消在途请求、清空累计列表、从 index 0 重新开始
+     *
+     * 取消与清空缺一不可——只清列表的话，旧关键词的响应仍会落进新列表里。
+     */
     fun search() {
         searchJob?.cancel()
-        val classes = category.classes
+        val next = currentQuery()
+        discoverResetReason(lastQuery, next)?.let { reason ->
+            Logger.info(TAG, "Restarting the result list because of: $reason")
+        }
+        lastQuery = next
+        feed = feed.start()
+        fetch(0)
+    }
+
+    /** 取下一页；已经在取或已经到底时这次调用什么也不做 */
+    fun loadMore() {
+        val started = feed.beginNextPage() ?: return
+        feed = started
+        fetch(DiscoverPaging.nextIndex(started.index, started.pageSize))
+    }
+
+    /**
+     * 重试
+     *
+     * 已经有结果就只重试失败的那一页（同一个 index），否则整轮重来。
+     * 两种情况都不会把失败说成"没有结果"。
+     */
+    fun retry() {
+        searchJob?.cancel()
+        if (feed.items.isEmpty()) {
+            feed = feed.start()
+            fetch(0)
+        } else {
+            loadMore()
+        }
+    }
+
+    /** 本地已装版本名，供"要不要连游戏版本一起装"使用 */
+    fun refreshInstalledVersions() {
+        installedVersions = VersionsManager.versions.value.map { it.getVersionName() }
+    }
+
+    /** 当前选中的实例变了：自动检测到的目标版本跟着换 */
+    fun onCurrentInstanceChanged(name: String?) {
+        detectedVersionName = name
+    }
+
+    /**
+     * 真正发起一次搜索
+     *
+     * [index] 是服务端那边的起始索引。落地前再核对一次条件：
+     * 条件已经被换掉时这次响应直接丢掉，不碰列表。
+     */
+    private fun fetch(index: Int) {
+        val request = lastQuery ?: return
+        val appending = feed.items.isNotEmpty()
         searchJob = viewModelScope.launch {
-            results = DiscoverResults.Loading
             searchAssets(
-                searchPlatform = platform,
+                searchPlatform = request.platform,
                 searchFilter = PlatformSearchFilter(
-                    searchName = query,
-                    gameVersion = gameVersion,
-                    sortField = sortField,
-                    modloader = modloader,
-                    index = 0,
-                    limit = RESULT_LIMIT
+                    searchName = request.searchName,
+                    gameVersion = request.gameVersion,
+                    sortField = request.sortField,
+                    modloader = request.modloader,
+                    index = index,
+                    limit = feed.pageSize,
                 ),
-                platformClasses = classes,
+                platformClasses = request.classes,
                 onSuccess = { result ->
-                    results = DiscoverResults.Ready(result.getAssetsPage(classes))
+                    if (lastQuery != request) {
+                        Logger.debug(TAG, "Discarded a stale page at index=$index")
+                        return@searchAssets
+                    }
+                    val page = result.getAssetsPage(request.classes)
+                    feed = feed.append(
+                        page = page.toDiscoverPage { data, mcmod ->
+                            titleResolver?.invoke(data, mcmod) ?: data.platformTitle()
+                        },
+                        classes = request.classes,
+                    )
                 },
                 onError = { error ->
-                    results = DiscoverResults.Failed(error.message)
+                    if (lastQuery != request) {
+                        Logger.debug(TAG, "Discarded a stale failure at index=$index")
+                        return@searchAssets
+                    }
+                    Logger.warning(TAG, "Search failed at index=$index", null)
+                    feed = if (appending) {
+                        feed.failNextPage(error.message)
+                    } else {
+                        feed.failFirstPage(error.message)
+                    }
                 }
             )
         }
@@ -456,156 +603,523 @@ private class OxideDiscoverViewModel : ViewModel() {
 
     // ---- 安装 ------------------------------------------------------------
 
+    /**
+     * 点"安装"
+     *
+     * 模组与整合包先开确认层，一个字节都还没下载；
+     * 其余类别是整包放进某个实例的固定目录，没有版本与依赖的概念，直接装。
+     */
     fun install(item: DiscoverItem) {
         if (install.busy()) return
-
-        // 整合包会被安装成独立的实例，不需要选中当前实例
-        if (item.classes == PlatformClasses.MOD_PACK) {
-            resolveThen(item) { version ->
-                modpackDraft = ModpackDraft(
-                    item = item,
-                    version = version,
-                    instanceName = uniqueInstanceName(item.title)
-                )
-                install = DiscoverInstall.Idle
-            }
-            return
-        }
-
-        if (VersionsManager.currentVersion.value == null) {
-            install = DiscoverInstall.NeedsInstance
-            return
-        }
-
-        resolveThen(item) { version -> submitFile(version, item.classes) }
-    }
-
-    /** 安装详情抽屉里选定的具体文件 */
-    fun installVersion(item: DiscoverItem, version: PlatformVersion) {
-        if (install.busy()) return
-        if (item.classes == PlatformClasses.MOD_PACK) {
-            modpackDraft = ModpackDraft(item, version, uniqueInstanceName(item.title))
+        if (discoverUsesInstallSheet(item.classes)) {
+            openSheet(item)
             return
         }
         if (VersionsManager.currentVersion.value == null) {
             install = DiscoverInstall.NeedsInstance
             return
         }
-        submitFile(version, item.classes)
-    }
-
-    /** 查询项目可安装的文件；查询失败或没有匹配文件时给出真实的失败状态 */
-    private fun resolveThen(item: DiscoverItem, onResolved: (PlatformVersion) -> Unit) {
         resolveJob?.cancel()
         resolveJob = viewModelScope.launch {
             install = DiscoverInstall.Resolving
-            when (val resolved = resolveInstallable(item)) {
-                is ResolveResult.Ok -> onResolved(resolved.version)
-                is ResolveResult.NoFile -> install = DiscoverInstall.NoFile
-                is ResolveResult.Failed -> install = DiscoverInstall.Failed(resolved.message)
+            when (val resolved = readAllVersions(item)) {
+                is DiscoverFilesResult.Failed -> install = DiscoverInstall.Failed(resolved.message)
+                is DiscoverFilesResult.Empty -> install = DiscoverInstall.NoFile
+                is DiscoverFilesResult.Ok -> submitFile(
+                    version = pickVersionFor(resolved.versions, gameVersion, loaderName())
+                        ?: resolved.versions.first(),
+                    classes = item.classes,
+                    projectId = item.data.platformId(),
+                )
             }
         }
     }
 
-    private suspend fun resolveInstallable(item: DiscoverItem): ResolveResult {
+    /** 详情抽屉里选定的具体文件 */
+    fun installVersion(item: DiscoverItem, version: PlatformVersion) {
+        if (install.busy()) return
+        if (discoverUsesInstallSheet(item.classes)) {
+            openSheet(item, pinnedVersion = version)
+            return
+        }
+        if (VersionsManager.currentVersion.value == null) {
+            install = DiscoverInstall.NeedsInstance
+            return
+        }
+        submitFile(version, item.classes, item.data.platformId())
+    }
+
+    /** 读项目的全部文件版本；失败如实上报，绝不退化成"没有文件" */
+    private suspend fun readAllVersions(item: DiscoverItem): DiscoverFilesResult {
         val projectId = item.data.platformId()
         val target = item.data.platform()
-
-        val all = try {
+        val raw = try {
             getVersions(projectID = projectId, platform = target)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Logger.warning(TAG, "Failed to load the file list of ${item.title}", e)
-            return ResolveResult.Failed(mapExceptionToMessage(e))
+            return DiscoverFilesResult.Failed(mapExceptionToMessage(e))
         }
-
         val versions = try {
-            all.initAll(projectId)
+            raw.initAll(projectId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Logger.warning(TAG, "Failed to initialise the files of ${item.title}", e)
-            return ResolveResult.Failed(mapExceptionToMessage(e))
+            return DiscoverFilesResult.Failed(mapExceptionToMessage(e))
         }
-
-        if (versions.isEmpty()) return ResolveResult.NoFile
-
-        val mcVersion = gameVersion
-        val loaderName = modloader?.getDisplayName()
-        val matched = versions.filter { version ->
-            val mcMatches = mcVersion.isBlank() || version.platformGameVersion().contains(mcVersion)
-            val loaderMatches = loaderName == null ||
-                    version.platformLoaders().any { it.getDisplayName().equals(loaderName, true) }
-            mcMatches && loaderMatches
-        }
-
-        return ResolveResult.Ok((matched.ifEmpty { versions }).first())
+        if (versions.isEmpty()) return DiscoverFilesResult.Empty
+        return DiscoverFilesResult.Ok(versions)
     }
 
-    /** 交给单文件安装器，顺带把必装依赖一起装上 */
-    private fun submitFile(version: PlatformVersion, classes: PlatformClasses) {
-        val target = VersionsManager.currentVersion.value
+    private fun loaderName(): String? = modloader?.getDisplayName()
+
+    // ---- 安装前确认 -------------------------------------------------------
+
+    /**
+     * 打开确认层
+     *
+     * 先解析项目文件与全部依赖，这一步只读不下载；
+     * 用户确认之后才开始真正的下载。
+     */
+    fun openSheet(item: DiscoverItem, pinnedVersion: PlatformVersion? = null) {
+        if (!discoverUsesInstallSheet(item.classes)) return
+        sheetJob?.cancel()
+        val target = pinnedVersion ?: VersionsManager.currentVersion.value?.getVersionName()
+        sheet = DiscoverSheet.Resolving(item)
+        sheetJob = viewModelScope.launch {
+            sheet = if (pinnedVersion != null) {
+                buildSheet(item, pinnedVersion, target)
+            } else {
+                resolveSheet(item, target)
+            }
+        }
+    }
+
+    /** 用户在确认层里改了目标版本：重新按那个版本解析文件与依赖 */
+    fun selectSheetVersion(name: String?) {
+        val current = sheet ?: return
+        sheetJob?.cancel()
+        sheet = DiscoverSheet.Resolving(current.item)
+        sheetJob = viewModelScope.launch {
+            sheet = resolveSheet(current.item, name)
+        }
+    }
+
+    /** 勾选或取消一个依赖 */
+    fun toggleSheetDependency(key: String, checked: Boolean) {
+        val ready = sheet as? DiscoverSheet.Ready ?: return
+        sheet = DiscoverSheet.Ready(
+            ready.content.copy(
+                dependencies = ready.content.dependencies.map { row ->
+                    if (row.dependency.key == key) row.withToggled(checked) else row
+                }
+            )
+        )
+    }
+
+    /** 只重试一个依赖的读取，其余依赖的状态原样保留 */
+    fun retrySheetDependency(key: String) {
+        val ready = sheet as? DiscoverSheet.Ready ?: return
+        val target = ready.content.dependencies.firstOrNull { it.dependency.key == key } ?: return
+        sheet = DiscoverSheet.Ready(
+            ready.content.copy(
+                dependencies = ready.content.dependencies.map {
+                    if (it.dependency.key == key) it.copy(state = DiscoverDependencyState.Resolving) else it
+                }
+            )
+        )
+        sheetJob?.cancel()
+        sheetJob = viewModelScope.launch {
+            val (state, request) = resolveDependency(
+                dependency = target.dependency,
+                classes = ready.content.classes,
+                mcVersionName = ready.content.minecraftVersionName(),
+            )
+            val current = sheet as? DiscoverSheet.Ready ?: return@launch
+            sheet = DiscoverSheet.Ready(
+                current.content.copy(
+                    dependencies = current.content.dependencies.map {
+                        if (it.dependency.key == key) it.copy(state = state, request = request) else it
+                    }
+                )
+            )
+        }
+    }
+
+    fun setSheetInstanceName(value: String) {
+        val ready = sheet as? DiscoverSheet.Ready ?: return
+        sheet = DiscoverSheet.Ready(ready.content.copy(instanceName = value))
+        instanceNameProblem = if (ready.content.classes == PlatformClasses.MOD_PACK) {
+            checkInstanceName(value)
+        } else {
+            null
+        }
+    }
+
+    fun dismissSheet() {
+        sheetJob?.cancel()
+        sheet = null
+        instanceNameProblem = null
+    }
+
+    /** 按目标 Minecraft 版本挑项目文件，再解析它的全部依赖 */
+    private suspend fun resolveSheet(item: DiscoverItem, targetVersionName: String?): DiscoverSheet {
+        val mcVersion = targetVersionName?.let { name ->
+            VersionsManager.versions.value.firstOrNull { it.getVersionName() == name }
+        }?.let { minecraftVersionOf(it) }
+
+        return when (val files = readAllVersions(item)) {
+            is DiscoverFilesResult.Failed -> DiscoverSheet.Failed(item, files.message)
+            is DiscoverFilesResult.Empty -> DiscoverSheet.Failed(
+                item,
+                androidText(R.string.oxide_dis_install_no_file_title),
+            )
+
+            is DiscoverFilesResult.Ok -> {
+                val version = pickVersionFor(files.versions, mcVersion, loaderName())
+                if (version == null) {
+                    DiscoverSheet.Failed(
+                        item,
+                        androidText(R.string.oxide_dis_sheet_no_file_for_version, mcVersion.orEmpty()),
+                    )
+                } else {
+                    buildSheet(item, version, targetVersionName)
+                }
+            }
+        }
+    }
+
+    private suspend fun buildSheet(
+        item: DiscoverItem,
+        version: PlatformVersion,
+        targetVersionName: String?,
+    ): DiscoverSheet {
+        val classes = item.classes
+        val dependencies = discoverDependenciesOf(version).take(MAX_DISCOVER_DEPENDENCIES)
+        val defaultSelected = discoverDefaultSelection(dependencies)
+
+        val rows = dependencies.map { dependency ->
+            val (state, request) = resolveDependency(
+                dependency = dependency,
+                classes = classes,
+                mcVersionName = targetVersionName?.let { name ->
+                    VersionsManager.versions.value.firstOrNull { it.getVersionName() == name }
+                }?.let { minecraftVersionOf(it) },
+            )
+            DiscoverDependencyRow(
+                dependency = dependency,
+                state = state,
+                selected = dependency.key in defaultSelected,
+                request = request,
+            )
+        }
+
+        val instanceName = if (classes == PlatformClasses.MOD_PACK) uniqueInstanceName(item.title) else ""
+        instanceNameProblem = if (classes == PlatformClasses.MOD_PACK) checkInstanceName(instanceName) else null
+
+        return DiscoverSheet.Ready(
+            DiscoverInstallSheet(
+                item = item,
+                version = version,
+                classes = classes,
+                detectedVersionName = VersionsManager.currentVersion.value?.getVersionName(),
+                chosenVersionName = targetVersionName,
+                instanceName = instanceName,
+                dependencies = rows,
+            )
+        )
+    }
+
+    /**
+     * 解析一个依赖在目标 Minecraft 版本下的具体文件
+     *
+     * 只给了精确版本 id（Modrinth）就直接取那个版本；只给了项目 id（CurseForge）
+     * 就拉全部版本再挑一个与目标版本匹配的——与依赖安装链路自己做的事一致，
+     * 因此界面上显示的版本就是会被装上的那个。
+     */
+    private suspend fun resolveDependency(
+        dependency: DiscoverDependency,
+        classes: PlatformClasses,
+        mcVersionName: String?,
+    ): Pair<DiscoverDependencyState, DependencyRequest?> = try {
+        when {
+            dependency.versionId != null -> {
+                val version = getVersionById(
+                    versionId = dependency.versionId,
+                    platform = dependency.platform,
+                    // CurseForge 的版本要按 (项目, 文件) 定位，缺项目就查不出来
+                    projectId = dependency.projectId,
+                    printLog = false,
+                )
+                val projectId = version.platformProjectId().takeIf { it.isNotBlank() }
+                if (projectId == null) {
+                    DiscoverDependencyState.NoCompatibleVersion to null
+                } else {
+                    resolvedState(version) to DependencyRequest(
+                        platform = dependency.platform,
+                        projectId = projectId,
+                        // Modrinth 认这个精确 id
+                        versionId = version.platformId(),
+                        classes = classes,
+                        projectTitle = version.platformDisplayName(),
+                    )
+                }
+            }
+
+            dependency.projectId != null -> {
+                val all = getVersions(
+                    projectID = dependency.projectId,
+                    platform = dependency.platform,
+                ).initAll(dependency.projectId)
+                val picked = pickVersionFor(all, mcVersionName, loaderName())
+                if (picked == null) {
+                    DiscoverDependencyState.NoCompatibleVersion to null
+                } else {
+                    resolvedState(picked) to DependencyRequest(
+                        platform = dependency.platform,
+                        projectId = dependency.projectId,
+                        // CurseForge 的依赖不带精确版本 id，交给依赖链路按目标游戏版本挑
+                        versionId = if (dependency.platform == Platform.MODRINTH) {
+                            picked.platformId()
+                        } else {
+                            null
+                        },
+                        classes = classes,
+                        projectTitle = picked.platformDisplayName(),
+                    )
+                }
+            }
+
+            // 两个 id 都没有的依赖只能展示，装不了
+            else -> DiscoverDependencyState.NoCompatibleVersion to null
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Logger.warning(TAG, "Failed to resolve the dependency ${dependency.key}", e)
+        DiscoverDependencyState.Failed(mapExceptionToMessage(e)) to null
+    }
+
+    /** 已解析出的依赖版本在界面上的样子：版本号 + 它支持的 Minecraft 版本 */
+    private fun resolvedState(version: PlatformVersion) = DiscoverDependencyState.Resolved(
+        versionLabel = version.platformVersion().ifBlank { version.platformDisplayName() },
+        gameVersions = version.platformGameVersion().joinToString(", "),
+    )
+
+    // ---- 提交安装 ---------------------------------------------------------
+
+    /**
+     * 按确认层上的选择执行这一次安装
+     *
+     * 模组：项目文件交给 [downloadSingleForVersions]，勾上的依赖逐条交给
+     * [downloadDependenciesForVersions]——每条一个任务，因此一个失败不会连累其余几条，
+     * 各自都有独立的错误与重试。
+     */
+    fun confirmInstall(context: Context) {
+        val ready = (sheet as? DiscoverSheet.Ready)?.content ?: return
+        val plan = ready.plan()
+
+        if (ready.classes == PlatformClasses.MOD_PACK) {
+            startModpackInstall(context, ready)
+            return
+        }
+
+        val targetName = plan.targetVersionName
+        if (targetName == null) {
+            install = DiscoverInstall.NeedsInstance
+            return
+        }
+        val existing = VersionsManager.versions.value.firstOrNull { it.getVersionName() == targetName }
+        if (existing == null) {
+            // 用户确认过要连游戏版本一起装：先装游戏，装好再装这个资源
+            if (plan.installGameVersion) {
+                installGameThenAssets(context, targetName, ready)
+            } else {
+                install = DiscoverInstall.NeedsInstance
+            }
+            return
+        }
+        submitAssets(ready, existing, plan)
+    }
+
+    /** 连游戏版本一起装：游戏任务结束后刷新版本列表，再装资源 */
+    private fun installGameThenAssets(
+        context: Context,
+        versionName: String,
+        ready: DiscoverInstallSheet,
+    ) {
+        sheet = null
+        if (TaskSystem.containsTask(DOWNLOADER_TAG)) {
+            install = DiscoverInstall.Failed(
+                androidText(R.string.oxide_dis_sheet_game_busy)
+            )
+            return
+        }
+        install = DiscoverInstall.Resolving
+        val gameTask = MinecraftDownloader(
+            context = context,
+            version = versionName,
+            customName = versionName,
+            gameHome = getGameHome(),
+            mode = DownloadMode.DOWNLOAD,
+            onThrowable = { throw it },
+        ).getDownloadTask()
+        TaskSystem.submitTask(gameTask) {
+            VersionsManager.refresh("$TAG: after installing the game version", versionName)
+            refreshInstalledVersions()
+            val installed = VersionsManager.versions.value.firstOrNull { it.getVersionName() == versionName }
+            if (installed == null) {
+                install = DiscoverInstall.Failed(
+                    androidText(R.string.oxide_dis_sheet_game_install_failed, versionName)
+                )
+                return@submitTask
+            }
+            submitAssets(ready, installed, ready.plan())
+        }
+    }
+
+    /** 项目文件 + 勾选的依赖，一起提交 */
+    private fun submitAssets(
+        sheetContent: DiscoverInstallSheet,
+        target: Version,
+        plan: DiscoverInstallPlan,
+    ) {
+        sheet = null
+        submitFile(sheetContent.version, sheetContent.classes, sheetContent.item.data.platformId(), target)
+
+        sheetContent.dependencies
+            .filter { it.dependency.key in plan.dependencyKeys && it.request != null }
+            .forEach { row ->
+                row.request?.let { request -> submitDependency(request, target, row.dependency.key) }
+            }
+
+        install = DiscoverInstall.Queued(sheetContent.version.platformDisplayName())
+    }
+
+    /** 详情抽屉里的"全部下载"：目标取当前实例，依赖逐条提交 */
+    fun downloadAllFromDetail() {
+        val detail = detail ?: return
+        val rows = (detail.dependencies as? DiscoverDependenciesState.Loaded)?.rows ?: return
+        val target = VersionsManager.currentVersion.value ?: run {
+            install = DiscoverInstall.NeedsInstance
+            return
+        }
+        resolveJob?.cancel()
+        resolveJob = viewModelScope.launch {
+            install = DiscoverInstall.Resolving
+            when (val files = readAllVersions(detail.item)) {
+                is DiscoverFilesResult.Failed -> {
+                    install = DiscoverInstall.Failed(files.message)
+                    return@launch
+                }
+
+                is DiscoverFilesResult.Empty -> {
+                    install = DiscoverInstall.NoFile
+                    return@launch
+                }
+
+                is DiscoverFilesResult.Ok -> {
+                    val version = pickVersionFor(files.versions, gameVersion, loaderName())
+                        ?: files.versions.first()
+                    submitFile(version, detail.item.classes, detail.item.data.platformId(), target)
+                    rows.filter { it.selected && it.request != null }.forEach { row ->
+                        row.request?.let { request -> submitDependency(request, target, row.dependency.key) }
+                    }
+                    install = DiscoverInstall.Queued(version.platformDisplayName())
+                }
+            }
+        }
+    }
+
+    /**
+     * 提交一个依赖
+     *
+     * 每个依赖单独一次调用，因此每个依赖都是一个独立任务：
+     * 失败通过 [submitError] 只落在它自己那一行，其余依赖照旧在跑。
+     */
+    private fun submitDependency(request: DependencyRequest, target: Version, key: String) {
+        downloadDependenciesForVersions(
+            requests = listOf(request),
+            versions = listOf(target),
+            submitError = { error ->
+                installError = error
+                markDependencyFailed(key, error.message)
+            },
+        )
+    }
+
+    /** 只重试一个依赖的下载 */
+    fun retryDependencyDownload(key: String) {
+        val rows = (detail?.dependencies as? DiscoverDependenciesState.Loaded)?.rows ?: return
+        val request = rows.firstOrNull { it.dependency.key == key }?.request ?: return
+        val target = VersionsManager.currentVersion.value ?: run {
+            install = DiscoverInstall.NeedsInstance
+            return
+        }
+        markDependencyFailed(key, null)
+        submitDependency(request, target, key)
+    }
+
+    /** 把某个依赖的下载错误记在它自己那一行上 */
+    private fun markDependencyFailed(key: String, message: AndroidStringText?) {
+        val loaded = detail?.dependencies as? DiscoverDependenciesState.Loaded
+        if (loaded != null) {
+            detail = detail?.copy(
+                dependencies = DiscoverDependenciesState.Loaded(
+                    loaded.rows.map { row ->
+                        if (row.dependency.key == key) row.copy(downloadError = message) else row
+                    }
+                )
+            )
+        }
+        val ready = sheet as? DiscoverSheet.Ready
+        if (ready != null) {
+            sheet = DiscoverSheet.Ready(
+                ready.content.copy(
+                    dependencies = ready.content.dependencies.map { row ->
+                        if (row.dependency.key == key) row.copy(downloadError = message) else row
+                    }
+                )
+            )
+        }
+    }
+
+    /** 交给单文件安装器 */
+    private fun submitFile(
+        version: PlatformVersion,
+        classes: PlatformClasses,
+        projectId: String,
+        target: Version? = VersionsManager.currentVersion.value,
+    ) {
         if (target == null) {
             install = DiscoverInstall.NeedsInstance
             return
         }
-        val targets = listOf(target)
-        val submitError: (ErrorViewModel.ThrowableMessage) -> Unit = { installError = it }
-
         downloadSingleForVersions(
             version = version,
-            versions = targets,
+            versions = listOf(target),
             folder = classes.versionFolder.folderName,
-            submitError = submitError
+            submitError = { installError = it }
         )
-
-        val dependencies = version.platformDependencies()
-            .filter { it.type == PlatformDependencyType.REQUIRED }
-            .mapNotNull { dependency ->
-                val projectId = dependency.projectId?.takeIf { it.isNotBlank() }
-                    ?: return@mapNotNull null
-                DependencyRequest(
-                    platform = dependency.platform,
-                    projectId = projectId,
-                    versionId = dependency.versionId,
-                    classes = classes,
-                    projectTitle = version.platformDisplayName()
-                )
-            }
-        if (dependencies.isNotEmpty()) {
-            downloadDependenciesForVersions(
-                requests = dependencies,
-                versions = targets,
-                submitError = submitError
-            )
-        }
-
-        install = DiscoverInstall.Queued(version.platformDisplayName())
+        Logger.info(TAG, "Queued ${version.platformDisplayName()} of $projectId for ${target.getVersionName()}")
     }
 
-    // ---- 整合包安装 ------------------------------------------------------
+    // ---- 整合包安装 -------------------------------------------------------
 
-    fun setModpackInstanceName(value: String) {
-        modpackDraft = modpackDraft?.copy(instanceName = value)
-    }
+    /** 确认层里确认整合包：交给安装器装成一个新实例 */
+    private fun startModpackInstall(context: Context, sheetContent: DiscoverInstallSheet) {
+        val draft = sheetContent
+        sheet = null
+        instanceNameProblem = null
 
-    fun dismissModpackDraft() {
-        modpackDraft = null
-    }
-
-    /** 用户确认后创建整合包安装器，安装过程全部交给它自己完成 */
-    fun confirmModpackInstall(context: Context) {
-        val draft = modpackDraft ?: return
-        modpackDraft = null
-
-        val instanceName = draft.instanceName
         val created = ModPackInstaller(
             context = context,
             version = draft.version,
             iconUrl = draft.item.data.platformIconUrl(),
             scope = viewModelScope,
-            waitForVersionName = { _: ModPackInfo -> instanceName },
+            waitForVersionName = { _: ModPackInfo -> draft.instanceName },
             waitForConfirmMobileData = ::awaitMobileDataDecision
         )
         installer = created
@@ -613,6 +1127,7 @@ private class OxideDiscoverViewModel : ViewModel() {
             onInstalled = { name ->
                 installer = null
                 VersionsManager.refresh("$TAG: ModPackInstaller.onInstalled", name)
+                refreshInstalledVersions()
                 install = DiscoverInstall.Created(name)
             },
             onCancelled = {
@@ -650,18 +1165,22 @@ private class OxideDiscoverViewModel : ViewModel() {
     fun openDetail(item: DiscoverItem) {
         projectJob?.cancel()
         filesJob?.cancel()
+        dependenciesJob?.cancel()
         detail = DiscoverDetail(
             item = item,
             project = DiscoverProjectState.Loading,
-            files = DiscoverFilesState.Loading
+            files = DiscoverFilesState.Loading,
+            dependencies = DiscoverDependenciesState.Loading
         )
         loadProject(item)
         loadFiles(item)
+        loadDependencies(item)
     }
 
     fun closeDetail() {
         projectJob?.cancel()
         filesJob?.cancel()
+        dependenciesJob?.cancel()
         detail = null
     }
 
@@ -702,6 +1221,57 @@ private class OxideDiscoverViewModel : ViewModel() {
         }
     }
 
+    private fun loadDependencies(item: DiscoverItem) {
+        val projectId = item.data.platformId()
+        val target = item.data.platform()
+        val classes = item.classes
+        dependenciesJob = viewModelScope.launch {
+            val state = try {
+                when (val files = readAllVersions(item)) {
+                    is DiscoverFilesResult.Failed -> DiscoverDependenciesState.Failed(files.message)
+                    is DiscoverFilesResult.Empty -> DiscoverDependenciesState.Empty
+                    is DiscoverFilesResult.Ok -> {
+                        val version = pickVersionFor(files.versions, gameVersion, loaderName())
+                            ?: files.versions.first()
+                        val dependencies = discoverDependenciesOf(version).take(MAX_DISCOVER_DEPENDENCIES)
+                        val defaultSelected = discoverDefaultSelection(dependencies)
+                        DiscoverDependenciesState.Loaded(
+                            dependencies.map { dependency ->
+                                val (rowState, request) =
+                                    resolveDependency(dependency, classes, gameVersion)
+                                DiscoverDependencyRow(
+                                    dependency = dependency,
+                                    state = rowState,
+                                    selected = dependency.key in defaultSelected,
+                                    request = request,
+                                )
+                            }
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.warning(TAG, "Failed to load the dependencies of $projectId", e)
+                DiscoverDependenciesState.Failed(mapExceptionToMessage(e))
+            }
+            if (detail?.item?.key != item.key) return@launch
+            detail = detail?.copy(dependencies = state)
+        }
+    }
+
+    /** 详情抽屉里勾选一个依赖 */
+    fun toggleDetailDependency(key: String, checked: Boolean) {
+        val loaded = detail?.dependencies as? DiscoverDependenciesState.Loaded ?: return
+        detail = detail?.copy(
+            dependencies = DiscoverDependenciesState.Loaded(
+                loaded.rows.map { row ->
+                    if (row.dependency.key == key) row.withToggled(checked) else row
+                }
+            )
+        )
+    }
+
     fun dismissInstallState() {
         install = DiscoverInstall.Idle
     }
@@ -713,12 +1283,41 @@ private class OxideDiscoverViewModel : ViewModel() {
     override fun onCleared() {
         searchJob?.cancel()
         resolveJob?.cancel()
+        sheetJob?.cancel()
         projectJob?.cancel()
         filesJob?.cancel()
+        dependenciesJob?.cancel()
         installer?.cancelInstall()
         mobileDataContinuation = null
     }
 }
+
+/** 勾选或取消这一个依赖，其他行原样不动 */
+private fun DiscoverDependencyRow.withToggled(checked: Boolean): DiscoverDependencyRow {
+    val selected = discoverToggleSelection(setOf(dependency.key), dependency, checked)
+    return copy(selected = dependency.key in selected)
+}
+
+/** 确认层里最终要装到哪个 Minecraft 版本 */
+private fun DiscoverInstallSheet.targetVersionName(): String? =
+    discoverResolveVersion(chosenVersionName, detectedVersionName).name
+
+/** 确认层里那个实例真实的 Minecraft 版本名 */
+private fun DiscoverInstallSheet.minecraftVersionName(): String? =
+    targetVersionName()?.let { name ->
+        VersionsManager.versions.value.firstOrNull { it.getVersionName() == name }
+    }?.let { minecraftVersionOf(it) }
+
+/** 确认层上这份选择对应的执行计划 */
+private fun DiscoverInstallSheet.plan(): DiscoverInstallPlan = discoverBuildPlan(
+    classes = classes,
+    detectedVersion = detectedVersionName,
+    chosenVersion = targetVersionName(),
+    installedVersions = installedVersionNames(),
+    dependencies = dependencies.map { it.dependency },
+    selectedDependencyKeys = dependencies.filter { it.selected }.mapTo(LinkedHashSet()) { it.dependency.key },
+    instanceName = instanceName,
+)
 
 /** 安装进行中时不允许重复触发 */
 private fun DiscoverInstall.busy(): Boolean = when (this) {
@@ -728,6 +1327,43 @@ private fun DiscoverInstall.busy(): Boolean = when (this) {
 
 /** 只有 CurseForge 提供存档 */
 private fun PlatformClasses.supportsModrinth(): Boolean = this != PlatformClasses.SAVES
+
+/**
+ * 按 Minecraft 版本与加载器挑一个文件版本
+ *
+ * [versions] 已由 [initAll] 按发布时间倒序排好，所以第一个命中的就是最新的那个；
+ * 一个都匹配不上时返回 null，交给调用方决定是退回最新还是如实报"这个版本没有匹配的文件"。
+ */
+private fun pickVersionFor(
+    versions: List<PlatformVersion>,
+    mcVersion: String?,
+    loaderName: String?,
+): PlatformVersion? {
+    if (versions.isEmpty()) return null
+    val wantedMc = mcVersion?.takeIf { it.isNotBlank() }
+    return versions.firstOrNull { version ->
+        val mcMatches = wantedMc == null || version.platformGameVersion().contains(wantedMc)
+        val loaderMatches = loaderName.isNullOrBlank() ||
+                version.platformLoaders().any { it.getDisplayName().equals(loaderName, true) }
+        mcMatches && loaderMatches
+    }
+}
+
+/** 实例名 → 它真实的 Minecraft 版本名；自定义实例名不等于 Minecraft 版本 */
+private fun minecraftVersionOf(version: Version): String =
+    version.getVersionInfo()?.minecraftVersion?.takeIf { it.isNotBlank() }
+        ?: version.getVersionName()
+
+/** 本地已装的实例版本名 */
+private fun installedVersionNames(): Set<String> =
+    VersionsManager.versions.value.mapTo(LinkedHashSet()) { it.getVersionName() }
+
+/** 整合包实例名的问题：空、重名、非法文件名 */
+private fun checkInstanceName(value: String): AndroidStringText? = when {
+    value.isBlank() -> androidText(R.string.oxide_dis_modpack_name_required)
+    VersionsManager.isVersionExists(value, true) -> androidText(R.string.oxide_dis_modpack_name_exists)
+    else -> isFilenameInvalid(value).takeIf { it.isNotBlank() }?.let { androidText(it) }
+}
 
 /**
  * 每个类别在设置里对应的"初始搜索平台"，与资源搜索页共用同一份配置
@@ -787,6 +1423,23 @@ private fun TaskStage.labelRes(): Int = when (this) {
     TaskStage.COMPLETED -> R.string.oxide_dis_task_stage_completed
 }
 
+/** 依赖类型的短标签 */
+@StringRes
+private fun PlatformDependencyType.typeLabelRes(): Int = when (this) {
+    PlatformDependencyType.REQUIRED -> R.string.oxide_dis_dep_type_required
+    PlatformDependencyType.OPTIONAL -> R.string.oxide_dis_dep_type_optional
+    PlatformDependencyType.EMBEDDED -> R.string.oxide_dis_dep_type_embedded
+    PlatformDependencyType.INCOMPATIBLE -> R.string.oxide_dis_dep_type_incompatible
+    PlatformDependencyType.TOOL -> R.string.oxide_dis_dep_type_tool
+    PlatformDependencyType.INCLUDE -> R.string.oxide_dis_dep_type_include
+}
+
+/** 依赖在列表里的标识：平台只保证给出项目 ID 或版本 ID 之一，两个都没有就不显示名字 */
+private fun DiscoverDependency.displayName(): String =
+    projectId?.takeIf { it.isNotBlank() }
+        ?: versionId?.takeIf { it.isNotBlank() }
+        ?: ""
+
 // ---------------------------------------------------------------------------
 // 页面
 // ---------------------------------------------------------------------------
@@ -795,8 +1448,8 @@ private fun TaskStage.labelRes(): Int = when (this) {
  * 发现页
  *
  * 结构照参考稿：左侧类别栏 + 右侧「搜索与筛选行 + 结果网格」。
- * 数据全部来自真实的平台搜索（CurseForge / Modrinth），安装动作调用现有的单文件安装器
- * 与整合包安装器，网格里的每一条都是平台上的真实项目，不会出现占位结果。
+ * 数据全部来自真实的平台搜索（CurseForge / Modrinth），结果**累积**并按需翻页；
+ * 安装动作先经过安装前确认层，网格里的每一条都是平台上的真实项目。
  */
 @Composable
 fun OxideDiscoverPage(
@@ -814,7 +1467,15 @@ fun OxideDiscoverPage(
     val context = LocalContext.current
     val currentVersion by VersionsManager.currentVersion.collectAsStateWithLifecycle()
     val minecraftVersions by MinecraftVersions.allVersions.collectAsStateWithLifecycle()
+    val localVersions by VersionsManager.versions.collectAsStateWithLifecycle()
     val installedMods = installed.installedByProject
+
+    // 条目标题要走 mcmod 译名，翻译表只有界面这一侧才有，所以把函数递进状态层
+    LaunchedEffect(context) {
+        viewModel.provideTitleResolver { data, mcmod ->
+            mcmod.getMcmodTitle(data.platformTitle(), context)
+        }
+    }
 
     // 版本表只在第一次进入时读取，之后复用进程内缓存
     LaunchedEffect(Unit) {
@@ -831,9 +1492,14 @@ fun OxideDiscoverPage(
     }
     LaunchedEffect(currentVersion?.getVersionName()) {
         installed.scan(currentVersion)
+        viewModel.onCurrentInstanceChanged(currentVersion?.getVersionName())
+    }
+    LaunchedEffect(localVersions.size) {
+        viewModel.refreshInstalledVersions()
     }
 
-    // 只有筛选条件真的变了才重新搜索，组合本身不会触发任何请求
+    // 条件真的变了才重新搜索，组合本身不会触发任何请求。
+    // query 不在键里：输入过程中不搜索，只有回车或按下搜索按钮才 search()
     LaunchedEffect(
         viewModel.category,
         viewModel.platform,
@@ -846,6 +1512,14 @@ fun OxideDiscoverPage(
 
     val installedIds = remember(installedMods, viewModel.platform) {
         installedMods.filterValues { it.platform == viewModel.platform }.keys
+    }
+
+    val visibleItems = remember(viewModel.feed, viewModel.onlyInstalled, installedIds) {
+        if (viewModel.onlyInstalled) {
+            viewModel.feed.items.filter { it.data.platformId() in installedIds }
+        } else {
+            viewModel.feed.items
+        }
     }
 
     OxidePageColumn(modifier = modifier, metrics = metrics) {
@@ -889,7 +1563,8 @@ fun OxideDiscoverPage(
                 OxideReveal(visible = true, index = 3, modifier = Modifier.weight(1f)) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         DiscoverResultsHeader(
-                            count = viewModel.results.resultCount(),
+                            count = visibleItems.size,
+                            pages = viewModel.feed.pages,
                             scanningInstalled = installed.matching,
                             onlyInstalled = viewModel.onlyInstalled
                         )
@@ -899,15 +1574,16 @@ fun OxideDiscoverPage(
                                 .fillMaxWidth()
                                 .weight(1f),
                             metrics = metrics,
-                            state = viewModel.results,
+                            feed = viewModel.feed,
+                            visible = visibleItems,
                             category = viewModel.category,
-                            onlyInstalled = viewModel.onlyInstalled,
                             installedIds = installedIds,
+                            onlyInstalled = viewModel.onlyInstalled,
                             busy = viewModel.install.busy(),
-                            onRetry = viewModel::search,
+                            onRetry = viewModel::retry,
+                            onLoadMore = viewModel::loadMore,
                             onOpen = viewModel::openDetail,
-                            onInstall = viewModel::install,
-                            onGoInstances = { onNavigate(OxidePage.Instances) }
+                            onInstall = viewModel::install
                         )
                     }
                 }
@@ -922,7 +1598,26 @@ fun OxideDiscoverPage(
         busy = viewModel.install.busy(),
         onDismiss = viewModel::closeDetail,
         onInstall = viewModel::install,
-        onInstallVersion = viewModel::installVersion
+        onInstallVersion = viewModel::installVersion,
+        onToggleDependency = viewModel::toggleDetailDependency,
+        onRetryDependency = viewModel::retryDependencyDownload,
+        onDownloadAll = viewModel::downloadAllFromDetail
+    )
+
+    DiscoverInstallSheetHost(
+        metrics = metrics,
+        sheet = viewModel.sheet,
+        localVersions = localVersions,
+        minecraftVersions = minecraftVersions,
+        instanceNameProblem = viewModel.instanceNameProblem,
+        busy = viewModel.install.busy(),
+        onDismiss = viewModel::dismissSheet,
+        onSelectVersion = viewModel::selectSheetVersion,
+        onToggleDependency = viewModel::toggleSheetDependency,
+        onRetryDependency = viewModel::retrySheetDependency,
+        onInstanceNameChange = viewModel::setSheetInstanceName,
+        onGoInstances = { onNavigate(OxidePage.Instances) },
+        onConfirm = { viewModel.confirmInstall(context) }
     )
 
     DiscoverInstallDrawer(
@@ -930,16 +1625,6 @@ fun OxideDiscoverPage(
         installer = viewModel.installer,
         onCancel = viewModel::cancelModpackInstall
     )
-
-    viewModel.modpackDraft?.let { draft ->
-        DiscoverModpackDialog(
-            metrics = metrics,
-            draft = draft,
-            onNameChange = viewModel::setModpackInstanceName,
-            onCancel = viewModel::dismissModpackDraft,
-            onConfirm = { viewModel.confirmModpackInstall(context) }
-        )
-    }
 
     if (viewModel.awaitingMobileData) {
         DiscoverMobileDataDialog(
@@ -957,12 +1642,6 @@ fun OxideDiscoverPage(
         onDismiss = viewModel::dismissInstallState,
         onDismissError = viewModel::dismissInstallError
     )
-}
-
-/** 搜索结果里可见的条数 */
-private fun DiscoverResults.resultCount(): Int = when (this) {
-    is DiscoverResults.Ready -> page.data.size
-    else -> 0
 }
 
 /** 页头：大标题 + 一行说明 + 刷新 */
@@ -1070,9 +1749,14 @@ private fun DiscoverCategoryTab(
     }
 }
 
-/** 结果区顶部：条数 + 已安装扫描状态 */
+/** 结果区顶部：条数 + 已翻页数 + 已安装扫描状态 */
 @Composable
-private fun DiscoverResultsHeader(count: Int, scanningInstalled: Boolean, onlyInstalled: Boolean) {
+private fun DiscoverResultsHeader(
+    count: Int,
+    pages: Int,
+    scanningInstalled: Boolean,
+    onlyInstalled: Boolean
+) {
     OxideSectionLabel(
         text = stringResource(R.string.oxide_dis_result_count, count),
         trailing = {
@@ -1085,6 +1769,11 @@ private fun DiscoverResultsHeader(count: Int, scanningInstalled: Boolean, onlyIn
                 onlyInstalled -> OxideBadge(
                     text = stringResource(R.string.oxide_dis_tab_installed),
                     tone = OxideBadgeTone.Active
+                )
+
+                pages > 1 -> OxideBadge(
+                    text = stringResource(R.string.oxide_dis_result_pages, pages),
+                    tone = OxideBadgeTone.Neutral
                 )
             }
         }
@@ -1311,36 +2000,52 @@ internal fun discoverResultColumns(metrics: OxideMetrics, contentWidth: Dp): Int
  * 结果网格
  *
  * 列数由 [discoverResultColumns] 按实际内容宽度算出，但封顶两列，与参考稿一致。
- * 加载中、空结果与失败是三种各自独立的状态，不会互相折叠。
+ * 五种状态各自独立：首次加载、正在翻下一页、确实没有结果、失败、没有更多。
+ * 失败永远带着重试，而且**不会**被渲染成一个空列表。
  */
 @Composable
 private fun DiscoverResultsGrid(
-    state: DiscoverResults,
+    feed: DiscoverFeed,
+    visible: List<DiscoverItem>,
     category: DiscoverCategory,
-    onlyInstalled: Boolean,
     installedIds: Set<String>,
+    onlyInstalled: Boolean,
     busy: Boolean,
     onRetry: () -> Unit,
+    onLoadMore: () -> Unit,
     onOpen: (DiscoverItem) -> Unit,
     onInstall: (DiscoverItem) -> Unit,
-    onGoInstances: () -> Unit,
     metrics: OxideMetrics,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val gridState = rememberLazyGridState()
 
-    when (state) {
-        is DiscoverResults.Loading -> {
+    // 接近末尾就去取下一页：翻页是一次网络往返，等滚到底再发会让列表先停住再跳
+    val shouldLoadMore by remember(feed, visible.size, onlyInstalled) {
+        derivedStateOf {
+            val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            discoverShouldPrefetch(lastVisible, visible.size, feed.phase, feed.endOfResults) ||
+                    // 「已安装」筛选后可能一条都不剩，只能靠继续翻来找
+                    (visible.isEmpty() && feed.canLoadMore())
+        }
+    }
+    LaunchedEffect(shouldLoadMore, feed.pages, visible.size) {
+        if (shouldLoadMore) onLoadMore()
+    }
+
+    when (feed.view()) {
+        DiscoverFeedView.Idle, DiscoverFeedView.Loading -> {
             Box(modifier = modifier, contentAlignment = Alignment.Center) {
                 OxideLoadingRow(text = stringResource(R.string.oxide_dis_loading))
             }
         }
 
-        is DiscoverResults.Failed -> {
+        DiscoverFeedView.Error -> {
             Box(modifier = modifier, contentAlignment = Alignment.Center) {
                 OxideEmptyState(
                     title = stringResource(R.string.oxide_dis_error_title),
-                    detail = state.message.toAndroidString(context),
+                    detail = feed.error?.toAndroidString(context),
                     action = {
                         OxideButton(
                             text = stringResource(R.string.oxide_dis_retry),
@@ -1352,81 +2057,150 @@ private fun DiscoverResultsGrid(
             }
         }
 
-        is DiscoverResults.Ready -> {
-            val items = remember(state.page, context) {
-                state.page.data.map { (data, mcmod) ->
-                    DiscoverItem(
-                        data = data,
-                        title = mcmod.getMcmodTitle(data.platformTitle(), context),
-                        classes = category.classes,
-                        loaderLabel = data.platformModLoaders()
-                            ?.firstOrNull()
-                            ?.getDisplayName()
-                            ?.takeIf { it.isNotBlank() }
+        DiscoverFeedView.NoResults -> {
+            Box(modifier = modifier, contentAlignment = Alignment.Center) {
+                if (onlyInstalled) {
+                    OxideEmptyState(
+                        title = stringResource(R.string.oxide_dis_empty_installed_title),
+                        detail = stringResource(R.string.oxide_dis_empty_installed_detail),
+                        action = {
+                            OxideButton(
+                                text = stringResource(R.string.oxide_dis_refresh),
+                                onClick = onRetry,
+                                tone = OxideButtonTone.Secondary
+                            )
+                        }
+                    )
+                } else {
+                    OxideEmptyState(
+                        title = stringResource(R.string.oxide_dis_empty_title),
+                        detail = stringResource(R.string.oxide_dis_empty_detail),
+                        action = {
+                            OxideButton(
+                                text = stringResource(R.string.oxide_dis_retry),
+                                onClick = onRetry,
+                                tone = OxideButtonTone.Secondary
+                            )
+                        }
                     )
                 }
             }
-            val visible = remember(items, onlyInstalled, installedIds) {
-                if (onlyInstalled) {
-                    items.filter { it.data.platformId() in installedIds }
-                } else {
-                    items
-                }
-            }
+        }
 
-            if (visible.isEmpty()) {
-                Box(modifier = modifier, contentAlignment = Alignment.Center) {
-                    if (onlyInstalled) {
-                        OxideEmptyState(
-                            title = stringResource(R.string.oxide_dis_empty_installed_title),
-                            detail = stringResource(R.string.oxide_dis_empty_installed_detail),
-                            action = {
-                                OxideButton(
-                                    text = stringResource(R.string.oxide_dis_refresh),
-                                    onClick = onRetry,
-                                    tone = OxideButtonTone.Secondary
-                                )
-                            }
-                        )
-                    } else {
-                        OxideEmptyState(
-                            title = stringResource(R.string.oxide_dis_empty_title),
-                            detail = stringResource(R.string.oxide_dis_empty_detail),
-                            action = {
-                                OxideButton(
-                                    text = stringResource(R.string.oxide_dis_retry),
-                                    onClick = onRetry,
-                                    tone = OxideButtonTone.Secondary
-                                )
-                            }
+        DiscoverFeedView.List, DiscoverFeedView.ListWithError, DiscoverFeedView.LoadingNext -> {
+            BoxWithConstraints(modifier = modifier) {
+                val columns = discoverResultColumns(metrics, maxWidth)
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    state = gridState,
+                    horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
+                    verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(visible, key = { it.key }) { item ->
+                        DiscoverResultCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            metrics = metrics,
+                            item = item,
+                            category = category,
+                            installed = item.data.platformId() in installedIds,
+                            busy = busy,
+                            onOpen = { onOpen(item) },
+                            onInstall = { onInstall(item) }
                         )
                     }
-                }
-            } else {
-                BoxWithConstraints(modifier = modifier) {
-                    val columns = discoverResultColumns(metrics, maxWidth)
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(columns),
-                        horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
-                        verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(visible, key = { it.key }) { item ->
-                            DiscoverResultCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                metrics = metrics,
-                                item = item,
-                                category = category,
-                                installed = item.data.platformId() in installedIds,
-                                busy = busy,
-                                onOpen = { onOpen(item) },
-                                onInstall = { onInstall(item) }
-                            )
-                        }
+
+                    // 尾部状态：翻页中 / 失败重试 / 到底了，三者各自独立
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        DiscoverFeedFooter(
+                            feed = feed,
+                            context = context,
+                            metrics = metrics,
+                            onRetry = onRetry,
+                            onLoadMore = onLoadMore,
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * 列表尾部的状态行
+ *
+ * "正在翻下一页""这一页失败了，点这里重试""已经没有更多了"是三种不同的事实，
+ * 所以三种文案分开写；翻页失败时列表仍然可用，只有这一行在提示失败。
+ */
+@Composable
+private fun DiscoverFeedFooter(
+    feed: DiscoverFeed,
+    context: Context,
+    metrics: OxideMetrics,
+    onRetry: () -> Unit,
+    onLoadMore: () -> Unit,
+) {
+    when (feed.view()) {
+        DiscoverFeedView.ListWithError -> {
+            OxideSurface(
+                shape = Oxide.RadiusBlock,
+                contentPadding = PaddingValues(all = metrics.cardGap * 0.8f)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = feed.error?.toAndroidString(context).orEmpty(),
+                        color = Oxide.FgMuted,
+                        fontSize = Oxide.Type.MicroLabel.fontSize,
+                        lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(metrics.controlPadding))
+                    OxideButton(
+                        text = stringResource(R.string.oxide_dis_paging_retry),
+                        onClick = onRetry,
+                        tone = OxideButtonTone.Primary
+                    )
+                }
+            }
+        }
+
+        DiscoverFeedView.LoadingNext -> {
+            OxideLoadingRow(text = stringResource(R.string.oxide_dis_paging_loading))
+        }
+
+        DiscoverFeedView.List -> {
+            if (feed.endOfResults) {
+                Text(
+                    text = stringResource(R.string.oxide_dis_paging_end),
+                    color = Oxide.FgGhost,
+                    fontSize = Oxide.Type.MicroLabel.fontSize,
+                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = metrics.controlPadding)
+                )
+            } else {
+                // 还有下一页但用户还没滚过去：给一个明确的按钮，不用猜
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = metrics.controlPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    OxideButton(
+                        text = stringResource(R.string.oxide_dis_paging_more),
+                        onClick = onLoadMore,
+                        tone = OxideButtonTone.Secondary
+                    )
+                }
+            }
+        }
+
+        else -> Unit
     }
 }
 
@@ -1521,7 +2295,7 @@ private fun DiscoverResultCard(
     }
 }
 
-/** 项目详情抽屉：概览与文件列表两个标签页 */
+/** 项目详情抽屉：概览、文件与依赖三个标签页 */
 @Composable
 private fun DiscoverDetailHost(
     detail: DiscoverDetail?,
@@ -1530,6 +2304,9 @@ private fun DiscoverDetailHost(
     onDismiss: () -> Unit,
     onInstall: (DiscoverItem) -> Unit,
     onInstallVersion: (DiscoverItem, PlatformVersion) -> Unit,
+    onToggleDependency: (String, Boolean) -> Unit,
+    onRetryDependency: (String) -> Unit,
+    onDownloadAll: () -> Unit,
     metrics: OxideMetrics
 ) {
     var tab by remember { mutableStateOf(0) }
@@ -1545,7 +2322,8 @@ private fun DiscoverDetailHost(
             OxideDrawerTabs(
                 tabs = listOf(
                     stringResource(R.string.oxide_dis_drawer_tab_overview),
-                    stringResource(R.string.oxide_dis_drawer_tab_files)
+                    stringResource(R.string.oxide_dis_drawer_tab_files),
+                    stringResource(R.string.oxide_dis_drawer_tab_dependencies)
                 ),
                 selectedIndex = tab,
                 onSelect = { tab = it }
@@ -1558,20 +2336,30 @@ private fun DiscoverDetailHost(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                if (tab == 0) {
-                    DiscoverOverview(
+                when (tab) {
+                    0 -> DiscoverOverview(
                         detail = current,
                         currentVersionName = currentVersionName,
                         busy = busy,
                         onInstall = { onInstall(current.item) },
                         metrics = metrics
                     )
-                } else {
-                    DiscoverFiles(
+
+                    1 -> DiscoverFiles(
                         item = current.item,
                         files = current.files,
                         busy = busy,
                         onInstall = { version -> onInstallVersion(current.item, version) },
+                        metrics = metrics
+                    )
+
+                    else -> DiscoverDependencySection(
+                        state = current.dependencies,
+                        showDownloadAll = true,
+                        busy = busy,
+                        onToggle = onToggleDependency,
+                        onRetry = onRetryDependency,
+                        onDownloadAll = onDownloadAll,
                         metrics = metrics
                     )
                 }
@@ -1792,6 +2580,464 @@ private fun DiscoverFileRow(
     }
 }
 
+/**
+ * 依赖列表
+ *
+ * 每一条都显示它真实的类型、真实解析到的版本，以及能不能勾选：
+ * 已内嵌与明确互斥的依赖是灰的且点不动；读失败的单独给一个重试，
+ * 其余条目照旧可用——一个失败不会静默吃掉整张列表。
+ */
+@Composable
+private fun DiscoverDependencySection(
+    state: DiscoverDependenciesState,
+    showDownloadAll: Boolean,
+    busy: Boolean,
+    onToggle: (String, Boolean) -> Unit,
+    onRetry: (String) -> Unit,
+    onDownloadAll: () -> Unit,
+    metrics: OxideMetrics,
+    selectedCount: Int? = null,
+) {
+    val context = LocalContext.current
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        when (state) {
+            is DiscoverDependenciesState.Loading -> {
+                OxideLoadingRow(text = stringResource(R.string.oxide_dis_deps_loading))
+            }
+
+            is DiscoverDependenciesState.Empty -> {
+                OxideEmptyState(title = stringResource(R.string.oxide_dis_deps_empty))
+            }
+
+            is DiscoverDependenciesState.Failed -> {
+                OxideEmptyState(
+                    title = stringResource(R.string.oxide_dis_deps_failed),
+                    detail = state.message.toAndroidString(context)
+                )
+            }
+
+            is DiscoverDependenciesState.Loaded -> {
+                if (showDownloadAll) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(metrics.cardGap, Alignment.End)
+                    ) {
+                        OxideButton(
+                            text = stringResource(R.string.oxide_dis_deps_download_all),
+                            onClick = onDownloadAll,
+                            enabled = !busy && state.rows.any { it.selected && it.request != null },
+                            tone = OxideButtonTone.Primary
+                        )
+                    }
+                    Spacer(Modifier.height(metrics.cardGap * 0.7f))
+                }
+
+                selectedCount?.let { count ->
+                    Text(
+                        text = stringResource(R.string.oxide_dis_deps_selected, count),
+                        color = Oxide.FgDim,
+                        fontSize = Oxide.Type.MicroLabel.fontSize,
+                        lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(metrics.cardGap * 0.5f))
+                }
+
+                state.rows.forEach { row ->
+                    DiscoverDependencyRowView(
+                        row = row,
+                        onToggle = { checked -> onToggle(row.dependency.key, checked) },
+                        onRetry = { onRetry(row.dependency.key) },
+                        metrics = metrics
+                    )
+                    Spacer(Modifier.height(metrics.cardGap * 0.5f))
+                }
+            }
+        }
+    }
+}
+
+/** 一个依赖的行：类型 + 版本 + 勾选 + 独立的失败与重试 */
+@Composable
+private fun DiscoverDependencyRowView(
+    row: DiscoverDependencyRow,
+    onToggle: (Boolean) -> Unit,
+    onRetry: () -> Unit,
+    metrics: OxideMetrics
+) {
+    val context = LocalContext.current
+    val dependency = row.dependency
+    val enabled = dependency.installable
+
+    OxideSurface(
+        shape = Oxide.RadiusBlock,
+        contentPadding = PaddingValues(all = metrics.cardGap * 0.8f)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = dependency.displayName(),
+                    color = if (enabled) Oxide.Fg else Oxide.FgFaint,
+                    fontSize = Oxide.Type.Body.fontSize,
+                    lineHeight = Oxide.Type.Body.lineHeight,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(metrics.cardGap * 0.25f))
+                Row(horizontalArrangement = Arrangement.spacedBy(metrics.cardGap * 0.4f)) {
+                    OxideBadge(
+                        text = stringResource(dependency.type.typeLabelRes()),
+                        tone = if (dependency.type == PlatformDependencyType.REQUIRED) {
+                            OxideBadgeTone.Warn
+                        } else {
+                            OxideBadgeTone.Neutral
+                        }
+                    )
+                    OxideBadge(text = dependency.platform.displayName, tone = OxideBadgeTone.Neutral)
+                }
+
+                val detailText = when (val state = row.state) {
+                    is DiscoverDependencyState.Resolving -> stringResource(R.string.oxide_dis_deps_resolving)
+                    is DiscoverDependencyState.Resolved -> stringResource(
+                        R.string.oxide_dis_dep_meta,
+                        state.versionLabel,
+                        state.gameVersions
+                    )
+
+                    is DiscoverDependencyState.NoCompatibleVersion -> stringResource(
+                        R.string.oxide_dis_dep_no_version
+                    )
+
+                    is DiscoverDependencyState.Failed -> state.message.toAndroidString(context)
+                }
+                if (detailText.isNotBlank()) {
+                    Spacer(Modifier.height(metrics.cardGap * 0.3f))
+                    Text(
+                        text = detailText,
+                        color = if (row.state is DiscoverDependencyState.Failed) Oxide.FgMuted else Oxide.FgFaint,
+                        fontSize = Oxide.Type.MicroLabel.fontSize,
+                        lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (row.state.retryable()) {
+                    Spacer(Modifier.height(metrics.cardGap * 0.4f))
+                    OxideButton(
+                        text = stringResource(R.string.oxide_dis_dep_retry),
+                        onClick = onRetry,
+                        tone = OxideButtonTone.Ghost
+                    )
+                }
+
+                row.downloadError?.let { error ->
+                    Spacer(Modifier.height(metrics.cardGap * 0.3f))
+                    Text(
+                        text = error.toAndroidString(context),
+                        color = Oxide.FgMuted,
+                        fontSize = Oxide.Type.MicroLabel.fontSize,
+                        lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(metrics.cardGap * 0.4f))
+                    OxideButton(
+                        text = stringResource(R.string.oxide_dis_dep_retry),
+                        onClick = onRetry,
+                        tone = OxideButtonTone.Secondary
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(metrics.controlPadding))
+
+            // 勾选状态由整行承载，开关本身不再重复朗读
+            Box(
+                modifier = Modifier
+                    .toggleable(
+                        value = row.selected,
+                        enabled = enabled,
+                        role = Role.Checkbox,
+                        onValueChange = onToggle,
+                    )
+                    .semantics { contentDescription = dependency.displayName() }
+            ) {
+                OxideToggle(
+                    checked = row.selected,
+                    onCheckedChange = { next ->
+                        if (enabled) onToggle(next)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 安装前确认层
+ *
+ * 只有模组与整合包会走到这里（门槛见 [discoverUsesInstallSheet]）：
+ * 点"安装"先落到这一层，确认 Minecraft 版本与依赖之后才开始下载。
+ * 光影、资源包、存档、地图不经过这里。
+ */
+@Composable
+private fun DiscoverInstallSheetHost(
+    sheet: DiscoverSheet?,
+    localVersions: List<Version>,
+    minecraftVersions: List<MinecraftVersion>,
+    instanceNameProblem: AndroidStringText?,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSelectVersion: (String?) -> Unit,
+    onToggleDependency: (String, Boolean) -> Unit,
+    onRetryDependency: (String) -> Unit,
+    onInstanceNameChange: (String) -> Unit,
+    onGoInstances: () -> Unit,
+    onConfirm: () -> Unit,
+    metrics: OxideMetrics
+) {
+    if (sheet == null) return
+    val context = LocalContext.current
+
+    OxideDrawerHost(
+        visible = true,
+        metrics = metrics,
+        onDismiss = onDismiss,
+        title = stringResource(R.string.oxide_dis_sheet_title)
+    ) {
+        when (sheet) {
+            is DiscoverSheet.Resolving -> {
+                OxideLoadingRow(text = stringResource(R.string.oxide_dis_sheet_resolving))
+            }
+
+            is DiscoverSheet.Failed -> {
+                OxideEmptyState(
+                    title = stringResource(R.string.oxide_dis_sheet_failed),
+                    detail = sheet.message.toAndroidString(context)
+                )
+                Spacer(Modifier.height(metrics.cardGap))
+                DiscoverDialogActions(
+                    metrics = metrics,
+                    confirmText = stringResource(R.string.oxide_dis_retry),
+                    confirmEnabled = false,
+                    onCancel = onDismiss,
+                    onConfirm = {}
+                )
+            }
+
+            is DiscoverSheet.Ready -> DiscoverInstallSheetBody(
+                sheet = sheet.content,
+                localVersions = localVersions,
+                minecraftVersions = minecraftVersions,
+                instanceNameProblem = instanceNameProblem,
+                busy = busy,
+                onDismiss = onDismiss,
+                onSelectVersion = onSelectVersion,
+                onToggleDependency = onToggleDependency,
+                onRetryDependency = onRetryDependency,
+                onInstanceNameChange = onInstanceNameChange,
+                onGoInstances = onGoInstances,
+                onConfirm = onConfirm,
+                metrics = metrics
+            )
+        }
+    }
+}
+
+@Composable
+private fun DiscoverInstallSheetBody(
+    sheet: DiscoverInstallSheet,
+    localVersions: List<Version>,
+    minecraftVersions: List<MinecraftVersion>,
+    instanceNameProblem: AndroidStringText?,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSelectVersion: (String?) -> Unit,
+    onToggleDependency: (String, Boolean) -> Unit,
+    onRetryDependency: (String) -> Unit,
+    onInstanceNameChange: (String) -> Unit,
+    onGoInstances: () -> Unit,
+    onConfirm: () -> Unit,
+    metrics: OxideMetrics
+) {
+    val context = LocalContext.current
+    val choice = discoverResolveVersion(sheet.chosenVersionName, sheet.detectedVersionName)
+    val isModpack = sheet.classes == PlatformClasses.MOD_PACK
+    val plan = sheet.plan()
+
+    OxideSectionLabel(text = stringResource(R.string.oxide_dis_sheet_file))
+    Spacer(Modifier.height(metrics.controlPadding))
+    Text(
+        text = sheet.version.platformDisplayName(),
+        color = Oxide.Fg,
+        fontSize = Oxide.Type.Body.fontSize,
+        lineHeight = Oxide.Type.Body.lineHeight,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
+    Spacer(Modifier.height(metrics.cardGap * 0.3f))
+    Text(
+        text = stringResource(
+            R.string.oxide_dis_sheet_file_meta,
+            sheet.version.platformVersion(),
+            formatFileSize(sheet.version.platformFileSize())
+        ),
+        color = Oxide.FgFaint,
+        fontSize = Oxide.Type.MicroLabel.fontSize,
+        lineHeight = Oxide.Type.MicroLabel.lineHeight,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+
+    if (isModpack) {
+        Spacer(Modifier.height(metrics.sectionGap))
+        OxideSectionLabel(text = stringResource(R.string.oxide_dis_modpack_name_label))
+        Spacer(Modifier.height(metrics.controlPadding))
+        DiscoverField(
+            modifier = Modifier.fillMaxWidth(),
+            metrics = metrics,
+            value = sheet.instanceName,
+            onValueChange = onInstanceNameChange,
+            onSubmit = { if (instanceNameProblem == null) onConfirm() },
+            placeholder = sheet.item.title,
+            imeAction = ImeAction.Done
+        )
+        instanceNameProblem?.let {
+            Spacer(Modifier.height(metrics.controlPadding))
+            Text(
+                text = it.toAndroidString(context),
+                color = Oxide.FgFaint,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.height(metrics.controlPadding))
+        Text(
+            text = stringResource(R.string.oxide_dis_modpack_dialog_detail),
+            color = Oxide.FgFaint,
+            fontSize = Oxide.Type.MicroLabel.fontSize,
+            lineHeight = Oxide.Type.MicroLabel.lineHeight
+        )
+    } else {
+        Spacer(Modifier.height(metrics.sectionGap))
+        OxideSectionLabel(text = stringResource(R.string.oxide_dis_sheet_version_label))
+        Spacer(Modifier.height(metrics.controlPadding))
+
+        // 目标版本：先列本地已装的实例，其余用版本表补齐
+        val versionOptions = remember(localVersions, minecraftVersions) {
+            val known = localVersions.mapTo(LinkedHashSet()) { it.getVersionName() }
+            buildList {
+                addAll(known)
+                addAll(
+                    minecraftVersions
+                        .filter { it.version.id.isNotBlank() && it.version.id !in known }
+                        .map { it.version.id }
+                )
+            }
+        }
+        val selectedIndex = choice.name?.let { versionOptions.indexOf(it) }?.takeIf { it >= 0 } ?: -1
+
+        if (versionOptions.isEmpty()) {
+            Text(
+                text = stringResource(R.string.oxide_dis_sheet_no_version_list),
+                color = Oxide.FgFaint,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight
+            )
+        } else {
+            OxideDropdown(
+                modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.oxide_dis_sheet_version_detected),
+                options = versionOptions,
+                selectedIndex = selectedIndex,
+                enabled = !busy,
+                placeholder = choice.name.orEmpty(),
+                onSelect = { index -> onSelectVersion(versionOptions.getOrNull(index)) },
+            )
+        }
+
+        Spacer(Modifier.height(metrics.cardGap * 0.5f))
+        Text(
+            text = when {
+                choice.name == null -> stringResource(R.string.oxide_dis_sheet_no_instance)
+                choice.detected -> stringResource(R.string.oxide_dis_sheet_version_auto, choice.name.orEmpty())
+                else -> stringResource(R.string.oxide_dis_sheet_version_chosen, choice.name.orEmpty())
+            },
+            color = if (choice.name == null) Oxide.FgMuted else Oxide.FgFaint,
+            fontSize = Oxide.Type.MicroLabel.fontSize,
+            lineHeight = Oxide.Type.MicroLabel.lineHeight,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        // 目标版本本地没有：明说会连游戏版本一起装，并由确认按钮让用户点头
+        if (plan.installGameVersion) {
+            Spacer(Modifier.height(metrics.controlPadding))
+            Text(
+                text = stringResource(R.string.oxide_dis_sheet_game_missing, choice.name.orEmpty()),
+                color = Oxide.FgMuted,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (choice.name == null) {
+            Spacer(Modifier.height(metrics.cardGap * 0.5f))
+            OxideButton(
+                text = stringResource(R.string.oxide_dis_install_go_instances),
+                onClick = onGoInstances,
+                tone = OxideButtonTone.Secondary
+            )
+        }
+
+        Spacer(Modifier.height(metrics.sectionGap))
+        DiscoverDependencySection(
+            state = if (sheet.dependencies.isEmpty()) {
+                DiscoverDependenciesState.Empty
+            } else {
+                DiscoverDependenciesState.Loaded(sheet.dependencies)
+            },
+            showDownloadAll = false,
+            busy = busy,
+            onToggle = onToggleDependency,
+            onRetry = onRetryDependency,
+            onDownloadAll = {},
+            metrics = metrics,
+            selectedCount = plan.dependencyKeys.size,
+        )
+    }
+
+    Spacer(Modifier.height(metrics.sectionGap))
+
+    val confirmEnabled = if (isModpack) {
+        instanceNameProblem == null && !busy
+    } else {
+        plan.hasTarget && !busy
+    }
+    val confirmText = when {
+        isModpack -> stringResource(R.string.oxide_dis_action_install)
+        // 勾了依赖就说"全部下载"，一个依赖都没有就直接说"安装"
+        plan.hasDependencies -> stringResource(R.string.oxide_dis_deps_download_all)
+        plan.installGameVersion -> stringResource(R.string.oxide_dis_sheet_confirm_game, choice.name.orEmpty())
+        else -> stringResource(R.string.oxide_dis_action_install)
+    }
+
+    DiscoverDialogActions(
+        metrics = metrics,
+        confirmText = confirmText,
+        confirmEnabled = confirmEnabled,
+        onCancel = onDismiss,
+        onConfirm = onConfirm
+    )
+}
+
 /** 整合包安装过程：任务流抽屉 */
 @Composable
 private fun DiscoverInstallDrawer(
@@ -1872,81 +3118,6 @@ private fun DiscoverTaskRow(task: TitledTask, metrics: OxideMetrics) {
     }
 }
 
-/** 整合包安装前的确认：显示将要创建的实例名，可修改 */
-@Composable
-private fun DiscoverModpackDialog(
-    draft: ModpackDraft,
-    onNameChange: (String) -> Unit,
-    onCancel: () -> Unit,
-    onConfirm: () -> Unit,
-    metrics: OxideMetrics
-) {
-    val nameError = isFilenameInvalid(draft.instanceName)
-    val exists = remember(draft.instanceName) {
-        VersionsManager.isVersionExists(draft.instanceName, true)
-    }
-    val problem = when {
-        draft.instanceName.isBlank() -> stringResource(R.string.oxide_dis_modpack_name_required)
-        exists -> stringResource(R.string.oxide_dis_modpack_name_exists)
-        else -> nameError?.takeIf { it.isNotBlank() }
-    }
-    val valid = problem == null
-
-    OxideModalHost(metrics = metrics, onDismiss = onCancel) {
-        OxideSectionLabel(text = stringResource(R.string.oxide_dis_modpack_dialog_title))
-        Spacer(Modifier.height(metrics.cardGap * 0.8f))
-        Text(
-            text = draft.item.title,
-            color = Oxide.Fg,
-            fontSize = Oxide.Type.Title.fontSize,
-            lineHeight = Oxide.Type.Title.lineHeight,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(metrics.controlPadding))
-        Text(
-            text = stringResource(R.string.oxide_dis_modpack_dialog_detail),
-            color = Oxide.FgFaint,
-            fontSize = Oxide.Type.MicroLabel.fontSize,
-            lineHeight = Oxide.Type.MicroLabel.lineHeight
-        )
-
-        Spacer(Modifier.height(metrics.cardGap))
-        OxideSectionLabel(text = stringResource(R.string.oxide_dis_modpack_name_label))
-        Spacer(Modifier.height(metrics.controlPadding))
-        DiscoverField(
-            modifier = Modifier.fillMaxWidth(),
-            metrics = metrics,
-            value = draft.instanceName,
-            onValueChange = onNameChange,
-            onSubmit = { if (valid) onConfirm() },
-            placeholder = draft.item.title,
-            imeAction = ImeAction.Done
-        )
-
-        problem?.let {
-            Spacer(Modifier.height(metrics.controlPadding))
-            Text(
-                text = it,
-                color = Oxide.FgFaint,
-                fontSize = Oxide.Type.MicroLabel.fontSize,
-                lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        Spacer(Modifier.height(metrics.cardGap))
-        DiscoverDialogActions(
-            metrics = metrics,
-            confirmText = stringResource(R.string.oxide_dis_action_install),
-            confirmEnabled = valid,
-            onCancel = onCancel,
-            onConfirm = onConfirm
-        )
-    }
-}
-
 /** 移动网络确认：安装器会在这里挂起 */
 @Composable
 private fun DiscoverMobileDataDialog(
@@ -1954,23 +3125,47 @@ private fun DiscoverMobileDataDialog(
     onDeny: () -> Unit,
     onAllow: () -> Unit
 ) {
-    OxideModalHost(metrics = metrics, onDismiss = onDeny) {
-        OxideSectionLabel(text = stringResource(R.string.oxide_dis_mobile_title))
-        Spacer(Modifier.height(metrics.cardGap * 0.8f))
-        Text(
-            text = stringResource(R.string.oxide_dis_mobile_detail),
-            color = Oxide.FgMuted,
-            fontSize = Oxide.Type.Body.fontSize,
-            lineHeight = Oxide.Type.Body.lineHeight
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Oxide.DrawerScrim)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDeny
+                )
         )
-        Spacer(Modifier.height(metrics.cardGap))
-        DiscoverDialogActions(
-            metrics = metrics,
-            confirmText = stringResource(R.string.oxide_dis_mobile_allow),
-            confirmEnabled = true,
-            onCancel = onDeny,
-            onConfirm = onAllow
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = metrics.pagePaddingH * 2f)
+                .padding(vertical = metrics.pagePaddingV),
+            contentAlignment = Alignment.Center
+        ) {
+            OxideSurface(
+                modifier = Modifier.width(metrics.drawerWidth * 0.82f),
+                shape = Oxide.RadiusDrawer,
+                contentPadding = PaddingValues(all = metrics.cardGap * 1.2f)
+            ) {
+                OxideSectionLabel(text = stringResource(R.string.oxide_dis_mobile_title))
+                Spacer(Modifier.height(metrics.cardGap * 0.8f))
+                Text(
+                    text = stringResource(R.string.oxide_dis_mobile_detail),
+                    color = Oxide.FgMuted,
+                    fontSize = Oxide.Type.Body.fontSize,
+                    lineHeight = Oxide.Type.Body.lineHeight
+                )
+                Spacer(Modifier.height(metrics.cardGap))
+                DiscoverDialogActions(
+                    metrics = metrics,
+                    confirmText = stringResource(R.string.oxide_dis_mobile_allow),
+                    confirmEnabled = true,
+                    onCancel = onDeny,
+                    onConfirm = onAllow
+                )
+            }
+        }
     }
 }
 
@@ -1997,43 +3192,6 @@ private fun DiscoverDialogActions(
             enabled = confirmEnabled,
             tone = OxideButtonTone.Primary
         )
-    }
-}
-
-/** 居中的模态层：半透明遮罩 + 居中面板，全部使用 Oxide 的面板样式 */
-@Composable
-private fun OxideModalHost(
-    metrics: OxideMetrics,
-    onDismiss: () -> Unit,
-    panelWidthFraction: Float = 0.82f,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Oxide.DrawerScrim)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismiss
-                )
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = metrics.pagePaddingH * 2f)
-                .padding(vertical = metrics.pagePaddingV),
-            contentAlignment = Alignment.Center
-        ) {
-            OxideSurface(
-                modifier = Modifier.width(metrics.drawerWidth * panelWidthFraction),
-                shape = Oxide.RadiusDrawer,
-                contentPadding = PaddingValues(all = metrics.cardGap * 1.2f)
-            ) {
-                content()
-            }
-        }
     }
 }
 

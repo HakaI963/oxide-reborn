@@ -1277,6 +1277,12 @@
     <string name="oxide_nav_discover">Discover</string>
     <string name="oxide_nav_settings">Settings</string>
     <string name="oxide_topbar_tasks">Tasks</string>
+    <string name="oxide_tasks_title">Tasks</string>
+    <string name="oxide_tasks_empty">Nothing running</string>
+    <string name="oxide_tasks_empty_detail">Downloads, installs and exports show up here while they work.</string>
+    <string name="oxide_task_stage_preparing">Preparing</string>
+    <string name="oxide_task_stage_running">Running</string>
+    <string name="oxide_task_stage_completed">Done</string>
     <string name="oxide_topbar_hide_tasks">Hide tasks</string>
     <string name="oxide_topbar_files">Files</string>
     <string name="oxide_topbar_multiplayer">Multiplayer</string>
@@ -1401,6 +1407,46 @@
     <string name="oxide_dis_install_created_detail">%1$s is ready to launch.</string>
     <string name="oxide_dis_dismiss">Dismiss</string>
     <string name="oxide_dis_cancel">Cancel</string>
+    <!-- 翻页：五种状态各自独立，失败永远不会被渲染成"没有结果" -->
+    <string name="oxide_dis_paging_loading">Loading more results…</string>
+    <string name="oxide_dis_paging_more">Load more</string>
+    <string name="oxide_dis_paging_retry">Retry this page</string>
+    <string name="oxide_dis_paging_end">That is every result this search can reach.</string>
+    <string name="oxide_dis_result_pages">%1$d pages loaded</string>
+    <!-- 安装前确认：只有模组与整合包会打开这一层 -->
+    <string name="oxide_dis_sheet_title">Install</string>
+    <string name="oxide_dis_sheet_resolving">Reading the files and dependencies…</string>
+    <string name="oxide_dis_sheet_failed">Could not prepare this install</string>
+    <string name="oxide_dis_sheet_file">File</string>
+    <string name="oxide_dis_sheet_file_meta">%1$s · %2$s</string>
+    <string name="oxide_dis_sheet_version_label">Minecraft version</string>
+    <string name="oxide_dis_sheet_version_detected">Detected instance</string>
+    <string name="oxide_dis_sheet_version_auto">Detected from the selected instance: %1$s</string>
+    <string name="oxide_dis_sheet_version_chosen">Changed to %1$s, no longer the selected instance</string>
+    <string name="oxide_dis_sheet_no_instance">No instance selected. Pick one to install into.</string>
+    <string name="oxide_dis_sheet_no_version_list">No Minecraft version is available yet.</string>
+    <string name="oxide_dis_sheet_no_file_for_version">No file of this project supports %1$s.</string>
+    <string name="oxide_dis_sheet_game_missing">%1$s is not installed yet. Confirming will install the game version together with this project.</string>
+    <string name="oxide_dis_sheet_confirm_game">Install %1$s and the project</string>
+    <string name="oxide_dis_sheet_game_busy">Another game version is already being installed. Try again when it finishes.</string>
+    <string name="oxide_dis_sheet_game_install_failed">%1$s did not finish installing, so nothing was added to it.</string>
+    <!-- 依赖 -->
+    <string name="oxide_dis_drawer_tab_dependencies">Dependencies</string>
+    <string name="oxide_dis_deps_loading">Reading the dependencies…</string>
+    <string name="oxide_dis_deps_empty">This file has no dependencies.</string>
+    <string name="oxide_dis_deps_failed">Could not read the dependencies</string>
+    <string name="oxide_dis_deps_resolving">Looking for a matching file…</string>
+    <string name="oxide_dis_deps_download_all">Download all</string>
+    <string name="oxide_dis_deps_selected">%1$d selected</string>
+    <string name="oxide_dis_dep_meta">%1$s · %2$s</string>
+    <string name="oxide_dis_dep_no_version">No file of this dependency matches the selected Minecraft version.</string>
+    <string name="oxide_dis_dep_retry">Retry</string>
+    <string name="oxide_dis_dep_type_required">Required</string>
+    <string name="oxide_dis_dep_type_optional">Optional</string>
+    <string name="oxide_dis_dep_type_embedded">Embedded</string>
+    <string name="oxide_dis_dep_type_incompatible">Incompatible</string>
+    <string name="oxide_dis_dep_type_tool">Tool</string>
+    <string name="oxide_dis_dep_type_include">Included</string>
     <string name="about_launcher_modified_title">About Oxide Launcher</string>
     <string name="about_launcher_modified_text">Oxide Launcher is a launcher for Minecraft: Java Edition on Android. It is free software released under the GNU General Public License v3.0 and is developed independently. Full upstream attribution, third-party licences and the list of modifications are in THIRD_PARTY.md; every original copyright notice is preserved in the source files.</string>
     <string name="about_launcher_account_code_title">Account code</string>
@@ -1777,7 +1823,6 @@
     <string name="oxide_set_section_account_actions">Account actions</string>
     <string name="oxide_set_section_runtime">Java runtime</string>
     <string name="oxide_set_section_memory">Memory</string>
-    <string name="oxide_set_section_runtime_actions">Runtime actions</string>
     <string name="oxide_set_section_renderer">Renderer</string>
     <string name="oxide_set_section_driver">Vulkan driver</string>
     <string name="oxide_set_section_graphics">Graphics</string>
@@ -1846,8 +1891,6 @@
     <string name="oxide_set_game_folder">Game folder</string>
     <string name="oxide_set_action_manage_accounts">Open the account manager</string>
     <string name="oxide_set_action_manage_accounts_detail">Sign in, refresh tokens, skins and capes.</string>
-    <string name="oxide_set_action_manage_runtimes">Manage Java runtimes</string>
-    <string name="oxide_set_action_manage_runtimes_detail">Import, run and delete Java runtimes.</string>
     <string name="oxide_set_action_dl_renderer_plugin">Get renderer plugins</string>
     <string name="oxide_set_action_dl_renderer_plugin_detail">Open the renderer plugin release page.</string>
     <string name="oxide_set_action_dl_driver_plugin">Get driver plugins</string>
@@ -1861,21 +1904,29 @@
     <string name="oxide_set_action_check_update">Check for launcher updates</string>
     <string name="oxide_set_action_check_update_detail">Ask the update service whether a newer build exists.</string>
     <string name="oxide_set_action_about_detail">Version, licences, acknowledgements and loaded plugins.</string>
-    <string name="oxide_set_action_guides">Replay the main-screen guide</string>
-    <string name="oxide_set_action_guides_detail">Walk through the home page once more.</string>
     <string name="oxide_set_action_community">Report a problem or get help</string>
     <string name="oxide_set_action_community_detail">Open the project issue tracker.</string>
     <string name="oxide_set_action_control_editor">Open the control layout editor</string>
     <string name="oxide_set_action_control_editor_detail">Edit the layout that is currently selected.</string>
     <string name="oxide_set_action_control_layouts_detail">Create, copy, import and delete control layouts.</string>
-    <string name="oxide_set_action_full_controls_detail">Every mouse, gesture and gyroscope option on one screen.</string>
-    <string name="oxide_set_action_full_gamepad_detail">Gamepad remapping, dead zones and joystick modes.</string>
     <string name="oxide_set_action_open_instances">Open the instance list</string>
     <string name="oxide_set_action_open_instances_detail">Every installed game version lives there.</string>
     <string name="oxide_set_action_open_discover">Browse mods and modpacks</string>
     <string name="oxide_set_action_open_discover_detail">Search the content platforms in Discover.</string>
     <string name="oxide_set_action_open_home">Open the launcher home page</string>
     <string name="oxide_set_action_open_home_detail">Sign in and launch a game from the home page.</string>
+    <!-- Oxide 控制分类 -->
+    <string name="oxide_set_section_mouse_hotspots">Pointer hotspots</string>
+    <string name="oxide_set_hotspot_row_detail">Where this pointer reports a hit on the image.</string>
+    <!-- Hotspot coordinates as X and Y percentages of the pointer image; %1$d is X, %2$d is Y -->
+    <string name="oxide_set_hotspot_value">%1$d%% / %2$d%%</string>
+    <string name="oxide_set_section_gamepad_bindings">Gamepad bindings</string>
+    <string name="oxide_set_section_gamepad_profiles">Mapping profiles</string>
+    <string name="oxide_set_drawer_gamepad_bindings">Gamepad bindings</string>
+    <string name="oxide_set_action_gamepad_bindings">Bind gamepad buttons</string>
+    <string name="oxide_set_action_gamepad_bindings_detail">Map each gamepad button to the keys it sends, in game and in the menu.</string>
+    <!-- Shown as the hint of the editor row while there is no layout to edit -->
+    <string name="oxide_set_control_layout_missing">Create a control layout to edit it here.</string>
     <!-- Oxide 实例页与实例配置抽屉 -->
     <string name="oxide_ins_page_title">Instances</string>
     <string name="oxide_ins_page_subtitle_count">%1$d installed</string>
@@ -2201,6 +2252,12 @@
     <string name="oxide_sec_launch_op_relogin">%1$s has to sign in again</string>
     <string name="oxide_sec_launch_op_refresh_failed">Refreshing %1$s failed</string>
 
+    <!-- Oxide: the pre-flight decisions that used to be modal dialogs -->
+    <string name="oxide_launch_preflight_title">Launch checks</string>
+    <string name="oxide_launch_storage_detail">The renderer %1$s is configured through a file, so the launcher needs file access before it can read that configuration.</string>
+    <string name="oxide_launch_relogin_password_hint">Enter the password to sign in again</string>
+    <string name="oxide_launch_relogin_busy">Signing in…</string>
+
     <!-- Oxide: installing a Minecraft version (replaces DownloadGameScreen) -->
     <string name="oxide_inst_title">Install a version</string>
     <string name="oxide_inst_subtitle">VERSION · LOADER · INSTALL</string>
@@ -2274,4 +2331,37 @@
     <string name="oxide_mod_start">Modify</string>
     <string name="oxide_mod_info_missing">This instance has no readable metadata, so it cannot be modified.</string>
     <string name="oxide_mod_loading_instance">Reading this instance…</string>
+    <!-- Oxide: about panel and control-layout management (replace AboutInfoScreen / ControlManageScreen) -->
+    <string name="oxide_about_page_subtitle">Version, licences and third-party credits.</string>
+    <string name="oxide_about_product_version_hint">The version of this product. Build numbers are not shown here.</string>
+    <string name="oxide_about_section_launcher">This launcher</string>
+    <string name="oxide_about_section_actions">Actions</string>
+    <string name="oxide_about_section_licences">Licences</string>
+    <string name="oxide_about_section_plugin_projects">Plugin projects</string>
+    <string name="oxide_about_project_link_detail">Source, releases and issue tracker.</string>
+    <string name="oxide_about_read_licence">Licence</string>
+    <string name="oxide_about_library_licensed">%1$s</string>
+    <string name="oxide_about_ack_pojav_title">PojavLauncher</string>
+    <string name="oxide_about_ack_pcl2_title">Plain Craft Launcher 2</string>
+    <string name="oxide_about_ack_fcl_title">Fold Craft Launcher</string>
+    <string name="oxide_about_ack_hmcl_title">Hello Minecraft! Launcher</string>
+    <string name="oxide_about_ack_bmcl_title">BMCL</string>
+    <string name="oxide_about_ack_mcim_title">mcmod-info-mirror</string>
+    <string name="oxide_about_ack_renderer_plugins_title">Renderer plugins</string>
+    <string name="oxide_about_ack_renderer_plugins_detail">%1$s can load rendering back-ends from this project.</string>
+    <string name="oxide_about_ack_driver_plugins_title">Vulkan driver plugins</string>
+    <string name="oxide_about_ack_driver_plugins_detail">%1$s can load Vulkan drivers from this project.</string>
+    <string name="oxide_about_ack_native_lib_plugins_title">Native library plugins</string>
+    <string name="oxide_about_ack_native_lib_plugins_detail">%1$s can load native graphics libraries from this project.</string>
+    <string name="oxide_about_layouts_page_title">Control layouts</string>
+    <string name="oxide_about_layouts_page_subtitle">Import, create, copy and delete the layouts the in-game controls use.</string>
+    <string name="oxide_about_layouts_section_info">Selected layout</string>
+    <string name="oxide_about_layouts_section_actions">Actions</string>
+    <string name="oxide_about_layouts_pick_one">Select a layout on the left to see what it contains.</string>
+    <string name="oxide_about_layouts_copy">Copy</string>
+    <string name="oxide_about_layouts_delete">Delete</string>
+    <string name="oxide_about_layouts_import_detail">Pick one or more layout files from storage.</string>
+    <string name="oxide_about_layouts_create_detail">Save a new empty layout under a name and author of your own.</string>
+    <string name="oxide_about_layouts_share_detail">Send the selected layout file to another app.</string>
+    <string name="oxide_about_layouts_edit_detail">Open the selected layout in the layout editor.</string>
 </resources>
