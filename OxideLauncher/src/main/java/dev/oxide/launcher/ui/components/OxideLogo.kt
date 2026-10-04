@@ -52,8 +52,6 @@ val OxideLogoWordmark = 60.sp
 
 /**
  * Oxide 标志
-/**
- * Oxide 标志
  *
  * 图形部分是一个圆角菱形环，左半钢色、右半 accent 色；字标是 "OX" 重、"IDE" 轻。
  * 两者之间固定 10dp，这是参考稿里 logo 的全部几何，任何缩放都按比例保持这个关系。
@@ -118,7 +116,7 @@ fun OxideLogo(
 //
 // 四个角的圆角半径并不相等（外缘 103.6..117.3，±6%），但这个差异远小于
 // 一条描边的宽度，重画时取四角的均值；只有位图资源才逐角保留（见
-// res/mipmap-*/ic_launcher_foreground.webp 与 res/drawable/ic_launcher_monochrome.xml）。
+// 各密度下的 ic_launcher_foreground.webp 与 res/drawable/ic_launcher_monochrome.xml）。
 //
 // 下面每个比例都除以 [OxideMarkHalfDiagonalRatio] 对应的半对角线，因此与尺寸无关；
 // 描边宽度也从半对角线里扣掉，于是 [OxideMarkRing.outerHalfDiagonal] 恒等于它。
