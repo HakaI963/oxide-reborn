@@ -82,6 +82,7 @@ import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionFolders
 import dev.oxide.launcher.game.version.installed.VersionType
 import dev.oxide.launcher.game.version.installed.VersionsManager
+import dev.oxide.launcher.BuildKeys
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.file.formatFileSize
@@ -265,7 +266,7 @@ fun OxideHomePage(
         Build.SUPPORTED_ABIS.firstOrNull()?.let {
             add(OxideHomeEnvRow(stringResource(R.string.oxide_home_env_architecture), it))
         }
-        BuildConfig.VERSION_NAME.takeIf { it.isNotBlank() }?.let {
+        BuildKeys.LAUNCHER_DISPLAY_VERSION.takeIf { it.isNotBlank() }?.let {
             add(OxideHomeEnvRow(stringResource(R.string.oxide_home_env_launcher), it))
         }
         snapshot.installSource?.let {

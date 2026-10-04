@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import dev.oxide.launcher.BuildKeys
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -303,14 +304,19 @@ private fun OxideSidebarNav(
             )
         }
 
-        OxidePage.entries.forEach { page ->
-            OxideSidebarItem(
-                page = page,
-                selected = page == current,
-                metrics = metrics,
-                onClick = { onSelect(page) },
-            )
-        }
+            // The items must live in a Column: as direct children of a Box every one of them
+            // aligns to top-start and all four land on the same row. The Box only exists so the
+            // rail track can overlay them.
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OxidePage.entries.forEach { page ->
+                    OxideSidebarItem(
+                        page = page,
+                        selected = page == current,
+                        metrics = metrics,
+                        onClick = { onSelect(page) },
+                    )
+                }
+            }
         }
     }
 }
@@ -415,7 +421,7 @@ private fun OxideSidebarBrandFooter() {
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = stringResource(R.string.oxide_shell_footer_version, BuildConfig.VERSION_NAME),
+            text = stringResource(R.string.oxide_shell_footer_version, BuildKeys.LAUNCHER_DISPLAY_VERSION),
             color = Oxide.FgGhost,
             fontSize = 8.sp,
             lineHeight = 14.sp,

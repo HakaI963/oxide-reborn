@@ -16,6 +16,7 @@ plugins {
 
 val oxidePackageName = "dev.oxide.launcher"
 val launcherAPPName = project.findProperty("launcher_app_name") as? String ?: error("The \"launcher_app_name\" property is not set in gradle.properties.")
+val launcherDisplayVersion = project.findProperty("launcher_display_version") as? String ?: error("The \"launcher_display_version\" property is not set in gradle.properties.")
 val launcherName = project.findProperty("launcher_name") as? String ?: error("The \"launcher_name\" property is not set in gradle.properties.")
 val launcherShortName = project.findProperty("launcher_short_name") as? String ?: error("The \"launcher_short_name\" property is not set in gradle.properties.")
 val launcherUrl = project.findProperty("url_home") as? String ?: error("The \"url_home\" property is not set in gradle.properties.")
@@ -322,6 +323,7 @@ buildKeys {
     string("LAUNCHER_SHORT_NAME", launcherShortName, true)
     string("URL_HOME", launcherUrl, true)
     string("CURSEFORGE_API", resolvedCurseForgeApiKey, true)
+    string("LAUNCHER_DISPLAY_VERSION", launcherDisplayVersion, true)
     string("BUILD_ARCH", projectArch)
 }
 

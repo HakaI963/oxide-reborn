@@ -105,7 +105,7 @@ fun AboutInfoScreen(
                         ButtonIconItem(
                             icon = painterResource(R.drawable.ic_oxide_mark),
                             title = BuildKeys.LAUNCHER_NAME,
-                            text = stringResource(R.string.about_launcher_version, BuildConfig.VERSION_NAME),
+                            text = stringResource(R.string.about_launcher_version, BuildKeys.LAUNCHER_DISPLAY_VERSION),
                             button = {
                                 Button(
                                     onClick = checkUpdate

@@ -1,36 +1,36 @@
 {
-  "code": 100500,
-  "version": "1.5.0",
+  "code": 100600,
+  "version": "1.6.0",
   "created_at": "2026-10-04",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.5.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.5.0/OxideLauncher-1.5.0.apk",
+      "file_name": "OxideLauncher-1.6.0.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.6.0/OxideLauncher-1.6.0.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.5.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.5.0/OxideLauncher-1.5.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.6.0-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.6.0/OxideLauncher-1.6.0-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.5.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.5.0/OxideLauncher-1.5.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.6.0-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.6.0/OxideLauncher-1.6.0-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.5.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.5.0/OxideLauncher-1.5.0-x86.apk",
+      "file_name": "OxideLauncher-1.6.0-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.6.0/OxideLauncher-1.6.0-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.5.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.5.0/OxideLauncher-1.5.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.6.0-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.6.0/OxideLauncher-1.6.0-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
@@ -42,7 +42,7 @@
   "bodies": [
     {
       "language": "en",
-      "markdown": "Every screen is now the Oxide GUI, and CurseForge works in release."
+      "markdown": "Every screen is the Oxide GUI, plus dependency-aware installs and real pagination in Discover."
     }
   ]
 }

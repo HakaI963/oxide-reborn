@@ -459,7 +459,7 @@ fun printLauncherInfo(
     println("▷ Device: ${Build.PRODUCT} ${Build.MODEL}")
     println("▷ Arch: ${Architecture.archAsString(Architecture.getDeviceArchitecture())}")
     println("▷ Android Version: ${Build.VERSION.RELEASE}")
-    println("▷ Launcher Version: ${BuildConfig.VERSION_NAME}, build: ${BuildKeys.BUILD_ARCH}")
+    println("▷ Launcher Version: ${BuildKeys.LAUNCHER_DISPLAY_VERSION} (build ${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE}), arch: ${BuildKeys.BUILD_ARCH}")
 }
 
 /**
