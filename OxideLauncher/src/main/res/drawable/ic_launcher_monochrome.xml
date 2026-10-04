@@ -2,20 +2,21 @@
 <!--
   ~ Oxide Launcher launcher icon monochrome (themed icons).
   ~
-  ~ This must be the silhouette of the adaptive foreground in
-  ~ res/mipmap-<density>/ic_launcher_foreground.png. The foreground is the
-  ~ supplied icon.png artwork composited over its own plate colour, so the
-  ~ silhouette is the artwork's rounded-square tile, and that is what is drawn
-  ~ here - a filled plate, not an outline.
+  ~ Silhouette of res/mipmap-<density>/ic_launcher_foreground.webp: the same
+  ~ two concentric rounded diamonds the foreground draws, expressed in the
+  ~ 108 dp adaptive viewport.  Geometry measured off the 1024 px source plate:
   ~
-  ~ Measured off the artwork (1254 px canvas) and converted to the 108 dp
-  ~ adaptive viewport, which covers the 1085 px square centred on the tile:
-  ~   tile   x 75..1176, y 75..1141   ->  -0.80..108.79 dp, 0.90..107.09 dp
-  ~   corner radius 237 px            ->  23.59 dp
+  ~   outer diamond  rounded square rotated 45 deg, half side 236.450 px,
+  ~                  corner radius 112.050 px, stroke 19.069 px
+  ~   inner diamond  half side 139.543 px, corner radius 50.653 px,
+  ~                  stroke 14.869 px, centred on the outer one (measured
+  ~                  offset 0.71 px = 0.15% of the mark width, i.e. noise)
   ~
-  ~ The tile is deliberately wider than the 108 dp viewport: at 109.6 dp it
-  ~ covers the whole 72 dp mask on every launcher mask shape, so no plate
-  ~ colour ever shows at the edge.
+  ~ Scaled so the mark's bounding box is the 66 dp safe-zone diameter:
+  ~   66 / 575.955 px = 0.114582 dp per px.
+  ~
+  ~ Four subpaths with fillType evenOdd: outer boundary, its hole, then the
+  ~ small ring's outer and inner boundary.
   ~
   ~ No android:tint: the launcher supplies the themed-icon colour, and a tint
   ~ here would multiply against it.
@@ -27,6 +28,15 @@
     android:viewportHeight="108">
 
     <path
-        android:pathData="M22.79,0.9 H85.2 A23.59,23.59 0 0 1 108.79,24.49 V83.5 A23.59,23.59 0 0 1 85.2,107.09 H22.79 A23.59,23.59 0 0 1 -0.8,83.5 V24.49 A23.59,23.59 0 0 1 22.79,0.9 Z"
+        android:pathData="M63.079,24.761L83.239,44.921A12.840,12.840 0 0 1 83.239,63.079L63.079,83.239A12.840,12.840 0 0 1 44.921,83.239L24.761,63.079A12.840,12.840 0 0 1 24.761,44.921L44.921,24.761A12.840,12.840 0 0 1 63.079,24.761Z"
+        android:fillColor="#FFFFFFFF" />
+    <path
+        android:pathData="M61.534,26.306L81.694,46.466A10.655,10.655 0 0 1 81.694,61.534L61.534,81.694A10.655,10.655 0 0 1 46.466,81.694L26.306,61.534A10.655,10.655 0 0 1 26.306,46.466L46.466,26.306A10.655,10.655 0 0 1 61.534,26.306Z"
+        android:fillColor="#FFFFFFFF" />
+    <path
+        android:pathData="M58.104,35.490L72.510,49.896A5.804,5.804 0 0 1 72.510,58.104L58.104,72.510A5.804,5.804 0 0 1 49.896,72.510L35.490,58.104A5.804,5.804 0 0 1 35.490,49.896L49.896,35.490A5.804,5.804 0 0 1 58.104,35.490Z"
+        android:fillColor="#FFFFFFFF" />
+    <path
+        android:pathData="M56.900,36.695L71.305,51.100A4.101,4.101 0 0 1 71.305,56.900L56.900,71.305A4.101,4.101 0 0 1 51.100,71.305L36.695,56.900A4.101,4.101 0 0 1 36.695,51.100L51.100,36.695A4.101,4.101 0 0 1 56.900,36.695Z"
         android:fillColor="#FFFFFFFF" />
 </vector>

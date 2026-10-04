@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Oxide Launcher icon background: the plate colour of the source artwork.
+
+  Measured off res/../icon.png (1024x1024, the shipped plate): median RGB over a
+  964x964 border ring is (8, 7, 9) and the four 100x100 corners average
+  (7.48, 7.38, 8.90).  This is what res/mipmap-*/ic_launcher_foreground.webp is
+  composited over, so the antialiased rim of the mark resolves against exactly
+  the colour it was cut from.
+-->
 <resources>
-    <!-- Oxide Launcher icon background: the backdrop of the shipped icon art -->
     <color name="ic_launcher_background">#080709</color>
 </resources>
