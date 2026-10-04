@@ -2504,5 +2504,5 @@
     <string name="oxide_dlg_option_recommended">Recommended</string>
     <string name="oxide_dlg_empty_options">Nothing to choose from</string>
     <string name="oxide_dlg_working">Working…</string>
-    <string name="oxide_dlg_entry_invalid">This value can't be used yet</string>
+    <string name="oxide_dlg_entry_invalid">This value can\'t be used yet</string>
 </resources>

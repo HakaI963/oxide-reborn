@@ -111,7 +111,9 @@ class ControlEditorNumberTest {
     @Test
     fun `负数显示时带负号且小数部分补零`() {
         assertEquals("-3.50", formatEditorValue(-3.5f, suffix = null, decimals = 2))
-        assertEquals("-3.05", formatEditorValue(-3.5f, suffix = null, decimals = 1))
+        assertEquals("-3.5", formatEditorValue(-3.5f, suffix = null, decimals = 1))
+        // 补零的那一位：3.5 在两位下必须是 "50"，不能是 "5"
+        assertEquals("-0.05", formatEditorValue(-0.05f, suffix = null, decimals = 2))
     }
 
     @Test

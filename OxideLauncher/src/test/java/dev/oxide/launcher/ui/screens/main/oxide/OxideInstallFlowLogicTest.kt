@@ -307,21 +307,46 @@ class OxideInstallFlowLogicTest {
     // ---- 已下载 / 总量 ----------------------------------------------------
 
     @Test
-    fun transferIsOnlyFormattedWhenBothNumbersAreReal() {
-        assertEquals("1.00 KB / 2.00 KB", oxideInstallTransferText(1024L, 2048L))
-        assertEquals("0 B / 2.00 KB", oxideInstallTransferText(0L, 2048L))
-        // 总量未知时不画：画一个错的分母比什么都不画更糟
-        assertNull(oxideInstallTransferText(0L, 0L))
-        assertNull(oxideInstallTransferText(1024L, -1L))
-        assertNull(oxideInstallTransferText(-1L, 2048L))
+    fun theBackendVolumeTextIsForwardedVerbatim() {
+        // 后端用 formatFileSize 写好的 "132/1400 files · 84.21 MB / 210.44 MB"
+        // 原样转发：界面不重算字节数，两处数字因此不会对不上
+        assertEquals(
+            "In progress · 132/1400 files · 84.21 MB / 210.44 MB",
+            oxideInstallDetailLine(
+                stateLabel = "In progress",
+                message = "132/1400 files · 84.21 MB / 210.44 MB",
+                speedText = "4.20 MB/s",
+            ),
+        )
     }
 
     @Test
-    fun fileCountIsAlsoOmittedWhenTheTotalIsUnknown() {
-        assertEquals("12/1400", oxideInstallFileCountText(12, 1400))
-        assertNull(oxideInstallFileCountText(0, 0))
-        assertNull(oxideInstallFileCountText(3, -1))
-        assertNull(oxideInstallFileCountText(-1, 3))
+    fun aMissingVolumeSegmentIsOmittedRatherThanFaked() {
+        // 后端没有报消息的加载器下载：那一段整个不画，不拿"下载中"三个字凑数
+        assertEquals(
+            "Waiting · 1.20 MB/s",
+            oxideInstallDetailLine(
+                stateLabel = "Waiting",
+                message = null,
+                speedText = "1.20 MB/s",
+            ),
+        )
+        assertEquals(
+            "Done",
+            oxideInstallDetailLine(stateLabel = "Done", message = "  ", speedText = null),
+        )
+    }
+
+    @Test
+    fun aZeroRateIsNotPutIntoTheDetailLine() {
+        assertEquals(
+            "In progress",
+            oxideInstallDetailLine(
+                stateLabel = "In progress",
+                message = null,
+                speedText = null,
+            ),
+        )
     }
 
     // ---- 整条流程的进度 ---------------------------------------------------
@@ -422,6 +447,8 @@ class OxideInstallFlowLogicTest {
 
     @Test
     fun aZeroRateIsNotReportedAsSpeed() {
+        // 下载停下来时后端把速率清成 0：显示 "0 B/s" 是把"没有数据"说成了"数据是零"
+        assertNull(oxideInstallSpeed(0L))
         val progress = oxideInstallProgress(
             listOf(task("vanilla", OxideInstallTaskState.Running, progress = 0.1f, rate = 0L)),
         )

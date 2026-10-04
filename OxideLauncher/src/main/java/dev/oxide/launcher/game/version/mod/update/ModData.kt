@@ -23,7 +23,10 @@ import dev.oxide.launcher.game.download.assets.platform.PlatformVersion
 import dev.oxide.launcher.game.download.assets.platform.getVersions
 import dev.oxide.launcher.game.download.assets.utils.ModTranslations
 import dev.oxide.launcher.game.version.mod.ModFile
+import dev.oxide.launcher.game.version.mod.ModLoaderVerdict
 import dev.oxide.launcher.game.version.mod.ModProject
+import dev.oxide.launcher.game.version.mod.modLoaderVerdict
+import dev.oxide.launcher.game.version.mod.resolveTargetLoaderNames
 import dev.oxide.launcher.ui.screens.content.download.assets.elements.initAll
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.string.parseInstant
@@ -59,32 +62,47 @@ data class ModData(
     suspend fun checkUpdate(
         minecraftVer: String,
         modLoader: ModLoader
+    ): PlatformVersion? = checkUpdate(minecraftVer, listOf(modLoader))
+
+    /**
+     * 检查模组更新
+     *
+     * 这里有一道下载前的守卫：[ModLoaderVerdict.Mismatch] 直接返回 null，
+     * 一个字都不下载。守卫之前不存在过：判定曾经是
+     * `当前加载器 ∉ 文件加载器 → 沿用文件自己的加载器通道`，
+     * 于是 Fabric 实例里的 NeoForge 模组被判成"可更新"，
+     * 平台上的 NeoForge 构建被下载下来覆盖掉原文件——
+     * 这就是"NeoForge 模组分进了 Fabric 实例"在设备上的来源。
+     *
+     * 判定本身在 [modLoaderVerdict] 里，是纯函数；这里只负责不再放宽它。
+     *
+     * @param minecraftVer MC版本，用于筛选版本
+     * @param modLoaders 目标实例**自己的**加载器
+     */
+    suspend fun checkUpdate(
+        minecraftVer: String,
+        modLoaders: Collection<ModLoader>
     ): PlatformVersion? {
         return withContext(Dispatchers.IO) {
             runCatching {
+                val verdict = modLoaderVerdict(modLoaders, modFile.loaders.toList())
+                if (!verdict.loadable) {
+                    Logger.info(
+                        TAG,
+                        "Skipping update for ${file.name}: the instance has " +
+                                "[${modLoaders.joinToString { it.displayName }}] but this file only " +
+                                "declares [${modFile.loaders.joinToString { it.getDisplayName() }}]."
+                    )
+                    return@runCatching null
+                }
+
                 val datePublished = parseInstant(modFile.datePublished)
                 val projectId = project.id
-                val currentLoaderName = modLoader.displayName.lowercase()
-                val currentFileLoaders = modFile.loaders
-                    .map { it.getDisplayName().lowercase() }
+                // 守卫之后只按**实例自己的**加载器筛通道。多加载器模组在 Fabric 实例里
+                // 因此只会取到 Fabric 构建，不会顺手把 NeoForge 构建也当成候选。
+                val targetLoaders = resolveTargetLoaderNames(modLoaders, modFile.loaders.toList())
+                    .map { it.lowercase() }
                     .toSet()
-                val targetLoaders = when {
-                    currentLoaderName in currentFileLoaders -> {
-                        // 当前模组文件支持当前游戏加载器：仅检查当前加载器通道的更新
-                        setOf(currentLoaderName)
-                    }
-
-                    currentFileLoaders.isNotEmpty() -> {
-                        // 当前模组文件不支持当前游戏加载器（例如 信雅互联 场景）：
-                        // 优先沿用该模组文件自身支持的加载器通道来检查更新
-                        currentFileLoaders
-                    }
-
-                    else -> {
-                        // 无法识别当前文件加载器信息时，回退到当前游戏加载器
-                        setOf(currentLoaderName)
-                    }
-                }
 
                 // 获取所有版本并初始化
                 val versions = getVersions(
@@ -101,8 +119,8 @@ data class ModData(
                             .toSet()
                         // 是否支持当前MC版本
                         minecraftVer in version.platformGameVersion() &&
-                        // 是否匹配目标加载器（当前加载器，或当前文件自身的加载器）
-                        loaderNames.any { it in targetLoaders } &&
+                        // 是否匹配实例自己的加载器通道
+                        (targetLoaders.isEmpty() || loaderNames.any { it in targetLoaders }) &&
                         // 是否比当前版本更新
                         version.platformDatePublished() > datePublished
                     }

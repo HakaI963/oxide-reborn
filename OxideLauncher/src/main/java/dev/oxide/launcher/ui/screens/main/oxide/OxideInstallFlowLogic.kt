@@ -18,7 +18,6 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
-import dev.oxide.launcher.utils.file.formatFileSize
 import kotlin.math.roundToInt
 
 /**
@@ -309,17 +308,24 @@ internal fun oxideInstallSpeed(bytesPerSec: Long?): Long? =
     bytesPerSec?.takeIf { it > 0L }
 
 /**
- * 一条任务那一行"量"的排法
+ * 一条任务那一行副标题的排法
  *
- * 后端把"下了多少 / 还剩多少"直接写进 [message] 里了——Minecraft 本体那一条由
- * `MinecraftDownloader` 用引擎快照格式化成 `132/1400 files · 84.21 MB / 210.44 MB`，
- * 用的是它一直在用的 `formatFileSize`。所以这里**原样转发**那段文字：单位与口径都
- * 由后端定，界面不重算，也就不会出现两处数字对不上。
+ * 三段按固定顺序排开：状态、[message]、速率。缺哪一段就少一段，
+ * 而不是补一句"下载中"来把位置填满——那一句话在没有任何真实数字的时候等于在编。
  *
- * 速率单独排在其后，且只在后端真的报了非零速率时才有这一段。
- * 两者都没有就返回空列表——那一行于是什么都不画，而不是补一句"下载中"来填位置。
+ * [message] 原样转发：后端把"下了多少 / 还剩多少"直接写在里面了
+ * （Minecraft 本体那一条由 `MinecraftDownloader` 用引擎快照格式化成
+ * `132/1400 files · 84.21 MB / 210.44 MB`，单位走它一直在用的 `formatFileSize`），
+ * 界面不重算，因此不会出现两处数字对不上。速率那一段同样只在后端报了非零速率时才有。
+ *
+ * 三段都是纯字符串拼接，所以可以在单元测试里逐条断言顺序与省略规则。
  */
-internal fun oxideInstallTransferParts(message: String?, bytesPerSec: Long?): List<String> = buildList {
-    message?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
-    oxideInstallSpeed(bytesPerSec)?.let { add("$it") }
-}
+internal fun oxideInstallDetailLine(
+    stateLabel: String,
+    message: String?,
+    speedText: String?,
+): String = listOfNotNull(
+    stateLabel.trim().takeIf { it.isNotEmpty() },
+    message?.trim()?.takeIf { it.isNotEmpty() },
+    speedText?.trim()?.takeIf { it.isNotEmpty() },
+).joinToString(" · ")

@@ -67,11 +67,12 @@ import dev.oxide.launcher.ui.screens.main.oxide.OxideBadgeTone
 import kotlin.math.roundToInt
 
 /**
- * 停靠面板里的三块"选择器"
+ * 停靠面板里的四块"选择器"
  *
- * 三块都用同一套画法：Canvas 一遍画完底板与指示，手势自己实现，
- * 状态另外交给 `selectable` 的 selected 与一行朗读说明。因此选中态
- * 除了颜色还有形状、位置与朗读三层线索。
+ * 定位板、九宫格、步进、以及层与控件两行条目。四块都用同一套画法：底板与指示
+ * 尽量一遍画完，手势自己实现，状态另外交给 `selectable` / `toggleable` 的
+ * selected 与一行朗读说明。因此选中态除了颜色，还有形状、位置与朗读三层线索——
+ * 高对比度模式、色觉差异与灰度打印下都读得出来。
  */
 
 // ---------------------------------------------------------------------------
@@ -103,7 +104,8 @@ internal fun EditorPositionPad(
     val fractionX = remember(position.x) { editorFractionFromStored(position.x) }
     val fractionY = remember(position.y) { editorFractionFromStored(position.y) }
 
-    // 手势协程只在 valueRange 变化时重启，回调要跟着组合走
+    // 手势协程的 key 里没有回调，因此它不会随选中项重启，
+    // 回调必须跟着组合走，否则拖到的还是上一个控件
     val currentMove by rememberUpdatedState(onMove)
     val currentFinish by rememberUpdatedState(onMoveFinished)
 
@@ -203,7 +205,12 @@ internal fun EditorPositionPad(
     }
 }
 
-/** 定位板自己的标题：一行小字，说明它在编辑什么 */
+/**
+ * 定位板的抬头：左边一行小字说明它在编辑什么，右边一个读数
+ *
+ * 读数放在抬头而不是塞进板里，是因为板内已经被九宫格参考线与旋钮占满了；
+ * 而读数必须在拖动时一直看得见，因此它跟板平级、在板上方。
+ */
 @Composable
 internal fun EditorPadHeader(
     label: String,
@@ -405,9 +412,9 @@ internal fun EditorNudgeRow(
 /**
  * 停靠面板里的控件层条目
  *
- * 一行里三块热区：眼睛（切隐藏）、名字（选中，再点一次开属性）、属性按钮。
- * 选中态除了强调色还有左侧指示条与实心方块；隐藏态另有一枚
- * `HIDDEN` 徽章——只在眼睛上换图标是不够的，图标差别太小。
+ * 一行里三块热区：眼睛（切隐藏）、名字（选中，再点一次取消）、属性按钮。
+ * 选中态除了强调色还有左侧指示条与实心方块；隐藏态另有一行"已隐藏"的字——
+ * 只在眼睛上换图标是不够的，两枚图形的差别太小，色觉差异下更难分辨。
  */
 @Composable
 internal fun EditorLayerRow(
@@ -444,8 +451,10 @@ internal fun EditorLayerRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         EditorSelectedMark(selected = selected)
+        // 可见时是一个实心点、隐藏时是一个空心圈，因此两态的**形状**就不同，
+        // 不必只靠描边与底色的差别
         EditorGlyphButton(
-            glyph = if (hidden) "◌" else "◉",
+            glyph = if (hidden) "○" else "●",
             description = visibilityText,
             enabled = enabled,
             selected = !hidden,

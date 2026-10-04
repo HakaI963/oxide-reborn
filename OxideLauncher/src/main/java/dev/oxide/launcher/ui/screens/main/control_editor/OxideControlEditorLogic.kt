@@ -186,12 +186,14 @@ fun editorPadKnob(
     height: Float,
     knobRadius: Float,
 ): EditorPadPoint {
-    // 板比旋钮还窄时不能交给 coerceIn——上下界会反过来，它会抛异常。
-    // 这里显式把上下界排好，于是退化成一条缝的板也只是把旋钮摆在中间。
-    val maxX = (width / 2f - knobRadius).coerceAtLeast(0f)
-    val minX = (knobRadius).coerceIn(0f, maxX)
-    val maxY = (height / 2f - knobRadius).coerceAtLeast(0f)
-    val minY = (knobRadius).coerceIn(0f, maxY)
+    // 让整个旋钮留在板内，也就是把中心夹在 [radius, 边长 - radius] 之间。
+    // 板比旋钮还窄时这两个界会反过来，交给 coerceIn 会抛异常，
+    // 因此这里先把上界压到不小于下界——退化成一条缝的板也只是把旋钮摆在中间。
+    val radius = knobRadius.coerceAtLeast(0f)
+    val maxX = (width - radius).coerceAtLeast(0f)
+    val minX = radius.coerceAtMost(maxX)
+    val maxY = (height - radius).coerceAtLeast(0f)
+    val minY = radius.coerceAtMost(maxY)
     return EditorPadPoint(
         x = (fractionX.coerceIn(0f, 1f) * width).coerceIn(minX, maxX),
         y = (fractionY.coerceIn(0f, 1f) * height).coerceIn(minY, maxY),

@@ -45,6 +45,17 @@ class ControlEditorMetricsTest {
     }
 
     @Test
+    fun `下限窗口下 面板给画布留了一半以上`() {
+        val metrics = controlEditorMetricsFor(640, 360)
+        // 面板压的是画布的一侧，因此它不能宽到让画布剩不下半屏——
+        // 那样用户就看不见自己正在摆的控件了
+        assertTrue(
+            "画布只剩 ${640f - metrics.dockWidth.value}dp",
+            640f - metrics.dockWidth.value >= 320f
+        )
+    }
+
+    @Test
     fun `下限窗口下行高与触摸目标仍是可用的`() {
         val metrics = controlEditorMetricsFor(640, 360)
         // 一行、格子、输入框、小按钮都不得低于 20dp，否则在触屏上点不准
@@ -272,9 +283,16 @@ class ControlEditorPadTest {
 
     @Test
     fun `板内像素映射到存储位置`() {
+        // 板宽 200 时按在 50 上是四分之一；板高 100 时按在 25 上也是四分之一
         val position = editorPositionFromPadPoint(px = 50f, py = 25f, width = 200f, height = 100f)
-        assertEquals(EditorStoredMax / 2, position.x)
+        assertEquals(EditorStoredMax / 4, position.x)
         assertEquals(EditorStoredMax / 4, position.y)
+    }
+
+    @Test
+    fun `按在板正中就是居中位置`() {
+        val position = editorPositionFromPadPoint(px = 100f, py = 50f, width = 200f, height = 100f)
+        assertEquals(EditorStoredPosition(5000, 5000), position)
     }
 
     @Test
@@ -301,31 +319,35 @@ class ControlEditorPadTest {
             height = 20f,
             knobRadius = 6f
         )
-        assertTrue("旋钮跑到了板左外侧 ${point.x}", point.x >= 0f)
-        assertTrue("旋钮跑到了板右外侧 ${point.x}", point.x <= 20f)
-        assertTrue("旋钮跑到了板下外侧 ${point.y}", point.y <= 20f)
+        // 左边界：整个旋钮在板内，所以中心至少离左边 6
+        assertEquals(6f, point.x, 0.001f)
+        assertEquals(14f, point.y, 0.001f)
     }
 
     @Test
     fun `板比旋钮还小时不抛异常`() {
         // 这一类输入以前会交给 coerceIn，而它的下界比上界大时会抛 IllegalArgumentException
-        listOf(0f to 0f, 1f to 1f, 4f to 4f).forEach { (w, h) ->
+        listOf(0f to 0f, 1f to 1f, 4f to 4f, 20f to 20f).forEach { (w, h) ->
             val point = editorPadKnob(0.5f, 0.5f, w, h, knobRadius = 10f)
             assertTrue("$w x $h 下旋钮 $point 跑出了板外", point.x in 0f..w && point.y in 0f..h)
         }
     }
 
     @Test
-    fun `旋钮中心就是比例乘板宽 并夹在板内`() {
-        // 旋钮半径 4、板宽 200：比例 0.5 想落在 100，但 100+4 会越过右边界，
-        // 因此被夹到 196。纵方向比例 0.25 落在 25，离上下边界都还远
-        val point = editorPadKnob(0.5f, 0.25f, width = 200f, height = 100f, knobRadius = 4f)
-        assertEquals(196f, point.x, 0.001f)
-        assertEquals(25f, point.y, 0.001f)
+    fun `板内任意比例下旋钮都不越界`() {
+        listOf(0f, 0.001f, 0.5f, 0.999f, 1f).forEach { fx ->
+            listOf(0f, 0.5f, 1f).forEach { fy ->
+                val point = editorPadKnob(fx, fy, width = 200f, height = 100f, knobRadius = 8f)
+                assertTrue("$fx,$fy -> $point 越出左边界", point.x - 8f >= -0.001f)
+                assertTrue("$fx,$fy -> $point 越出右边界", point.x + 8f <= 200f + 0.001f)
+                assertTrue("$fx,$fy -> $point 越出上边界", point.y - 8f >= -0.001f)
+                assertTrue("$fx,$fy -> $point 越出下边界", point.y + 8f <= 100f + 0.001f)
+            }
+        }
     }
 
     @Test
-    fun `旋钮半径为零时就是比例乘板宽`() {
+    fun `半径为零时旋钮就是比例乘板宽`() {
         val point = editorPadKnob(0.5f, 0.25f, width = 200f, height = 100f, knobRadius = 0f)
         assertEquals(100f, point.x, 0.001f)
         assertEquals(25f, point.y, 0.001f)
@@ -356,7 +378,9 @@ class ControlEditorPadTest {
 
     @Test
     fun `下界比上界大的区间被排好而不是抛异常`() {
-        assertEquals(5, editorNudge(5, step = 10, direction = 1, min = 9, max = 2))
+        // 9..2 这类区间以前会交给 coerceIn，而下界比上界大时它会抛异常。
+        // 这里把上下界各自排一次，于是 10 + 5 落到排好后的上界 9
+        assertEquals(9, editorNudge(5, step = 10, direction = 1, min = 9, max = 2))
     }
 
     @Test

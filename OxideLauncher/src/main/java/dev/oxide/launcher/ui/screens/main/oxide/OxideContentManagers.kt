@@ -149,6 +149,18 @@ fun OxideContentManagerScreen(
 
     var selected by remember { mutableStateOf(initialCategory) }
 
+    // 模组是重建过的一块：它自带子窗口外壳、不透明、有真的关闭按钮，
+    // 因此不再落进下面那个"分类列 + 通用面板"的形状里。
+    if (selected == OxideContentCategory.Mods) {
+        OxideModsSurface(
+            version = version,
+            metrics = metrics,
+            onClose = onDismiss,
+            modifier = modifier,
+        )
+        return
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = metrics.pagePaddingH)) {
             Row(
@@ -349,7 +361,26 @@ internal fun OxideContentPanel(
     eventViewModel: EventViewModel,
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 模组那一块自己带一个子窗口外壳时用它作为关闭按钮
+     *
+     * 其余四类内容没有这一层：它们由页面自己的顶栏负责返回，
+     * 再套一层子窗口就是两层关闭。
+     */
+    onCloseMods: (() -> Unit)? = null,
 ) {
+    // 模组这一块是重建过的：它有独立的图标、兼容性判定、详情与依赖面板，
+    // 因此走 [OxideModsSurface] 而不是这一块共用的行模型。
+    if (category == OxideContentCategory.Mods) {
+        OxideModsSurface(
+            version = version,
+            metrics = metrics,
+            onClose = onCloseMods,
+            modifier = modifier,
+        )
+        return
+    }
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 

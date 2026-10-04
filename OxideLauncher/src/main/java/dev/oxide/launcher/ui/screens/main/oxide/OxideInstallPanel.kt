@@ -421,13 +421,14 @@ private fun OxideInstallTaskRow(
             OxideInstallTaskState.Pending -> R.string.oxide_inst_step_state_pending
         },
     )
-    // 速率先在这里取成字符串：stringResource 是 @Composable，不能放进 buildString 的 lambda
+    // 速率先在这里取成字符串：stringResource 是 @Composable，不能塞进纯函数的参数里
     val speedText = speed?.let { stringResource(R.string.oxide_sec_launch_rate, formatFileSize(it)) }
-    val detailText = listOfNotNull(
-        stateLabel,
-        detail?.takeIf { it.isNotBlank() },
-        speedText,
-    ).joinToString(" · ")
+    // 状态 → 后端报出来的量 → 速率，缺哪段就少哪段
+    val detailText = oxideInstallDetailLine(
+        stateLabel = stateLabel,
+        message = detail,
+        speedText = speedText,
+    )
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = metrics.secRowGap),
