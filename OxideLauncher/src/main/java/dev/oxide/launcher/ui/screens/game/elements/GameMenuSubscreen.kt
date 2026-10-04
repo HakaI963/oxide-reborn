@@ -1,5 +1,5 @@
 /*
- * Zalith Launcher 2
+ * Oxide Launcher
  * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -9,8 +9,8 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
@@ -20,11 +20,20 @@ package dev.oxide.launcher.ui.screens.game.elements
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,26 +42,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SecondaryScrollableTabRow
-import androidx.compose.material3.Tab
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.R
@@ -63,49 +68,44 @@ import dev.oxide.launcher.setting.enums.GamepadInputMode
 import dev.oxide.launcher.setting.enums.GestureActionType
 import dev.oxide.launcher.setting.enums.MouseControlMode
 import dev.oxide.launcher.setting.enums.ResolutionRule
+import dev.oxide.launcher.setting.unit.BooleanSettingUnit
+import dev.oxide.launcher.setting.unit.EnumSettingUnit
+import dev.oxide.launcher.setting.unit.IntSettingUnit
 import dev.oxide.launcher.setting.unit.floatRange
 import dev.oxide.launcher.ui.AndroidStringText
 import dev.oxide.launcher.ui.androidText
-import dev.oxide.launcher.ui.components.BackgroundCard
-import dev.oxide.launcher.ui.components.DualMenuSubscreen
-import dev.oxide.launcher.ui.components.IntInputField
-import dev.oxide.launcher.ui.components.MenuListLayout
-import dev.oxide.launcher.ui.components.MenuSliderLayout
 import dev.oxide.launcher.ui.components.MenuState
-import dev.oxide.launcher.ui.components.MenuSwitchButton
-import dev.oxide.launcher.ui.components.MenuTextButton
-import dev.oxide.launcher.ui.components.lazyScrollWithBar
+import dev.oxide.launcher.ui.components.rememberBoxSize
 import dev.oxide.launcher.ui.control.HotbarRule
 import dev.oxide.launcher.ui.control.gyroscope.isGyroscopeAvailable
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.cardTitleColor
-import dev.oxide.launcher.ui.theme.onCardColor
-import dev.oxide.launcher.utils.animation.getAnimateTween
+import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.customResolutionRange
 import dev.oxide.launcher.utils.ensureCustomResolutionInitialized
-import dev.oxide.launcher.utils.getRealScreenSize
 import dev.oxide.launcher.viewmodel.GamepadViewModel
-
-private data class IconTab(val iconRes: Int, val iconSize: Dp = 18.dp)
-
-private val controlTabs = listOf(
-    //概览
-    IconTab(R.drawable.ic_dashboard_filled),
-    //虚拟鼠标设置
-    IconTab(R.drawable.ic_mouse_filled, iconSize = 16.dp),
-    //手柄设置
-    IconTab(R.drawable.ic_sports_esports_filled),
-    //手势控制设置
-    IconTab(R.drawable.ic_touch_app_filled),
-    //陀螺仪设置
-    IconTab(R.drawable.ic_mobile_rotate_filled)
-)
-
+import kotlin.math.roundToInt
+/**
+ * 游戏内菜单
+ *
+ * 画在一块**正在运行的游戏**上，所以它是一层可以关掉的紧凑浮层，而不是一次全屏接管：
+ *
+ * - 面板宽高、边距与内边距全部由真实窗口尺寸推出（见 [gameMenuMetricsFor]），
+ *   启动器那套 640x360 的下限在这里不成立，窗口多窄面板就多窄；
+ * - 点遮罩、点标题栏的关闭或系统返回都能关掉它；菜单关着的时候整棵内容树
+ *   根本不参与组合，所以帧率捕获每秒几十次的重组也碰不到它；
+ * - 面板上的手势一律被吃掉（[consumeTouches]），不会顺手漏给游戏。
+ *
+ * 版面从原来那种两列五页的分页器换成一块面板 + 一条分区栏：分页器会把全部控件
+ * 一次性排版，在游戏运行时的布局开销是可以看出来的；分区栏只组合当前分区，
+ * 其余五块的控件连组合都不发生。
+ *
+ * 选项一项没少：分区、开关、滑杆、单选与动作都与改造前逐条对应，
+ * 分辨率那一段仍然走 `AllSettings` → `onRefreshWindowSize` → `RefreshSize` 这条链。
+ */
 @Composable
 fun GameMenuSubscreen(
     state: MenuState,
-    controlMenuTabIndex: Int,
-    onControlMenuTabChange: (Int) -> Unit,
+    sectionIndex: Int,
+    onSectionChange: (Int) -> Unit,
     gamepadViewModel: GamepadViewModel,
     closeScreen: () -> Unit,
     onForceClose: () -> Unit,
@@ -117,1007 +117,763 @@ fun GameMenuSubscreen(
     onSendKeycode: () -> Unit,
     onReplacementControl: () -> Unit,
     onEditLayout: () -> Unit,
-    onShowToast: (AndroidStringText, Int) -> Unit
+    onShowToast: (AndroidStringText, Int) -> Unit,
 ) {
-    DualMenuSubscreen(
-        state = state,
-        closeScreen = closeScreen,
-        leftMenuContent = {
-            val pagerState = rememberPagerState(pageCount = { controlTabs.size })
+    val visible = state == MenuState.SHOW
+    val density = LocalDensity.current
+    val guiScalePercent = AllSettings.launcherGuiScale.state
+    val context = LocalContext.current
+    // 传感器在菜单开着期间不会变，问一次就够：组合阶段不去反复问框架
+    val gyroscopeAvailable = remember(context) { isGyroscopeAvailable(context) }
 
-            LaunchedEffect(controlMenuTabIndex) {
-                pagerState.animateScrollToPage(controlMenuTabIndex)
-            }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 窗口的**测量**尺寸，而不是 displayMetrics：分屏、折叠屏与横竖屏切换时
+        // 前者会变而后者常常不变，面板必须跟着前者走
+        val window = rememberBoxSize()
+        val metrics = remember(window, density.density, guiScalePercent) {
+            gameMenuMetricsFor(window.width, window.height, density.density, guiScalePercent)
+        }
+        val section = remember(sectionIndex) { GameMenuSection.fromIndex(sectionIndex) }
+        val slidePx = with(density) { metrics.edgeMargin.roundToPx() }
+        val scrimInteraction = remember { MutableInteractionSource() }
 
-            Column {
-                //顶贴标签栏
-                SecondaryScrollableTabRow(
-                    selectedTabIndex = controlMenuTabIndex,
-                    edgePadding = 0.dp,
-                    minTabWidth = 58.dp,
-                    containerColor = cardTitleColor(),
-                ) {
-                    controlTabs.forEachIndexed { index, iconTab ->
-                        Tab(
-                            selected = index == controlMenuTabIndex,
-                            onClick = {
-                                onControlMenuTabChange(index)
-                            },
-                            icon = {
-                                Icon(
-                                    modifier = Modifier.size(iconTab.iconSize),
-                                    painter = painterResource(iconTab.iconRes),
-                                    contentDescription = null
-                                )
-                            }
-                        )
-                    }
-                }
+        // 遮罩：点空白处关掉菜单。它是菜单里唯一"点一下就走"的区域
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(animationSpec = tween(Oxide.Motion.ScrimMs)),
+            exit = fadeOut(animationSpec = tween(Oxide.Motion.ScrimMs)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Oxide.DrawerScrim)
+                    .clickable(
+                        interactionSource = scrimInteraction,
+                        indication = null,
+                        onClick = closeScreen,
+                    )
+            )
+        }
 
-                HorizontalPager(
-                    state = pagerState,
-                    userScrollEnabled = false,
+        AnimatedVisibility(
+            visible = visible,
+            modifier = Modifier.align(Alignment.CenterEnd),
+            enter = fadeIn(animationSpec = tween(Oxide.Motion.PopoverFadeMs)) +
+                slideInHorizontally(animationSpec = tween(Oxide.Motion.PopoverMs)) { slidePx },
+            exit = fadeOut(animationSpec = tween(Oxide.Motion.PopoverFadeMs)) +
+                slideOutHorizontally(animationSpec = tween(Oxide.Motion.PopoverMs)) { slidePx },
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(metrics.edgeMargin)
+                    .width(metrics.panelWidth)
+                    .height(metrics.panelHeight)
+                    .clip(Oxide.RadiusDrawer)
+                    .background(Oxide.DrawerBg)
+                    .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusDrawer)
+                    .consumeTouches()
+            ) {
+                GameMenuHeader(onClose = closeScreen)
+                GameMenuSectionRail(
+                    selected = section,
+                    onSelect = onSectionChange,
+                )
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f, fill = false)
-                ) { page ->
-                    when (page) {
-                        0 -> {
-                            ControlOverview(
-                                modifier = Modifier.fillMaxSize(),
-                                closeScreen = closeScreen,
-                                onInputMethod = onInputMethod,
-                                onSendKeycode = onSendKeycode,
-                                onReplacementControl = onReplacementControl,
-                                onEditLayout = onEditLayout
-                            )
-                        }
-                        1 -> ControlMouse(modifier = Modifier.fillMaxSize())
-                        2 -> ControlGamepad(
-                            modifier = Modifier.fillMaxSize(),
-                            gamepadViewModel = gamepadViewModel
+                        .height(1.dp)
+                        .background(Oxide.Line)
+                )
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(
+                        start = metrics.contentPadding,
+                        end = metrics.contentPadding,
+                        top = 4.dp,
+                        bottom = metrics.contentPadding,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    when (section) {
+                        GameMenuSection.Game -> gameSection(
+                            enableTerracotta = enableTerracotta,
+                            onForceClose = onForceClose,
+                            onSwitchLog = onSwitchLog,
+                            onOpenTerracottaMenu = onOpenTerracottaMenu,
+                            onRefreshWindowSize = onRefreshWindowSize,
+                            onShowToast = onShowToast,
+                            windowWidth = window.width,
+                            windowHeight = window.height,
+                            optionListMaxHeight = metrics.optionListMaxHeight,
                         )
-                        3 -> ControlGesture(modifier = Modifier.fillMaxSize())
-                        4 -> ControlGyroscope(modifier = Modifier.fillMaxSize())
+
+                        GameMenuSection.Controls -> controlsSection(
+                            closeScreen = closeScreen,
+                            onInputMethod = onInputMethod,
+                            onSendKeycode = onSendKeycode,
+                            onReplacementControl = onReplacementControl,
+                            onEditLayout = onEditLayout,
+                        )
+
+                        GameMenuSection.Mouse -> mouseSection()
+
+                        GameMenuSection.Gamepad -> gamepadSection(
+                            gamepadViewModel = gamepadViewModel,
+                            optionListMaxHeight = metrics.optionListMaxHeight,
+                        )
+
+                        GameMenuSection.Gestures -> gesturesSection(
+                            optionListMaxHeight = metrics.optionListMaxHeight,
+                        )
+
+                        GameMenuSection.Gyroscope -> gyroscopeSection(available = gyroscopeAvailable)
                     }
                 }
             }
-        },
-        rightMenuTitle = {
-            Text(
-                modifier = Modifier.padding(all = 8.dp),
-                text = stringResource(R.string.game_menu_title),
-                style = MaterialTheme.typography.titleMedium
-            )
-        },
-        rightMenuContent = {
-            GameActionContent(
-                modifier = Modifier.weight(1f),
-                onForceClose = onForceClose,
-                onSwitchLog = onSwitchLog,
-                enableTerracotta = enableTerracotta,
-                onOpenTerracottaMenu = onOpenTerracottaMenu,
-                onRefreshWindowSize = onRefreshWindowSize,
-                onShowToast = onShowToast
-            )
         }
-    )
+    }
 }
 
+/** 标题栏：菜单名 + 关闭 */
 @Composable
-private fun GameActionContent(
-    onForceClose: () -> Unit,
-    onSwitchLog: () -> Unit,
-    enableTerracotta: Boolean,
-    onOpenTerracottaMenu: () -> Unit,
-    onRefreshWindowSize: () -> Unit,
-    onShowToast: (AndroidStringText, Int) -> Unit,
-    modifier: Modifier = Modifier,
-    color: Color = cardColor(false),
-    contentColor: Color = onCardColor(),
-) {
-    val context = LocalContext.current
-    val listState = rememberLazyListState()
-    LazyColumn(
-        modifier = modifier.lazyScrollWithBar(listState),
-        state = listState,
-        contentPadding = PaddingValues(all = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+private fun GameMenuHeader(onClose: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 10.dp, end = 7.dp, top = 7.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        //强制关闭
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_button_force_close),
-                onClick = onForceClose,
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //日志输出
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_switch_log),
-                onClick = onSwitchLog,
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //如果开启多人联机，则展示这个按钮
-        if (enableTerracotta) {
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            //打开联机菜单
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.terracotta_menu),
-                    onClick = onOpenTerracottaMenu,
-                    color = color,
-                    contentColor = contentColor,
-                )
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        //开启菜单悬浮窗
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_show_menu),
-                switch = AllSettings.showMenuBall.state,
-                onSwitch = { value ->
-                    AllSettings.showMenuBall.save(value)
-                    if (!value) {
-                        onShowToast(
-                            androidText(R.string.game_menu_option_show_menu_hided),
-                            Toast.LENGTH_LONG
-                        )
-                    }
-                },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //菜单悬浮窗不透明度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.game_menu_option_menu_ball_opacity),
-                value = AllSettings.menuBallOpacity.state,
-                valueRange = AllSettings.menuBallOpacity.floatRange,
-                onValueChange = { value ->
-                    AllSettings.menuBallOpacity.updateState(value)
-                },
-                onValueChangeFinished = { value ->
-                    AllSettings.menuBallOpacity.save(value)
-                },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.showMenuBall.state
-            )
-        }
-        //帧率显示
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_switch_fps),
-                switch = AllSettings.showFPS.state,
-                onSwitch = { AllSettings.showFPS.save(it) },
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.showMenuBall.state
-            )
-        }
-        //帧率显示模式
-        item {
-            MenuListLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.game_menu_option_fps_display_mode),
-                items = FpsDisplayMode.entries,
-                currentItem = AllSettings.fpsDisplayMode.state,
-                onItemChange = { mode ->
-                    AllSettings.fpsDisplayMode.save(mode)
-                },
-                getItemText = { stringResource(it.nameRes) },
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.showMenuBall.state && AllSettings.showFPS.state
-            )
-        }
-        //内存显示
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_switch_memory),
-                switch = AllSettings.showMemory.state,
-                onSwitch = { AllSettings.showMemory.save(it) },
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.showMenuBall.state
-            )
-        }
-
-        // 分辨率规则与游戏窗口分辨率
-        item {
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // 分辨率规则
-                MenuListLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.settings_renderer_resolution_rule_title),
-                    items = ResolutionRule.entries,
-                    currentItem = AllSettings.resolutionRule.state,
-                    onItemChange = { rule ->
-                        AllSettings.resolutionRule.save(rule)
-                        // 自定义分辨率尚未初始化时，以屏幕真实宽高填充
-                        if (rule == ResolutionRule.CUSTOM) {
-                            ensureCustomResolutionInitialized(context)
-                        }
-                        onRefreshWindowSize()
-                    },
-                    getItemText = { stringResource(it.nameRes) },
-                    color = color,
-                    contentColor = contentColor,
-                )
-
-                // 百分比分辨率
-                AnimatedVisibility(
-                    visible = AllSettings.resolutionRule.state == ResolutionRule.PERCENTAGE,
-                    enter = fadeIn(animationSpec = getAnimateTween()) +
-                            expandVertically(animationSpec = getAnimateTween()),
-                    exit = fadeOut(animationSpec = getAnimateTween()) +
-                            shrinkVertically(animationSpec = getAnimateTween())
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    ) {
-                        MenuSliderLayout(
-                            modifier = Modifier.fillMaxWidth(),
-                            title = stringResource(R.string.settings_renderer_resolution_scale_title),
-                            value = AllSettings.resolutionRatio.state,
-                            valueRange = AllSettings.resolutionRatio.floatRange,
-                            onValueChange = { value ->
-                                AllSettings.resolutionRatio.updateState(value)
-                            },
-                            onValueChangeFinished = { value ->
-                                AllSettings.resolutionRatio.save(value)
-                                onRefreshWindowSize()
-                            },
-                            suffix = "%",
-                            color = color,
-                            contentColor = contentColor,
-                        )
-                    }
-                }
-
-                // 自定义分辨率
-                AnimatedVisibility(
-                    visible = AllSettings.resolutionRule.state == ResolutionRule.CUSTOM,
-                    enter = fadeIn(animationSpec = getAnimateTween()) +
-                            expandVertically(animationSpec = getAnimateTween()),
-                    exit = fadeOut(animationSpec = getAnimateTween()) +
-                            shrinkVertically(animationSpec = getAnimateTween())
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    ) {
-                        CustomResolutionContent(onValueCommitted = onRefreshWindowSize)
-                    }
-                }
-            }
-        }
+        Text(
+            text = stringResource(R.string.game_menu_title),
+            color = Oxide.Fg,
+            fontSize = Oxide.Type.DrawerTitle.fontSize,
+            lineHeight = Oxide.Type.DrawerTitle.lineHeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        GameMenuMiniButton(
+            text = "✕",
+            description = stringResource(R.string.generic_close),
+            enabled = true,
+            onClick = onClose,
+        )
     }
 }
 
 /**
- * 自定义分辨率的宽高输入卡片
+ * 分区栏
+ *
+ * 可以横向滑，但宽度被真实窗口夹过：正常窗口下六个分区一屏放得下，
+ * 放不下时滑过去，而不是把标题挤成竖排。
  */
 @Composable
-private fun CustomResolutionContent(
-    onValueCommitted: () -> Unit,
-    modifier: Modifier = Modifier
+private fun GameMenuSectionRail(
+    selected: GameMenuSection,
+    onSelect: (Int) -> Unit,
 ) {
-    val context = LocalContext.current
-    val screenSize = remember(context) { getRealScreenSize(context) }
-
-    BackgroundCard(
-        modifier = modifier.fillMaxWidth(),
-        influencedByBackground = false,
-        shape = MaterialTheme.shapes.large
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(all = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.settings_renderer_resolution_scale_title),
-                style = MaterialTheme.typography.titleSmall
+        GameMenuSection.entries.forEach { section ->
+            GameMenuSectionChip(
+                label = stringResource(section.labelRes),
+                selected = section == selected,
+                onClick = { onSelect(section.ordinal) },
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IntInputField(
-                    modifier = Modifier.weight(1f),
-                    value = AllSettings.customResolutionWidth.state,
-                    permitted = customResolutionRange(screenSize.width),
-                    label = stringResource(R.string.settings_renderer_resolution_custom_width),
-                    onValueChange = { value ->
-                        AllSettings.customResolutionWidth.save(value)
-                        onValueCommitted()
-                    }
-                )
-                IntInputField(
-                    modifier = Modifier.weight(1f),
-                    value = AllSettings.customResolutionHeight.state,
-                    permitted = customResolutionRange(screenSize.height),
-                    label = stringResource(R.string.settings_renderer_resolution_custom_height),
-                    onValueChange = { value ->
-                        AllSettings.customResolutionHeight.save(value)
-                        onValueCommitted()
-                    }
-                )
-            }
         }
     }
 }
 
-@Composable
-private fun ControlOverview(
-    modifier: Modifier = Modifier,
-    color: Color = cardColor(false),
-    contentColor: Color = onCardColor(),
+/** 分区标签用的文案，全部取自已有的字符串资源 */
+private val GameMenuSection.labelRes: Int
+    get() = when (this) {
+        GameMenuSection.Game -> R.string.settings_tab_game
+        GameMenuSection.Controls -> R.string.settings_tab_control
+        GameMenuSection.Mouse -> R.string.oxide_set_section_mouse
+        GameMenuSection.Gamepad -> R.string.oxide_set_section_gamepad
+        GameMenuSection.Gestures -> R.string.oxide_set_section_gestures
+        GameMenuSection.Gyroscope -> R.string.oxide_set_section_gyroscope
+    }
+
+// ---------------------------------------------------------------------------
+// 分区
+//
+// 分区函数本身不是 Composable：字符串、`LocalContext`、传感器与 Flow 都在
+// 下面那些 `item {}` 里取，因此每一项只会因为自己关心的那几个设置而重组。
+// ---------------------------------------------------------------------------
+
+/** 游戏本体：动作、菜单悬浮窗与画面分辨率 */
+private fun LazyListScope.gameSection(
+    enableTerracotta: Boolean,
+    onForceClose: () -> Unit,
+    onSwitchLog: () -> Unit,
+    onOpenTerracottaMenu: () -> Unit,
+    onRefreshWindowSize: () -> Unit,
+    onShowToast: (AndroidStringText, Int) -> Unit,
+    windowWidth: Int,
+    windowHeight: Int,
+    optionListMaxHeight: Dp,
+) {
+    val showMenuBall = AllSettings.showMenuBall.state
+
+    group(R.string.oxide_set_section_quick_actions)
+    action(
+        key = "forceClose",
+        labelRes = R.string.game_button_force_close,
+        onClick = onForceClose,
+        emphasis = true,
+    )
+    action("switchLog", R.string.game_menu_option_switch_log, onClick = onSwitchLog)
+    if (enableTerracotta) {
+        action("terracotta", R.string.terracotta_menu, onClick = onOpenTerracottaMenu)
+    }
+
+    group(R.string.oxide_set_section_overlay)
+    switch(
+        key = "showMenuBall",
+        labelRes = R.string.game_menu_option_show_menu,
+        unit = AllSettings.showMenuBall,
+        onTurnedOff = {
+            onShowToast(androidText(R.string.game_menu_option_show_menu_hided), Toast.LENGTH_LONG)
+        },
+    )
+    intSlider(
+        key = "menuBallOpacity",
+        labelRes = R.string.game_menu_option_menu_ball_opacity,
+        unit = AllSettings.menuBallOpacity,
+        suffix = "%",
+        enabled = showMenuBall,
+    )
+    switch("showFPS", R.string.game_menu_option_switch_fps, AllSettings.showFPS, enabled = showMenuBall)
+    choice(
+        key = "fpsDisplayMode",
+        labelRes = R.string.game_menu_option_fps_display_mode,
+        items = FpsDisplayMode.entries,
+        unit = AllSettings.fpsDisplayMode,
+        optionText = { stringResource(it.nameRes) },
+        enabled = showMenuBall && AllSettings.showFPS.state,
+        maxListHeight = optionListMaxHeight,
+    )
+    switch("showMemory", R.string.game_menu_option_switch_memory, AllSettings.showMemory, enabled = showMenuBall)
+
+    group(R.string.oxide_set_section_graphics)
+    resolutionRuleRow(optionListMaxHeight, onRefreshWindowSize)
+    if (gameMenuShowsResolutionScale(AllSettings.resolutionRule.state)) {
+        intSlider(
+            key = "resolutionRatio",
+            labelRes = R.string.settings_renderer_resolution_scale_title,
+            unit = AllSettings.resolutionRatio,
+            suffix = "%",
+            enabled = true,
+            onFinished = onRefreshWindowSize,
+        )
+    }
+    if (gameMenuShowsCustomResolution(AllSettings.resolutionRule.state)) {
+        // 范围跟着**测量到的**窗口重新推导：旋转之后立刻更新，
+        // 不再像以前那样把 getRealScreenSize 的结果一直缓存着
+        number(
+            key = "customResolutionWidth",
+            labelRes = R.string.settings_renderer_resolution_custom_width,
+            unit = AllSettings.customResolutionWidth,
+            permitted = customResolutionRange(windowWidth),
+            onCommit = onRefreshWindowSize,
+        )
+        number(
+            key = "customResolutionHeight",
+            labelRes = R.string.settings_renderer_resolution_custom_height,
+            unit = AllSettings.customResolutionHeight,
+            permitted = customResolutionRange(windowHeight),
+            onCommit = onRefreshWindowSize,
+        )
+    }
+}
+
+/** 分辨率规则：换规则时刷新游戏窗口，切到自定义时先把宽高填成真实窗口 */
+private fun LazyListScope.resolutionRuleRow(
+    maxListHeight: Dp,
+    onRefreshWindowSize: () -> Unit,
+) {
+    item(key = "resolutionRule") {
+        val context = LocalContext.current
+        GameMenuChoiceRow(
+            label = stringResource(R.string.settings_renderer_resolution_rule_title),
+            options = ResolutionRule.entries,
+            selected = AllSettings.resolutionRule.state,
+            optionText = { stringResource(it.nameRes) },
+            maxListHeight = maxListHeight,
+            onSelect = { rule ->
+                AllSettings.resolutionRule.save(rule)
+                // 自定义分辨率尚未初始化时，以屏幕真实宽高填充
+                if (rule == ResolutionRule.CUSTOM) {
+                    ensureCustomResolutionInitialized(context)
+                }
+                onRefreshWindowSize()
+            },
+        )
+    }
+}
+
+/** 输入与控制布局 */
+private fun LazyListScope.controlsSection(
     closeScreen: () -> Unit,
     onInputMethod: () -> Unit,
     onSendKeycode: () -> Unit,
     onReplacementControl: () -> Unit,
-    onEditLayout: () -> Unit
+    onEditLayout: () -> Unit,
 ) {
-    val listState = rememberLazyListState()
-    val sdlEnabled by SdlBridge.enabled.collectAsState()
+    group(R.string.oxide_set_section_input)
+    action(
+        key = "inputMethod",
+        labelRes = R.string.game_menu_option_input_method,
+        onClick = {
+            onInputMethod()
+            closeScreen()
+        },
+    )
+    autoShowImeRow()
 
-    LazyColumn(
-        modifier = modifier.lazyScrollWithBar(listState),
-        state = listState,
-        contentPadding = PaddingValues(all = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        //切换输入法
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_input_method),
-                onClick = {
-                    onInputMethod()
-                    closeScreen()
-                },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //自动唤起输入法（SDL）
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_auto_show_ime),
-                switch = AllSettings.sdlAutoShowIme.state,
-                onSwitch = { AllSettings.sdlAutoShowIme.save(it) },
-                enabled = sdlEnabled,
-                color = color,
-                contentColor = contentColor,
-            )
-        }
+    group(R.string.oxide_set_section_control_actions)
+    action(
+        key = "sendKeycode",
+        labelRes = R.string.game_menu_option_send_keycode,
+        onClick = {
+            onSendKeycode()
+            closeScreen()
+        },
+    )
+    action(
+        key = "replacementControl",
+        labelRes = R.string.game_menu_option_replacement_control,
+        onClick = {
+            onReplacementControl()
+            closeScreen()
+        },
+    )
+    action(
+        key = "editLayout",
+        labelRes = R.string.control_manage_info_edit,
+        onClick = {
+            onEditLayout()
+            closeScreen()
+        },
+    )
 
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-        }
+    group(R.string.oxide_set_section_layout)
+    intSlider(
+        key = "controlsOpacity",
+        labelRes = R.string.game_menu_option_controls_opacity,
+        unit = AllSettings.controlsOpacity,
+        suffix = "%",
+        enabled = true,
+    )
+}
 
-        //发送键值
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_send_keycode),
-                onClick = {
-                    onSendKeycode()
-                    closeScreen()
-                },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //更换控制布局
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_replacement_control),
-                onClick = {
-                    onReplacementControl()
-                    closeScreen()
-                },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //编辑布局
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.control_manage_info_edit),
-                onClick = {
-                    onEditLayout()
-                    closeScreen()
-                },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //控制布局不透明度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.game_menu_option_controls_opacity),
-                value = AllSettings.controlsOpacity.state,
-                valueRange = AllSettings.controlsOpacity.floatRange,
-                onValueChange = { AllSettings.controlsOpacity.updateState(it) },
-                onValueChangeFinished = { AllSettings.controlsOpacity.save(it) },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
+/** SDL 自动唤起输入法：开关是否可用取决于 SDL 有没有启用 */
+private fun LazyListScope.autoShowImeRow() {
+    item(key = "sdlAutoShowIme") {
+        val sdlEnabled by SdlBridge.enabled.collectAsState()
+        GameMenuSwitchRow(
+            label = stringResource(R.string.game_menu_option_auto_show_ime),
+            checked = AllSettings.sdlAutoShowIme.state,
+            enabled = sdlEnabled,
+            onCheckedChange = { AllSettings.sdlAutoShowIme.save(it) },
+        )
     }
 }
 
-@Composable
-private fun ControlMouse(
-    modifier: Modifier = Modifier,
-    color: Color = cardColor(false),
-    contentColor: Color = onCardColor(),
-) {
-    val listState = rememberLazyListState()
-    LazyColumn(
-        modifier = modifier.lazyScrollWithBar(listState),
-        state = listState,
-        contentPadding = PaddingValues(all = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        //隐藏虚拟鼠标
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.settings_control_mouse_hide_title),
-                switch = AllSettings.hideMouse.state,
-                onSwitch = { AllSettings.hideMouse.save(it) },
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.mouseControlMode.state == MouseControlMode.CLICK
-            )
-        }
-        //触控板式操作
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.settings_control_mouse_enable_click_title),
-                switch = AllSettings.enableMouseClick.state,
-                onSwitch = { AllSettings.enableMouseClick.save(it) },
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.mouseControlMode.state == MouseControlMode.SLIDE
-            )
-        }
-        //鼠标控制模式
-        item {
-            MenuListLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_mouse_control_mode_title),
-                items = MouseControlMode.entries,
-                currentItem = AllSettings.mouseControlMode.state,
-                onItemChange = { AllSettings.mouseControlMode.save(it) },
-                getItemText = { stringResource(it.nameRes) },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //虚拟鼠标大小
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_mouse_size_title),
-                value = AllSettings.mouseSize.state,
-                valueRange = AllSettings.mouseSize.floatRange,
-                onValueChange = { AllSettings.mouseSize.updateState(it) },
-                onValueChangeFinished = { AllSettings.mouseSize.save(it) },
-                suffix = "Dp",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //虚拟鼠标灵敏度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_mouse_sensitivity_title),
-                value = AllSettings.cursorSensitivity.state,
-                valueRange = AllSettings.cursorSensitivity.floatRange,
-                onValueChange = { AllSettings.cursorSensitivity.updateState(it) },
-                onValueChangeFinished = { AllSettings.cursorSensitivity.save(it) },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //抓获鼠标滑动灵敏度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_mouse_capture_sensitivity_title),
-                value = AllSettings.mouseCaptureSensitivity.state,
-                valueRange = AllSettings.mouseCaptureSensitivity.floatRange,
-                onValueChange = { AllSettings.mouseCaptureSensitivity.updateState(it) },
-                onValueChangeFinished = { AllSettings.mouseCaptureSensitivity.save(it) },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-        //虚拟鼠标长按触发的延迟
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_mouse_long_press_delay_title),
-                value = AllSettings.mouseLongPressDelay.state,
-                valueRange = AllSettings.mouseLongPressDelay.floatRange,
-                onValueChange = { AllSettings.mouseLongPressDelay.updateState(it) },
-                onValueChangeFinished = { AllSettings.mouseLongPressDelay.save(it) },
-                suffix = "ms",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-    }
+/** 虚拟鼠标 */
+private fun LazyListScope.mouseSection() {
+    val mode = AllSettings.mouseControlMode.state
+
+    switch(
+        key = "hideMouse",
+        labelRes = R.string.settings_control_mouse_hide_title,
+        unit = AllSettings.hideMouse,
+        enabled = mode == MouseControlMode.CLICK,
+    )
+    switch(
+        key = "enableMouseClick",
+        labelRes = R.string.settings_control_mouse_enable_click_title,
+        unit = AllSettings.enableMouseClick,
+        enabled = mode == MouseControlMode.SLIDE,
+    )
+    choice(
+        key = "mouseControlMode",
+        labelRes = R.string.settings_control_mouse_control_mode_title,
+        items = MouseControlMode.entries,
+        unit = AllSettings.mouseControlMode,
+        optionText = { stringResource(it.nameRes) },
+    )
+    intSlider("mouseSize", R.string.settings_control_mouse_size_title, AllSettings.mouseSize, suffix = "Dp")
+    intSlider(
+        "cursorSensitivity",
+        R.string.settings_control_mouse_sensitivity_title,
+        AllSettings.cursorSensitivity,
+        suffix = "%",
+    )
+    intSlider(
+        "mouseCaptureSensitivity",
+        R.string.settings_control_mouse_capture_sensitivity_title,
+        AllSettings.mouseCaptureSensitivity,
+        suffix = "%",
+    )
+    intSlider(
+        "mouseLongPressDelay",
+        R.string.settings_control_mouse_long_press_delay_title,
+        AllSettings.mouseLongPressDelay,
+        suffix = "ms",
+    )
 }
 
-@Composable
-private fun ControlGamepad(
+/** 手柄 */
+private fun LazyListScope.gamepadSection(
     gamepadViewModel: GamepadViewModel,
-    modifier: Modifier = Modifier,
-    color: Color = cardColor(false),
-    contentColor: Color = onCardColor(),
+    optionListMaxHeight: Dp,
 ) {
-    val listState = rememberLazyListState()
-    //重映射相关设置仅在映射模式下可用
-    val remapEnabled = AllSettings.gamepadControl.state &&
-        AllSettings.gamepadInputMode.state == GamepadInputMode.Mapped
-    LazyColumn(
-        modifier = modifier.lazyScrollWithBar(listState),
-        state = listState,
-        contentPadding = PaddingValues(all = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        //手柄控制总开关
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.settings_gamepad_title),
-                switch = AllSettings.gamepadControl.state,
-                onSwitch = { AllSettings.gamepadControl.save(it) },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
+    val enabled = AllSettings.gamepadControl.state
+    // 重映射相关的设置只在映射模式下可用，与改造前一致
+    val remapEnabled = enabled && AllSettings.gamepadInputMode.state == GamepadInputMode.Mapped
 
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        //手柄输入模式
-        item {
-            MenuListLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_gamepad_input_mode_title),
-                items = GamepadInputMode.entries,
-                currentItem = AllSettings.gamepadInputMode.state,
-                onItemChange = { AllSettings.gamepadInputMode.save(it) },
-                getItemText = { stringResource(it.titleRes) },
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.gamepadControl.state,
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        //手柄死区缩放
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_gamepad_deadzone_title),
-                value = AllSettings.gamepadDeadZoneScale.state,
-                valueRange = AllSettings.gamepadDeadZoneScale.floatRange,
-                enabled = remapEnabled,
-                onValueChange = { AllSettings.gamepadDeadZoneScale.updateState(it) },
-                onValueChangeFinished = { AllSettings.gamepadDeadZoneScale.save(it) },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //摇杆指针灵敏度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_gamepad_cursor_sensitivity_title),
-                value = AllSettings.gamepadCursorSensitivity.state,
-                valueRange = AllSettings.gamepadCursorSensitivity.floatRange,
-                enabled = remapEnabled,
-                onValueChange = { AllSettings.gamepadCursorSensitivity.updateState(it) },
-                onValueChangeFinished = { AllSettings.gamepadCursorSensitivity.save(it) },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //摇杆视角灵敏度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_gamepad_camera_sensitivity_title),
-                value = AllSettings.gamepadCameraSensitivity.state,
-                valueRange = AllSettings.gamepadCameraSensitivity.floatRange,
-                enabled = remapEnabled,
-                onValueChange = { AllSettings.gamepadCameraSensitivity.updateState(it) },
-                onValueChangeFinished = { AllSettings.gamepadCameraSensitivity.save(it) },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //手柄映射配置切换
-        item {
-            val list = remember(gamepadViewModel) {
-                gamepadViewModel.getAllConfigKeys()
-            }
-
-            if (list.isNotEmpty()) {
-                MenuListLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.settings_gamepad_config_title),
-                    items = list,
-                    currentItem = AllSettings.gamepadMappingConfig.state,
-                    onItemChange = { name ->
-                        AllSettings.gamepadMappingConfig.save(name)
-                        gamepadViewModel.reloadAllMappings()
-                    },
-                    getItemText = { it },
-                    color = color,
-                    contentColor = contentColor,
-                    enabled = remapEnabled,
-                )
-            } else {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.settings_gamepad_config_no_items),
-                    onClick = {},
-                    color = color,
-                    contentColor = contentColor,
-                    enabled = false
-                )
-            }
-        }
-    }
+    switch("gamepadControl", R.string.settings_gamepad_title, AllSettings.gamepadControl)
+    choice(
+        key = "gamepadInputMode",
+        labelRes = R.string.settings_gamepad_input_mode_title,
+        items = GamepadInputMode.entries,
+        unit = AllSettings.gamepadInputMode,
+        optionText = { stringResource(it.titleRes) },
+        enabled = enabled,
+        maxListHeight = optionListMaxHeight,
+    )
+    intSlider(
+        key = "gamepadDeadZoneScale",
+        labelRes = R.string.settings_gamepad_deadzone_title,
+        unit = AllSettings.gamepadDeadZoneScale,
+        suffix = "%",
+        enabled = remapEnabled,
+    )
+    intSlider(
+        key = "gamepadCursorSensitivity",
+        labelRes = R.string.settings_gamepad_cursor_sensitivity_title,
+        unit = AllSettings.gamepadCursorSensitivity,
+        suffix = "%",
+        enabled = remapEnabled,
+    )
+    intSlider(
+        key = "gamepadCameraSensitivity",
+        labelRes = R.string.settings_gamepad_camera_sensitivity_title,
+        unit = AllSettings.gamepadCameraSensitivity,
+        suffix = "%",
+        enabled = remapEnabled,
+    )
+    gamepadMappingRow(gamepadViewModel, optionListMaxHeight, remapEnabled)
 }
 
-@Composable
-private fun ControlGesture(
-    modifier: Modifier = Modifier,
-    color: Color = cardColor(false),
-    contentColor: Color = onCardColor(),
+/** 手柄映射配置：配置列表只在这一项里取一次，没有配置时给一行不可点的说明 */
+private fun LazyListScope.gamepadMappingRow(
+    gamepadViewModel: GamepadViewModel,
+    maxListHeight: Dp,
+    enabled: Boolean,
 ) {
-    val listState = rememberLazyListState()
-    LazyColumn(
-        modifier = modifier.lazyScrollWithBar(listState),
-        state = listState,
-        contentPadding = PaddingValues(all = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        //手势控制
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.settings_control_gesture_control_title),
-                switch = AllSettings.gestureControl.state,
-                onSwitch = { AllSettings.gestureControl.save(it) },
-                color = color,
-                contentColor = contentColor,
+    item(key = "gamepadMappingConfig") {
+        val configs = remember(gamepadViewModel) { gamepadViewModel.getAllConfigKeys() }
+        if (configs.isEmpty()) {
+            GameMenuActionRow(
+                label = stringResource(R.string.settings_gamepad_config_no_items),
+                onClick = {},
+                enabled = false,
             )
-        }
-
-        //点击触发的操作类型
-        item {
-            MenuListLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_gesture_tap_action_title),
-                items = GestureActionType.entries,
-                currentItem = AllSettings.gestureTapMouseAction.state,
-                onItemChange = { AllSettings.gestureTapMouseAction.save(it) },
-                getItemText = { stringResource(it.nameRes) },
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.gestureControl.state
-            )
-        }
-
-        //长按触发的操作类型
-        item {
-            MenuListLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_gesture_long_press_action_title),
-                items = GestureActionType.entries,
-                currentItem = AllSettings.gestureLongPressMouseAction.state,
-                onItemChange = { AllSettings.gestureLongPressMouseAction.save(it) },
-                getItemText = { stringResource(it.nameRes) },
-                color = color,
-                contentColor = contentColor,
-                enabled = AllSettings.gestureControl.state
-            )
-        }
-
-        //手势长按触发的延迟
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_gesture_long_press_delay_title),
-                value = AllSettings.gestureLongPressDelay.state,
-                valueRange = AllSettings.gestureLongPressDelay.floatRange,
-                enabled = AllSettings.gestureControl.state,
-                onValueChange = { AllSettings.gestureLongPressDelay.updateState(it) },
-                onValueChangeFinished = { AllSettings.gestureLongPressDelay.save(it) },
-                suffix = "ms",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        //快捷栏定位规则
-        item {
-            MenuListLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.game_menu_option_hotbar_rule),
-                items = HotbarRule.entries,
-                currentItem = AllSettings.hotbarRule.state,
-                onItemChange = { AllSettings.hotbarRule.save(it) },
-                getItemText = { stringResource(it.nameRes) },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //快捷栏宽度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.game_menu_option_hotbar_width),
-                value = AllSettings.hotbarWidth.state / 10f,
-                valueRange = 0f..100f,
-                enabled = AllSettings.hotbarRule.state == HotbarRule.Custom,
-                onValueChange = { value ->
-                    AllSettings.hotbarWidth.updateState((value * 10f).toInt())
+        } else {
+            GameMenuChoiceRow(
+                label = stringResource(R.string.settings_gamepad_config_title),
+                options = configs,
+                selected = AllSettings.gamepadMappingConfig.state,
+                enabled = enabled,
+                maxListHeight = maxListHeight,
+                optionText = { it },
+                onSelect = { name ->
+                    AllSettings.gamepadMappingConfig.save(name)
+                    gamepadViewModel.reloadAllMappings()
                 },
-                onValueChangeFinished = { value ->
-                    AllSettings.hotbarWidth.save((value * 10f).toInt())
-                },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //快捷栏高度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.game_menu_option_hotbar_height),
-                value = AllSettings.hotbarHeight.state / 10f,
-                valueRange = 0f..100f,
-                enabled = AllSettings.hotbarRule.state == HotbarRule.Custom,
-                onValueChange = { value ->
-                    AllSettings.hotbarHeight.updateState((value * 10f).toInt())
-                },
-                onValueChangeFinished = { value ->
-                    AllSettings.hotbarHeight.save((value * 10f).toInt())
-                },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //快捷栏双击与副手交换物品
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_hotbar_double_click),
-                switch = AllSettings.hotbarDoubleClick.state,
-                onSwitch = { AllSettings.hotbarDoubleClick.save(it) },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //快捷栏长按丢弃所选物品
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.game_menu_option_hotbar_long_click),
-                switch = AllSettings.hotbarLongClick.state,
-                onSwitch = { AllSettings.hotbarLongClick.save(it) },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //快捷栏长按快捷栏触发延迟
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.game_menu_option_hotbar_long_click_delay),
-                value = AllSettings.hotbarLongClickDelay.state,
-                valueRange = AllSettings.hotbarLongClickDelay.floatRange,
-                onValueChange = { value ->
-                    AllSettings.hotbarLongClickDelay.updateState(value)
-                },
-                onValueChangeFinished = { value ->
-                    AllSettings.hotbarLongClickDelay.save(value)
-                },
-                suffix = "ms",
-                enabled = AllSettings.hotbarLongClick.state,
-                color = color,
-                contentColor = contentColor,
             )
         }
     }
 }
 
-@Composable
-private fun ControlGyroscope(
-    modifier: Modifier = Modifier,
-    color: Color = cardColor(false),
-    contentColor: Color = onCardColor(),
+/** 手势与物品栏 */
+private fun LazyListScope.gesturesSection(optionListMaxHeight: Dp) {
+    val gestureOn = AllSettings.gestureControl.state
+    val customHotbar = AllSettings.hotbarRule.state == HotbarRule.Custom
+
+    switch("gestureControl", R.string.settings_control_gesture_control_title, AllSettings.gestureControl)
+    choice(
+        key = "gestureTapMouseAction",
+        labelRes = R.string.settings_control_gesture_tap_action_title,
+        items = GestureActionType.entries,
+        unit = AllSettings.gestureTapMouseAction,
+        optionText = { stringResource(it.nameRes) },
+        enabled = gestureOn,
+        maxListHeight = optionListMaxHeight,
+    )
+    choice(
+        key = "gestureLongPressMouseAction",
+        labelRes = R.string.settings_control_gesture_long_press_action_title,
+        items = GestureActionType.entries,
+        unit = AllSettings.gestureLongPressMouseAction,
+        optionText = { stringResource(it.nameRes) },
+        enabled = gestureOn,
+        maxListHeight = optionListMaxHeight,
+    )
+    intSlider(
+        key = "gestureLongPressDelay",
+        labelRes = R.string.settings_control_gesture_long_press_delay_title,
+        unit = AllSettings.gestureLongPressDelay,
+        suffix = "ms",
+        enabled = gestureOn,
+    )
+
+    group(R.string.oxide_set_section_hotbar)
+    choice(
+        key = "hotbarRule",
+        labelRes = R.string.game_menu_option_hotbar_rule,
+        items = HotbarRule.entries,
+        unit = AllSettings.hotbarRule,
+        optionText = { stringResource(it.nameRes) },
+        maxListHeight = optionListMaxHeight,
+    )
+    // 物品栏的宽高设置存的是 0..1000 的整数，界面上按百分比显示
+    intSlider(
+        key = "hotbarWidth",
+        labelRes = R.string.game_menu_option_hotbar_width,
+        unit = AllSettings.hotbarWidth,
+        suffix = "%",
+        enabled = customHotbar,
+        divisor = 10f,
+        valueRange = 0f..100f,
+    )
+    intSlider(
+        key = "hotbarHeight",
+        labelRes = R.string.game_menu_option_hotbar_height,
+        unit = AllSettings.hotbarHeight,
+        suffix = "%",
+        enabled = customHotbar,
+        divisor = 10f,
+        valueRange = 0f..100f,
+    )
+    switch(
+        "hotbarDoubleClick",
+        R.string.game_menu_option_hotbar_double_click,
+        AllSettings.hotbarDoubleClick,
+    )
+    switch(
+        "hotbarLongClick",
+        R.string.game_menu_option_hotbar_long_click,
+        AllSettings.hotbarLongClick,
+    )
+    intSlider(
+        key = "hotbarLongClickDelay",
+        labelRes = R.string.game_menu_option_hotbar_long_click_delay,
+        unit = AllSettings.hotbarLongClickDelay,
+        suffix = "ms",
+        enabled = AllSettings.hotbarLongClick.state,
+    )
+}
+
+/**
+ * 陀螺仪
+ *
+ * 传感器探测在菜单这一层做一次（见 [GameMenuSubscreen]），不在每一行里重复问框架。
+ */
+private fun LazyListScope.gyroscopeSection(available: Boolean) {
+    val on = available && AllSettings.gyroscopeControl.state
+
+    switch(
+        key = "gyroscopeControl",
+        labelRes = R.string.settings_control_gyroscope_title,
+        unit = AllSettings.gyroscopeControl,
+        enabled = available,
+        noteRes = if (available) null else R.string.settings_control_gyroscope_unsupported,
+    )
+    intSlider(
+        key = "gyroscopeSensitivity",
+        labelRes = R.string.settings_control_gyroscope_sensitivity_title,
+        unit = AllSettings.gyroscopeSensitivity,
+        suffix = "%",
+        enabled = on,
+    )
+    intSlider(
+        key = "gyroscopeSampleRate",
+        labelRes = R.string.settings_control_gyroscope_sample_rate_title,
+        unit = AllSettings.gyroscopeSampleRate,
+        suffix = "ms",
+        enabled = on,
+    )
+    switch(
+        key = "gyroscopeSmoothing",
+        labelRes = R.string.settings_control_gyroscope_smoothing_title,
+        unit = AllSettings.gyroscopeSmoothing,
+        enabled = on,
+    )
+    intSlider(
+        key = "gyroscopeSmoothingWindow",
+        labelRes = R.string.settings_control_gyroscope_smoothing_window_title,
+        unit = AllSettings.gyroscopeSmoothingWindow,
+        suffix = null,
+        enabled = on && AllSettings.gyroscopeSmoothing.state,
+    )
+    switch(
+        key = "gyroscopeInvertX",
+        labelRes = R.string.settings_control_gyroscope_invert_x_title,
+        unit = AllSettings.gyroscopeInvertX,
+        enabled = on,
+    )
+    switch(
+        key = "gyroscopeInvertY",
+        labelRes = R.string.settings_control_gyroscope_invert_y_title,
+        unit = AllSettings.gyroscopeInvertY,
+        enabled = on,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// 行
+//
+// 这些都是 LazyListScope 的扩展。设置的值一律在 `item {}` **里面**读，
+// 因此改一项只会让那一项重组，不会把整个分区重新排一遍版；
+// 标签也只以字符串 id 传进来，真正的 `stringResource` 同样在 `item {}` 里取。
+// ---------------------------------------------------------------------------
+
+private fun LazyListScope.group(labelRes: Int) {
+    item(key = "group:$labelRes") { GameMenuGroupLabel(stringResource(labelRes)) }
+}
+
+private fun LazyListScope.action(
+    key: String,
+    labelRes: Int,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    emphasis: Boolean = false,
 ) {
-    val context = LocalContext.current
-    val isGyroscopeAvailable = remember(context) {
-        isGyroscopeAvailable(context = context)
+    item(key = key) {
+        GameMenuActionRow(
+            label = stringResource(labelRes),
+            onClick = onClick,
+            enabled = enabled,
+            emphasis = emphasis,
+        )
     }
+}
 
-    val listState = rememberLazyListState()
-    LazyColumn(
-        modifier = modifier.lazyScrollWithBar(listState),
-        state = listState,
-        contentPadding = PaddingValues(all = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        //陀螺仪控制
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.settings_control_gyroscope_title),
-                switch = AllSettings.gyroscopeControl.state,
-                onSwitch = { AllSettings.gyroscopeControl.save(it) },
-                color = color,
-                contentColor = contentColor,
-                enabled = isGyroscopeAvailable
-            )
-        }
+/** 布尔设置：整行可点，状态由 [toggleable] 暴露 */
+private fun LazyListScope.switch(
+    key: String,
+    labelRes: Int,
+    unit: BooleanSettingUnit,
+    enabled: Boolean = true,
+    noteRes: Int? = null,
+    onTurnedOff: () -> Unit = {},
+) {
+    item(key = key) {
+        GameMenuSwitchRow(
+            label = stringResource(labelRes),
+            checked = unit.state,
+            enabled = enabled,
+            hint = noteRes?.let { stringResource(it) },
+            onCheckedChange = { value ->
+                unit.save(value)
+                if (!value) onTurnedOff()
+            },
+        )
+    }
+}
 
-        //陀螺仪控制灵敏度
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_gyroscope_sensitivity_title),
-                value = AllSettings.gyroscopeSensitivity.state,
-                valueRange = AllSettings.gyroscopeSensitivity.floatRange,
-                enabled = isGyroscopeAvailable && AllSettings.gyroscopeControl.state,
-                onValueChange = { AllSettings.gyroscopeSensitivity.updateState(it) },
-                onValueChangeFinished = { AllSettings.gyroscopeSensitivity.save(it) },
-                suffix = "%",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
+/**
+ * 整数设置的滑杆
+ *
+ * [divisor] 只给"存的是千分比、界面上按百分比显示"的那两项用（物品栏宽高），
+ * 其余是 1。范围默认取设置自己声明的区间，所以界面上能拖到的两端
+ * 与落盘时会夹的两端永远是同一个区间。
+ */
+private fun LazyListScope.intSlider(
+    key: String,
+    labelRes: Int,
+    unit: IntSettingUnit,
+    suffix: String? = null,
+    enabled: Boolean = true,
+    divisor: Float = 1f,
+    valueRange: ClosedFloatingPointRange<Float>? = null,
+    onFinished: () -> Unit = {},
+) {
+    item(key = key) {
+        GameMenuSliderRow(
+            label = stringResource(labelRes),
+            value = unit.state / divisor,
+            valueRange = valueRange ?: unit.floatRange,
+            enabled = enabled,
+            suffix = suffix,
+            onValueChange = { unit.updateState((it * divisor).roundToInt()) },
+            onValueChangeFinished = { committed ->
+                unit.save((committed * divisor).roundToInt())
+                onFinished()
+            },
+        )
+    }
+}
 
-        //陀螺仪采样率
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_gyroscope_sample_rate_title),
-                value = AllSettings.gyroscopeSampleRate.state,
-                valueRange = AllSettings.gyroscopeSampleRate.floatRange,
-                enabled = isGyroscopeAvailable && AllSettings.gyroscopeControl.state,
-                onValueChange = { AllSettings.gyroscopeSampleRate.updateState(it) },
-                onValueChangeFinished = { AllSettings.gyroscopeSampleRate.save(it) },
-                suffix = "ms",
-                color = color,
-                contentColor = contentColor,
-            )
-        }
+/** 单选设置 */
+private fun <T : Enum<T>> LazyListScope.choice(
+    key: String,
+    labelRes: Int,
+    items: List<T>,
+    unit: EnumSettingUnit<T>,
+    optionText: @Composable (T) -> String,
+    enabled: Boolean = true,
+    maxListHeight: Dp = 160.dp,
+    onSelected: (T) -> Unit = {},
+) {
+    item(key = key) {
+        GameMenuChoiceRow(
+            label = stringResource(labelRes),
+            options = items,
+            selected = unit.state,
+            enabled = enabled,
+            maxListHeight = maxListHeight,
+            optionText = optionText,
+            onSelect = { option ->
+                unit.save(option)
+                onSelected(option)
+            },
+        )
+    }
+}
 
-        //陀螺仪数值平滑
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.settings_control_gyroscope_smoothing_title),
-                switch = AllSettings.gyroscopeSmoothing.state,
-                onSwitch = { AllSettings.gyroscopeSmoothing.save(it) },
-                color = color,
-                contentColor = contentColor,
-                enabled = isGyroscopeAvailable && AllSettings.gyroscopeControl.state
-            )
-        }
-
-        //陀螺仪平滑处理的窗口大小
-        item {
-            MenuSliderLayout(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.settings_control_gyroscope_smoothing_window_title),
-                value = AllSettings.gyroscopeSmoothingWindow.state,
-                valueRange = AllSettings.gyroscopeSmoothingWindow.floatRange,
-                enabled = isGyroscopeAvailable && AllSettings.gyroscopeControl.state && AllSettings.gyroscopeSmoothing.state,
-                onValueChange = { AllSettings.gyroscopeSmoothingWindow.updateState(it) },
-                onValueChangeFinished = { AllSettings.gyroscopeSmoothingWindow.save(it) },
-                color = color,
-                contentColor = contentColor,
-            )
-        }
-
-        //反转 X 轴
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.settings_control_gyroscope_invert_x_title),
-                switch = AllSettings.gyroscopeInvertX.state,
-                onSwitch = { AllSettings.gyroscopeInvertX.save(it) },
-                color = color,
-                contentColor = contentColor,
-                enabled = isGyroscopeAvailable && AllSettings.gyroscopeControl.state
-            )
-        }
-
-        //反转 Y 轴
-        item {
-            MenuSwitchButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.settings_control_gyroscope_invert_y_title),
-                switch = AllSettings.gyroscopeInvertY.state,
-                onSwitch = { AllSettings.gyroscopeInvertY.save(it) },
-                color = color,
-                contentColor = contentColor,
-                enabled = isGyroscopeAvailable && AllSettings.gyroscopeControl.state
-            )
-        }
+/** 整数输入（自定义分辨率的宽高）：范围由真实窗口推出 */
+private fun LazyListScope.number(
+    key: String,
+    labelRes: Int,
+    unit: IntSettingUnit,
+    permitted: IntRange,
+    onCommit: () -> Unit,
+) {
+    item(key = key) {
+        GameMenuNumberRow(
+            label = stringResource(labelRes),
+            value = unit.state,
+            permitted = permitted,
+            enabled = true,
+            onCommit = { committed ->
+                unit.save(committed)
+                onCommit()
+            },
+        )
     }
 }

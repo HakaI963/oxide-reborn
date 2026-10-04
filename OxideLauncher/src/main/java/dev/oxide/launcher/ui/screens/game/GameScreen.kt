@@ -149,8 +149,8 @@ private class GameViewModel(
 ) : ViewModel() {
     /** 游戏菜单操作状态 */
     var gameMenuState by mutableStateOf(MenuState.NONE)
-    /** 游戏菜单-控制设置区域Tab选择的索引 */
-    var controlMenuTabIndex by mutableIntStateOf(0)
+    /** 游戏菜单当前显示的分区索引 */
+    var gameMenuSectionIndex by mutableIntStateOf(0)
     /** 强制关闭弹窗操作状态 */
     var forceCloseState by mutableStateOf<ForceCloseOperation>(ForceCloseOperation.None)
     /** 发送键值操作状态 */
@@ -749,31 +749,35 @@ fun GameScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        GameMenuSubscreen(
-            state = viewModel.gameMenuState,
-            controlMenuTabIndex = viewModel.controlMenuTabIndex,
-            onControlMenuTabChange = { viewModel.controlMenuTabIndex = it },
-            gamepadViewModel = gamepadViewModel,
-            closeScreen = { viewModel.gameMenuState = MenuState.HIDE },
-            onForceClose = { viewModel.forceCloseState = ForceCloseOperation.Show },
-            onSwitchLog = { onLogStateChange(logState.next()) },
-            enableTerracotta = AllSettings.enableTerracotta.state,
-            onOpenTerracottaMenu = { terracottaViewModel.openMenu() },
-            onRefreshWindowSize = { eventViewModel.sendEvent(EventViewModel.Event.Game.RefreshSize) },
-            onInputMethod = {
-                eventViewModel.sendEvent(EventViewModel.Event.Game.SwitchIme(null))
-            },
-            onSendKeycode = { viewModel.sendKeycodeState = SendKeycodeState.ShowDialog },
-            onReplacementControl = { viewModel.replacementControlState = ReplacementControlState.Show },
-            onEditLayout = {
-                viewModel.startControlEditor(
-                    editorVM = editorViewModel
-                )
-            },
-            onShowToast = { text, duration ->
-                eventViewModel.sendToast(text, duration)
-            }
-        )
+        // 菜单一次都没开过时什么都不组合：帧率捕获每秒几十次重组，
+        // 不该带着一棵用不到的浮层一起重排
+        if (viewModel.gameMenuState != MenuState.NONE) {
+            GameMenuSubscreen(
+                state = viewModel.gameMenuState,
+                sectionIndex = viewModel.gameMenuSectionIndex,
+                onSectionChange = { viewModel.gameMenuSectionIndex = it },
+                gamepadViewModel = gamepadViewModel,
+                closeScreen = { viewModel.gameMenuState = MenuState.HIDE },
+                onForceClose = { viewModel.forceCloseState = ForceCloseOperation.Show },
+                onSwitchLog = { onLogStateChange(logState.next()) },
+                enableTerracotta = AllSettings.enableTerracotta.state,
+                onOpenTerracottaMenu = { terracottaViewModel.openMenu() },
+                onRefreshWindowSize = { eventViewModel.sendEvent(EventViewModel.Event.Game.RefreshSize) },
+                onInputMethod = {
+                    eventViewModel.sendEvent(EventViewModel.Event.Game.SwitchIme(null))
+                },
+                onSendKeycode = { viewModel.sendKeycodeState = SendKeycodeState.ShowDialog },
+                onReplacementControl = { viewModel.replacementControlState = ReplacementControlState.Show },
+                onEditLayout = {
+                    viewModel.startControlEditor(
+                        editorVM = editorViewModel
+                    )
+                },
+                onShowToast = { text, duration ->
+                    eventViewModel.sendToast(text, duration)
+                }
+            )
+        }
 
         if (AllSettings.gamepadControl.state) {
             //手柄事件捕获层
