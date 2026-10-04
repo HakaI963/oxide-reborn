@@ -29,7 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.oxide.launcher.R
 import dev.oxide.launcher.game.control.ControlData
 import dev.oxide.launcher.game.control.ControlManager
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
+import dev.oxide.launcher.ui.screens.main.oxide.OxideConfirmDialog
 import dev.oxide.launcher.ui.components.SimpleListDialog
 import dev.oxide.launcher.ui.components.SimpleListItem
 import java.io.File
@@ -95,13 +95,15 @@ private fun ReplacementControlDialog(
             }
         )
     } else {
-        SimpleAlertDialog(
+        OxideConfirmDialog(
             title = stringResource(R.string.game_menu_option_replacement_control),
-            text = stringResource(R.string.control_manage_list_empty),
+            message = stringResource(R.string.control_manage_list_empty),
+            confirmText = stringResource(R.string.generic_confirm),
             onConfirm = {
                 onDismissRequest(false)
             },
-            dismissText = stringResource(R.string.generic_refresh),
+            // 旧对话框的 dismissText 是副按钮文案，不是标题；这里对应取消/刷新那一侧
+            cancelText = stringResource(R.string.generic_refresh),
             onDismiss = {
                 ControlManager.refresh()
             }

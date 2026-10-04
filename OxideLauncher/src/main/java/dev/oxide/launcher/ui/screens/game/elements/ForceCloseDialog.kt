@@ -21,7 +21,7 @@ package dev.oxide.launcher.ui.screens.game.elements
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
+import dev.oxide.launcher.ui.screens.main.oxide.OxideConfirmDialog
 
 sealed interface ForceCloseOperation {
     data object None : ForceCloseOperation
@@ -39,9 +39,10 @@ fun ForceCloseOperation(
     when (operation) {
         ForceCloseOperation.None -> {}
         ForceCloseOperation.Show -> {
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.game_button_force_close),
-                text = text,
+                message = text,
+                confirmText = stringResource(R.string.generic_confirm),
                 onConfirm = onForceClose,
                 onDismiss = {
                     onChange(ForceCloseOperation.None)

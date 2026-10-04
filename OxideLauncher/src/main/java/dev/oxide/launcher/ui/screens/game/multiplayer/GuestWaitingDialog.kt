@@ -29,7 +29,7 @@ import dev.oxide.launcher.R
 import dev.oxide.launcher.terracotta.Terracotta
 import dev.oxide.launcher.ui.AndroidStringText
 import dev.oxide.launcher.ui.androidText
-import dev.oxide.launcher.ui.components.SimpleEditDialog
+import dev.oxide.launcher.ui.screens.main.oxide.OxideTextEntryDialog
 import dev.oxide.launcher.utils.string.isEmptyOrBlank
 import net.burningtnt.terracotta.TerracottaAndroidAPI
 
@@ -74,7 +74,8 @@ private fun InviteCodeInputDialog(
 
     /** 验证不通过时 */
     var isError by remember { mutableStateOf(false) }
-    val supportingText: AndroidStringText? = remember(code) {
+    /** 格式提示。只会用到无参数的字符串资源，所以这里直接留 id */
+    val supportingText: Int? = remember(code) {
         if (code.isEmpty()) {
             //还未填写内容
             isError = false
@@ -83,30 +84,31 @@ private fun InviteCodeInputDialog(
 
         val type = Terracotta.parseRoomCode(code)
         when (type) {
-            TerracottaAndroidAPI.RoomType.TERRACOTTA_LEGACY -> androidText(R.string.terracotta_status_waiting_guest_prompt_terracotta_legacy)
-            TerracottaAndroidAPI.RoomType.PCL2CE -> androidText(R.string.terracotta_status_waiting_guest_prompt_pcl2ce)
-            TerracottaAndroidAPI.RoomType.SCAFFOLDING -> androidText(R.string.terracotta_status_waiting_guest_prompt_scaffolding)
+            TerracottaAndroidAPI.RoomType.TERRACOTTA_LEGACY -> R.string.terracotta_status_waiting_guest_prompt_terracotta_legacy
+            TerracottaAndroidAPI.RoomType.PCL2CE -> R.string.terracotta_status_waiting_guest_prompt_pcl2ce
+            TerracottaAndroidAPI.RoomType.SCAFFOLDING -> R.string.terracotta_status_waiting_guest_prompt_scaffolding
             else -> null
         }.also { text ->
             //根据是否检测出对应格式判断
             isError = text == null
-        } ?: androidText(R.string.terracotta_status_waiting_guest_prompt_invalid)
+        } ?: R.string.terracotta_status_waiting_guest_prompt_invalid)
     }
 
-    SimpleEditDialog(
+    OxideTextEntryDialog(
         title = stringResource(R.string.terracotta_status_waiting_guest_prompt_title),
+        label = "U/XXXX-XXXX-XXXX-XXXX",
         value = code,
         onValueChange = { value ->
             code = value
         },
-        label = (@Composable { Text(text = "U/XXXX-XXXX-XXXX-XXXX") }).takeIf { code.isEmpty() },
-        supportingText = supportingText?.let { text ->
-            {
-                AndroidStringText(text = text)
-            }
-        },
+        // 旧实现把“认得出格式”的提示放在 supportingText、把“认不出来”显示成错误色。
+        // 这里保持同样的分工：认不出来才走 errorText，其余走普通提示。
+        errorText = if (isError) supportingText?.let { stringResource(it) } else null,
+        supportText = if (!isError) supportingText?.let { stringResource(it) } else null,
         singleLine = true,
-        isError = isError,
+        isValid = { !isError && it.isNotBlank() && Terracotta.parseRoomCode(it) != null },
+        confirmText = stringResource(R.string.generic_confirm),
+        cancelText = stringResource(R.string.generic_cancel),
         onConfirm = {
             if (isError || code.isEmptyOrBlank() || Terracotta.parseRoomCode(code) == null) {
                 onShowToast(androidText(R.string.terracotta_status_waiting_guest_prompt_invalid))
@@ -115,6 +117,6 @@ private fun InviteCodeInputDialog(
                 onDismiss()
             }
         },
-        onDismissRequest = onDismiss
+        onDismiss = onDismiss
     )
 }
