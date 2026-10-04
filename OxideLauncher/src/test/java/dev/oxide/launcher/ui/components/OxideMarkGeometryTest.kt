@@ -113,7 +113,7 @@ class OxideMarkGeometryTest {
         assertTrue(inner < outer)
         assertEquals(
             outer.toDouble(),
-            octagonVertices(0f, 0f, outer).first().let { hypot(it.x, it.y) },
+            octagonVertices(0f, 0f, outer).first().let { hypot(it.x, it.y).toDouble() },
             0.001,
         )
     }
