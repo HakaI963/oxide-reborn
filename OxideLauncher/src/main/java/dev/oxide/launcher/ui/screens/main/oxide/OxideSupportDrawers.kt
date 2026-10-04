@@ -743,7 +743,7 @@ fun OxideRendererDrawer(
 ) {
     val context = LocalContext.current
     val bridge = rememberOxideLauncherBridge()
-    var tab by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
+    var tab by rememberSaveable(initialTab) { mutableIntStateOf(initialTab) }
     var pluginToken by remember { mutableIntStateOf(0) }
 
     val tabs = listOf(

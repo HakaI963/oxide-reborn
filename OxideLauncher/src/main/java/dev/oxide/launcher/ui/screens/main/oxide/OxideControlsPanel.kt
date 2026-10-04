@@ -758,7 +758,7 @@ private fun OxideGamepadBindingsDrawer(
     val bridge = rememberOxideLauncherBridge()
 
     // 落在"游戏内"还是"菜单内"是这块抽屉自己的临时选择，跟外壳那些整块表面一样
-    var tab by remember { mutableStateOf(OxideGamepadBindingTabs.IN_GAME) }
+    var tab by remember { mutableIntStateOf(OxideGamepadBindingTabs.IN_GAME) }
     // 映射改动不经过设置状态，只能靠翻这个令牌让抽屉重读一次
     var reloadToken by remember { mutableIntStateOf(0) }
     var binding by remember { mutableStateOf<GamepadMap?>(null) }
