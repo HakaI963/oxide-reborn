@@ -41,6 +41,7 @@ import dev.oxide.launcher.ui.guide.rememberAppGuides
 import dev.oxide.launcher.ui.screens.content.elements.Background
 import dev.oxide.launcher.ui.screens.main.control_editor.ControlEditor
 import dev.oxide.launcher.ui.theme.OxideTheme
+import dev.oxide.launcher.ui.theme.ProvideOxideChrome
 import dev.oxide.launcher.ui.theme.backgroundColor
 import dev.oxide.launcher.ui.theme.onBackgroundColor
 import dev.oxide.launcher.viewmodel.BackgroundViewModel
@@ -92,46 +93,50 @@ class ControlEditorActivity : BaseAppCompatActivity() {
             OxideTheme(
                 backgroundViewModel = backgroundViewModel
             ) {
-                val guides = rememberAppGuides()
-                GuideHost(
-                    guides.editorScreen,
-                    nextTip = { NextTipLabel(it) }
-                ) {
-                    LaunchedEffect(Unit) {
-                        guides.startOnce(GuideKeys.Editor)
-                    }
-
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = backgroundColor(),
-                        contentColor = onBackgroundColor()
+                // 界面根上还需要再包一层，见 dev.oxide.launcher.ui.theme.ProvideOxideChrome。
+                // 没有它编辑器读到的是调色板的默认值而不是用户当前选的那一套
+                ProvideOxideChrome {
+                    val guides = rememberAppGuides()
+                    GuideHost(
+                        guides.editorScreen,
+                        nextTip = { NextTipLabel(it) }
                     ) {
-                        BoxWithConstraints(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Background(
-                                modifier = Modifier.fillMaxSize(),
-                                viewModel = backgroundViewModel,
-                                allowVideo = false
-                            )
+                        LaunchedEffect(Unit) {
+                            guides.startOnce(GuideKeys.Editor)
+                        }
 
-                            ControlEditor(
-                                viewModel = editorViewModel,
-                                targetFile = controlFile,
-                                exit = {
-                                    //已保存控制布局后进行的退出
-                                    finish()
-                                },
-                                menuExit = {
-                                    //菜单要求的直接退出，使用对话框让用户确认
-                                    editorViewModel.showExitEditorDialog(
-                                        context = this@ControlEditorActivity,
-                                        onExit = {
-                                            this@ControlEditorActivity.finish()
-                                        }
-                                    )
-                                }
-                            )
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = backgroundColor(),
+                            contentColor = onBackgroundColor()
+                        ) {
+                            BoxWithConstraints(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Background(
+                                    modifier = Modifier.fillMaxSize(),
+                                    viewModel = backgroundViewModel,
+                                    allowVideo = false
+                                )
+
+                                ControlEditor(
+                                    viewModel = editorViewModel,
+                                    targetFile = controlFile,
+                                    exit = {
+                                        //已保存控制布局后进行的退出
+                                        finish()
+                                    },
+                                    menuExit = {
+                                        //菜单要求的直接退出，使用对话框让用户确认
+                                        editorViewModel.showExitEditorDialog(
+                                            context = this@ControlEditorActivity,
+                                            onExit = {
+                                                this@ControlEditorActivity.finish()
+                                            }
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
