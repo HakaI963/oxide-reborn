@@ -237,7 +237,10 @@ fun OxideAccountPage(
                             backStack?.mainScreen?.clearWith(NormalNavKey.LauncherMain)
                         },
                         checkIfInWebScreen = {
-                            backStack?.mainScreen?.currentKey is NormalNavKey.WebScreen
+                            // 问浏览器自己，不再问"栈顶那个键是不是 WebScreen"：
+                            // 旧答案在这一屏永远为假，登录轮询每一次都判定用户已经
+                            // 走开，授权页还开着，登录却被取消
+                            globalOxideBrowser.isOpen()
                         },
                     ))
                     viewModel.onIntent(AccountManageIntent.UpdateAccountOp(AccountOperation.None))
@@ -304,7 +307,8 @@ fun OxideAccountPage(
             toWeb = { url -> backStack?.mainScreen?.backStack?.navigateToWeb(url) },
             backToMain = { backStack?.mainScreen?.clearWith(NormalNavKey.LauncherMain) },
             checkIfInWebScreen = {
-                backStack?.mainScreen?.currentKey is NormalNavKey.WebScreen
+                // 同上：设备码轮询问的是浏览器自己的状态
+                globalOxideBrowser.isOpen()
             },
         ))
     }
@@ -583,7 +587,7 @@ private sealed interface AccountSheet {
 
 /** 当前账号：真实的 currentAccountFlow，没有账号时如实说明 */
 @Composable
-private fun OxideAccountCurrentCard(
+internal fun OxideAccountCurrentCard(
     metrics: OxideMetrics,
     current: Account?,
     accountsCount: Int,
@@ -804,7 +808,7 @@ private fun OxideAccountStoreCard(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun OxideAccountListCard(
+internal fun OxideAccountListCard(
     metrics: OxideMetrics,
     accounts: List<Account>,
     current: Account?,
@@ -866,7 +870,7 @@ private fun OxideAccountListCard(
  * 这样布局在切换账号时不会跳动。
  */
 @Composable
-private fun OxideAccountRow(
+internal fun OxideAccountRow(
     metrics: OxideMetrics,
     account: Account,
     selected: Boolean,

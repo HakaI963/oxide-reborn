@@ -2593,9 +2593,11 @@
     <string name="oxide_cap_storage_game_dir_name">Name of the game folder</string>
     <string name="oxide_cap_storage_game_dir_added">Game folder added</string>
     <string name="oxide_cap_storage_game_dir_conflict">This folder is already in the list.</string>
+    <string name="oxide_cap_storage_game_dir_unsupported">A game folder has to be a real folder on this device\u2014\u2014this one is not on internal storage.</string>
     <string name="oxide_cap_storage_cleanup_detail">Delete asset files that no installed version needs any more. This cannot be undone.</string>
     <string name="oxide_cap_storage_cleanup_running">Scanning installed versions…</string>
     <string name="oxide_cap_storage_cleanup_done">%1$s</string>
+    <string name="oxide_cap_storage_cleanup_needs_instance">Install at least one version before cleaning up: with no versions, every asset file would count as unused.</string>
     <!-- Java：导入 / 删除自定义运行时，以及用指定运行时跑 jar -->
     <string name="oxide_cap_java_manage">Manage runtimes</string>
     <string name="oxide_cap_java_import">Import a runtime</string>
@@ -2604,7 +2606,7 @@
     <string name="oxide_cap_java_run_jar_detail">Launch a .jar from this device with a chosen Java runtime.</string>
     <string name="oxide_cap_java_run_jar_pick">Which Java runtime?</string>
     <string name="oxide_cap_java_run_jar_default">Let the launcher decide</string>
-    <string name="oxide_cap_java_builtin_only">Built-in runtimes can't be deleted.</string>
+    <string name="oxide_cap_java_builtin_only">Built-in runtimes can\'t be deleted.</string>
     <!-- 内容管理器：从设备导入 -->
     <string name="oxide_cap_mgr_import">Import from device</string>
     <string name="oxide_cap_mgr_import_detail">Copy %1$s off this device into this instance.</string>
@@ -2623,4 +2625,18 @@
     <string name="oxide_cap_dis_import_modpack_instance">Instance name</string>
     <string name="oxide_cap_dis_import_modpack_mobile">This download needs mobile data. Continue?</string>
     <string name="oxide_cap_dis_import_modpack_unavailable">That modpack could not be imported.</string>
+    <string name="oxide_cap_dis_import_modpack_log">Log</string>
+    <!-- 盖板：协议全文与内置浏览器（这两块不再是旧导航栈上的整页） -->
+    <string name="oxide_cap_retry">Retry</string>
+    <string name="oxide_cap_licence_title">Licence</string>
+    <string name="oxide_cap_licence_failed">This licence could not be read</string>
+    <string name="oxide_cap_licence_failed_detail">Nothing was loaded from that file. Retrying usually helps; if it does not, the text is missing from this build.</string>
+    <string name="oxide_cap_licence_empty">This licence file is empty</string>
+    <string name="oxide_cap_licence_empty_detail">The file exists but holds no text, so there is nothing to read. Retrying will not change that.</string>
+    <string name="oxide_cap_browser_title">Browser</string>
+    <string name="oxide_cap_browser_reload">Reload this page</string>
+    <string name="oxide_cap_browser_failed">This page could not be loaded</string>
+    <string name="oxide_cap_browser_failed_unknown">The page did not say why it failed.</string>
+    <string name="oxide_cap_browser_open_externally">Open this page in the system browser</string>
+    <string name="oxide_cap_browser_sign_in_hint">Finish signing in on this page. The device code is on the clipboard, and this panel closes itself once the sign-in is done.</string>
 </resources>

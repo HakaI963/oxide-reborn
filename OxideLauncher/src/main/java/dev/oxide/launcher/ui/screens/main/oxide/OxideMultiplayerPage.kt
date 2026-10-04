@@ -986,7 +986,7 @@ private fun OxideMpRuntimeCard(
  * 开关本身不再重复朗读，避免同一信息被念两遍。
  */
 @Composable
-private fun OxideMpToggleRow(
+internal fun OxideMpToggleRow(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
@@ -1026,7 +1026,7 @@ private fun OxideMpToggleRow(
  * 说明文字直接流进去，和上面两段一起滚。
  */
 @Composable
-private fun OxideMpGuideCard(metrics: OxideMetrics) {
+internal fun OxideMpGuideCard(metrics: OxideMetrics) {
     val tabs = listOf(
         stringResource(R.string.oxide_sec_mp_tab_notice),
         stringResource(R.string.oxide_sec_mp_tab_host),
@@ -1119,7 +1119,7 @@ private fun OxideMpGuideCard(metrics: OxideMetrics) {
 
 /** 说明里的一个小节：标题 + 若干步 */
 @Composable
-private fun OxideMpGuideBlock(title: String, lines: List<Int>) {
+internal fun OxideMpGuideBlock(title: String, lines: List<Int>) {
     Column {
         Text(
             text = title,

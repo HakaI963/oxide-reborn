@@ -91,7 +91,7 @@ import kotlinx.coroutines.launch
  * 参考稿是"左侧分类 + 右侧分组面板"，分类名与顺序沿用参考稿，
  * 只是去掉了属于另一个项目的 Recorder，并把每一类映射到启动器真实存在的功能上。
  */
-private enum class OxideSettingsCategory(
+internal enum class OxideSettingsCategory(
     val titleRes: Int,
     val summaryRes: Int,
 ) {
@@ -109,7 +109,7 @@ private enum class OxideSettingsCategory(
 }
 
 /** 由抽屉承载的分类：面板本身只给摘要与入口，细节在抽屉里 */
-private enum class OxideSettingsDrawer {
+internal enum class OxideSettingsDrawer {
     Account, Java, Renderer, Storage, Advanced,
 }
 
@@ -120,7 +120,7 @@ private enum class OxideSettingsDrawer {
  * 所以要记住是从哪一类进来的：Graphics 应当直接落在"图形"那一页，
  * 否则用户点了 Graphics 却看到渲染器列表，会以为按钮没生效。
  */
-private data class OxideDrawerRequest(
+internal data class OxideDrawerRequest(
     val drawer: OxideSettingsDrawer,
     /** 抽屉内部的初始标签页 */
     val initialTab: Int = 0,
@@ -404,7 +404,7 @@ private fun OxideCategoryItem(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun OxideSettingsPanel(
+internal fun OxideSettingsPanel(
     metrics: OxideMetrics,
     category: OxideSettingsCategory,
     bridge: OxideLauncherBridge,

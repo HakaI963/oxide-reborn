@@ -110,7 +110,7 @@ import java.io.File
 
 /** 环境面板里的一行：左边的弱化标签与右边的值 */
 @Immutable
-private data class OxideHomeEnvRow(val label: String, val value: String)
+internal data class OxideHomeEnvRow(val label: String, val value: String)
 
 /**
  * 需要读磁盘或问包管理器才能得到的几个值
@@ -355,7 +355,7 @@ fun OxideHomePage(
  * 它会被压到 192px，环境面板里的标签和值就会挤在一起。
  */
 @Composable
-private fun OxideHomeWideBody(
+internal fun OxideHomeWideBody(
     metrics: OxideMetrics,
     contentWidth: Dp,
     revealed: Boolean,
@@ -463,7 +463,7 @@ private fun OxideHomeWideBody(
  * 因此这一栏在 560dp 的小屏和 660dp 的大屏横屏上都各得其所。
  */
 @Composable
-private fun OxideHomeCompactBody(
+internal fun OxideHomeCompactBody(
     metrics: OxideMetrics,
     contentWidth: Dp,
     revealed: Boolean,

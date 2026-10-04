@@ -20,9 +20,15 @@ package dev.oxide.launcher.ui.screens.main
 
 import dev.oxide.launcher.ui.screens.main.oxide.OxideSettingsSection
 import dev.oxide.launcher.ui.screens.main.oxide.OxideMainShell
+import dev.oxide.launcher.ui.screens.main.oxide.OxideBrowserClosesWhenSignInEnds
+import dev.oxide.launcher.ui.screens.main.oxide.OxideBrowserPanel
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDestinationBackdrop
+import dev.oxide.launcher.ui.screens.main.oxide.OxideLicencePanel
 import dev.oxide.launcher.ui.screens.main.oxide.OxideDownloadCategory
 import dev.oxide.launcher.ui.screens.main.oxide.OxideAboutPanel
 import dev.oxide.launcher.ui.screens.main.oxide.OxideControlLayoutsPanel
+import dev.oxide.launcher.ui.screens.main.oxide.globalOxideBrowser
+import dev.oxide.launcher.ui.screens.main.oxide.oxideDestinationPanelInput
 import dev.oxide.launcher.ui.screens.main.oxide.rememberOxideMetrics
 import androidx.activity.compose.BackHandler
 import dev.oxide.launcher.ui.theme.ProvideOxideChrome
@@ -104,14 +110,12 @@ import dev.oxide.launcher.ui.screens.content.AccountManageScreen
 import dev.oxide.launcher.ui.screens.content.DownloadScreen
 import dev.oxide.launcher.ui.screens.content.FileSelectorScreen
 import dev.oxide.launcher.ui.screens.content.LauncherScreen
-import dev.oxide.launcher.ui.screens.content.LicenseScreen
 import dev.oxide.launcher.ui.screens.content.LogViewScreen
 import dev.oxide.launcher.ui.screens.content.MultiplayerScreen
 import dev.oxide.launcher.ui.screens.content.SettingsScreen
 import dev.oxide.launcher.ui.screens.content.VersionExportScreen
 import dev.oxide.launcher.ui.screens.content.VersionSettingsScreen
 import dev.oxide.launcher.ui.screens.content.VersionsManageScreen
-import dev.oxide.launcher.ui.screens.content.WebViewScreen
 import dev.oxide.launcher.ui.screens.content.assetinfo.AssetInfoScreen
 import dev.oxide.launcher.ui.screens.content.navigateToDownload
 import dev.oxide.launcher.ui.screens.navigateTo
@@ -173,6 +177,25 @@ fun MainScreen(
         backgroundColor().copy(alpha = launcherBackgroundOpacity)
     } else backgroundColor()
 
+    // ---- Oxide 自有的两层盖板 ---------------------------------------------
+    //
+    // 协议全文与内置浏览器曾经各占一条旧导航条目（NormalNavKey.License 与
+    // NormalNavKey.WebScreen），都是一整页旧 Zalith 界面：页顶是它自己上游的图标栏，
+    // 底下那页照原样透上来，没有可见的关闭按钮。现在两者都是压在这棵导航树**之上**
+    // 的一层，由这里统一承接——因此无论下面停在哪一页（Oxide 外壳、旧设置栈、
+    // 旧下载页……），它们都是最上面那一层。
+    //
+    // 协议面板的状态用 remember 而不是 rememberSaveable，理由与外壳里那些整块面板
+    // 一样（见 entry<NormalNavKey.LauncherMain> 里的说明）：它压在外面一层，
+    // 旋转之后回到下面那一页比回到一块盖住的旧界面更符合预期。
+    //
+    // 内置浏览器是唯一的例外：设备码是一次性的授权，那一块状态挂在进程上
+    // （见 globalOxideBrowser），因此旋转时授权页仍在，登录也不会被当成用户走开。
+    var oxideLicenceRaw by remember { mutableStateOf<Int?>(null) }
+
+    // 浏览器状态在进程上、界面在这里：读的是同一份状态，但只有这一处负责把它画出来
+    val browserUrl by globalOxideBrowser.openUrl.collectAsStateWithLifecycle()
+    val browserForSignIn by globalOxideBrowser.openedForSignIn.collectAsStateWithLifecycle()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -242,8 +265,80 @@ fun MainScreen(
                     tasks = tasks,
                     tasksExpanded = isTaskMenuExpanded,
                     onToggleTasks = ::changeTasksExpandedState,
+                    onOpenLicence = { raw -> oxideLicenceRaw = raw },
                 )
 
+                // 两层盖板都声明在导航树之后，因此画在它上面；它们各自先铺一层
+                // 完全不透明的面（OxideDestinationBackdrop），底下那一页一丝也透不过来
+                OxideCapSurfaces(
+                    licenceRaw = oxideLicenceRaw,
+                    browserUrl = browserUrl,
+                    browserForSignIn = browserForSignIn,
+                    onDismissLicence = { oxideLicenceRaw = null },
+                    onDismissBrowser = { globalOxideBrowser.close() },
+                    openLink = { url ->
+                        eventViewModel.sendEvent(EventViewModel.Event.OpenLink(url))
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Oxide 自有的两层盖板：协议全文与内置浏览器
+ *
+ * 放在宿主这一层而不是某个导航条目上，因此它们压得住**任何**下面那一页——包括旧
+ * 设置栈的"关于"页面与旧下载页这些仍然可达、却还是旧 Zalith 界面的地方。
+ *
+ * 浏览器优先于协议面板：设备码登录是一段真实的等待，等待期间用户看的东西不该被
+ * 另一块面板换掉。两块同时开着只可能是协议面板还没关又点了别的入口，那种情况下
+ * 登录那一侧更重要。
+ *
+ * 返回键：浏览器开着就收浏览器（面板自己还带着返回键，它在组合里更靠后，因此优先），
+ * 否则收协议面板。收掉之后这一次返回才轮到导航栈。
+ */
+@Composable
+private fun OxideCapSurfaces(
+    licenceRaw: Int?,
+    browserUrl: String?,
+    browserForSignIn: Boolean,
+    onDismissLicence: () -> Unit,
+    onDismissBrowser: () -> Unit,
+    openLink: (String) -> Unit,
+) {
+    // 登录跑完（成功、失败，或者用户自己走开）就自己收起浏览器：旧实现里那一步是
+    // backToMain() 把导航栈清回主界面，顺带把网页那一项弹掉
+    OxideBrowserClosesWhenSignInEnds(
+        openUrl = browserUrl,
+        openedForSignIn = browserForSignIn,
+        state = globalOxideBrowser,
+    )
+    BackHandler(enabled = licenceRaw != null && browserUrl == null) {
+        onDismissLicence()
+    }
+
+    // 面板自带底色与调色板：外壳里的 ProvideOxideChrome 只覆盖它自己的子树
+    ProvideOxideChrome {
+        val url = browserUrl
+        val raw = licenceRaw
+        // 底幕吞掉落在面板外面的点击，但**不**因此关掉面板。这两件事必须分开：
+        // 设备码登录正在轮询时，"浏览器不在了"被当作用户自己走开，于是这一次授权
+        // 立刻被取消——一次误触不该有这么大后果。因此点外面什么也不发生，
+        // 关掉它只有两条路：面板右上角的 ✕ 与硬件返回键。
+        val scrim = Modifier.oxideDestinationPanelInput()
+        when {
+            url != null -> OxideDestinationBackdrop(modifier = scrim) {
+                OxideBrowserPanel(
+                    url = url,
+                    forSignIn = browserForSignIn,
+                    onDismiss = onDismissBrowser,
+                    openLink = openLink,
+                )
+            }
+
+            raw != null -> OxideDestinationBackdrop(modifier = scrim) {
+                OxideLicencePanel(raw = raw, onDismiss = onDismissLicence)
             }
         }
     }
@@ -498,6 +593,13 @@ private fun NavigationUI(
     tasks: List<Task>,
     tasksExpanded: Boolean,
     onToggleTasks: () -> Unit,
+    /**
+     * 打开一份协议全文
+     *
+     * 协议全文曾经是 `NormalNavKey.License` 那条整页旧界面，现在由宿主那一层的
+     * OxideLicencePanel 承接。这里只描述"要打开哪一份"，不自己决定打开在哪里。
+     */
+    onOpenLicence: (raw: Int) -> Unit,
 ) {
     val backStack = screenBackStackModel.mainScreen.backStack
     val currentKey = backStack.lastOrNull()
@@ -601,9 +703,11 @@ private fun NavigationUI(
                                 OxideSettingsSection.About -> OxideAboutPanel(
                                     metrics = oxideMetrics,
                                     onDismiss = { oxidePanel = null },
-                                    // 协议全文走既有的 License 路由：那是启动器里唯一
-                                    // 一个真的能把 R.raw 读完并渲染出来的地方
-                                    openLicense = { raw -> backStack.navigateTo(NormalNavKey.License(raw)) },
+                                    // 协议全文走 Oxide 自己的 [OxideLicencePanel]：
+                                    // 关于面板只负责**列**协议（每一行一枚"读协议"按钮），
+                                    // 它自己不渲染正文。旧实现推到 NormalNavKey.License
+                                    // 那整页旧界面上去，而那一页已经不存在了
+                                    openLicense = { raw -> onOpenLicence(raw) },
                                 )
 
                                 OxideSettingsSection.ControlManager -> OxideControlLayoutsPanel(
@@ -620,17 +724,14 @@ private fun NavigationUI(
                     SettingsScreen(
                         key = key,
                         backStackViewModel = screenBackStackModel,
+                        // 旧设置栈的"关于"页面（AboutInfoScreen）仍然可达：旧下载页、
+                        // 旧版本管理页的顶栏都能走进来。它那一枚"读协议"按钮同样不再
+                        // 推开旧整页，而是打开 Oxide 自己的协议面板
                         openLicenseScreen = { raw ->
-                            backStack.navigateTo(NormalNavKey.License(raw))
+                            onOpenLicence(raw)
                         },
                         eventViewModel = eventViewModel,
                         submitError = submitError
-                    )
-                }
-                entry<NormalNavKey.License> { key ->
-                    LicenseScreen(
-                        key = key,
-                        backStackViewModel = screenBackStackModel
                     )
                 }
                 entry<NormalNavKey.AccountManager> { key ->
@@ -643,13 +744,6 @@ private fun NavigationUI(
                         },
                         eventViewModel = eventViewModel,
                         submitError = submitError
-                    )
-                }
-                entry<NormalNavKey.WebScreen> { key ->
-                    WebViewScreen(
-                        key = key,
-                        backStackViewModel = screenBackStackModel,
-                        eventViewModel = eventViewModel
                     )
                 }
                 entry<NormalNavKey.VersionsManager> {

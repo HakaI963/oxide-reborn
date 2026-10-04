@@ -652,7 +652,10 @@ internal fun performOxidePreflightAction(
                     backStack?.mainScreen?.clearWith(NormalNavKey.LauncherMain)
                 },
                 checkIfInWebScreen = {
-                    backStack?.mainScreen?.currentKey is NormalNavKey.WebScreen
+                    // 问浏览器自己，不再问"栈顶那个键是不是 WebScreen"：
+                    // 旧答案在这里永远为假，设备码轮询每一次都判定用户已经走开，
+                    // 授权页还开着，登录却被取消
+                    globalOxideBrowser.isOpen()
                 },
                 updateOperation = {},
                 showToast = { text, duration -> eventViewModel.sendToast(text, duration) },

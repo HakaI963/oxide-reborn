@@ -9,8 +9,8 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
@@ -18,161 +18,32 @@
 
 package dev.oxide.launcher.ui.screens.content
 
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
-import android.webkit.CookieManager
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation3.runtime.NavBackStack
-import dev.oxide.launcher.ui.base.BaseScreen
-import dev.oxide.launcher.ui.components.MarqueeText
-import dev.oxide.launcher.ui.screens.NormalNavKey
 import dev.oxide.launcher.ui.screens.TitledNavKey
-import dev.oxide.launcher.ui.screens.navigateTo
-import dev.oxide.launcher.utils.string.isNotEmptyOrBlank
-import dev.oxide.launcher.viewmodel.EventViewModel
-import dev.oxide.launcher.viewmodel.ScreenBackStackViewModel
-import org.apache.commons.io.FileUtils
+import dev.oxide.launcher.ui.screens.main.oxide.openOxideBrowser
 
 /**
- * 导航至WebViewScreen并访问特定网址
+ * 应用内浏览器：这个文件曾经是它本身，现在只留下这一座桥
+ *
+ * ## 为什么桥还在
+ *
+ * 调用点有三处，两处在 Oxide 自己的账号页与启动前置检查里，第三处是旧的
+ * `AccountManageScreen`。前两处不需要改（它们要的仍然是"打开这一页"），第三处不在
+ * 本次改动的范围里，但它那份源码靠这个扩展函数编译。留着这四行，旧界面的调用点
+ * 也就自动指向 Oxide 的浏览器面板，而不是推进一条已经不存在的旧条目。
+ *
+ * ## 为什么接收者不再被使用
+ *
+ * 旧实现把网址推进导航栈（`NormalNavKey.WebScreen`），一整页旧 Zalith 界面换掉底下
+ * 那一页：自己的图标顶栏、底下那页照原样透上来、没有可见的关闭按钮、失败时只有一屏
+ * 白、也没有重试。更要紧的是"浏览器开着吗"这件事只能靠
+ * `currentKey is NormalNavKey.WebScreen` 去猜，而设备码登录的轮询逻辑正是拿这个猜测
+ * 判断用户是不是自己走了——那条链一旦断开，登录会在用户还好好看着网页的时候被取消。
+ *
+ * 现在网址交给 [openOxideBrowser]：状态在进程上（`globalOxideBrowser`），面板由宿主
+ * 那一层渲染成 Oxide 自家的一块盖板。扩展函数保留下来只是为了不改调用点的写法，
+ * 接收者留着不用是刻意的——它的意义只剩"从导航栈的语境里打开浏览器"。
  */
-fun NavBackStack<TitledNavKey>.navigateToWeb(webUrl: String) = this.navigateTo(
-    screenKey = NormalNavKey.WebScreen(webUrl),
-    useClassEquality = true
-)
-
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-fun WebViewScreen(
-    key: NormalNavKey.WebScreen,
-    backStackViewModel: ScreenBackStackViewModel,
-    eventViewModel: EventViewModel
-) {
-    BaseScreen(
-        screenKey = key,
-        currentKey = backStackViewModel.mainScreen.currentKey,
-        useClassEquality = true
-    ) {
-        var webUrl by remember {
-            mutableStateOf(key.url)
-        }
-
-        val urlAvailable = remember(webUrl) {
-            webUrl.isNotEmptyOrBlank() && webUrl != "about:blank"
-        }
-
-        val context = LocalContext.current
-        var isWebLoading by rememberSaveable { mutableStateOf(true) }
-
-        val webViewHolder = remember {
-            mutableStateOf<WebView?>(null)
-        }
-
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(color = MaterialTheme.colorScheme.surface)
-            ) {
-                AnimatedVisibility(
-                    visible = isWebLoading
-                ) {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                    )
-                }
-
-                //网址，可供用户复制
-                AnimatedVisibility(
-                    visible = webUrl.isNotEmptyOrBlank()
-                ) {
-                    MarqueeText(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .clickable(enabled = urlAvailable) {
-                                eventViewModel.sendEvent(EventViewModel.Event.OpenLink(webUrl))
-                            },
-                        text = webUrl,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = {
-                        WebView(context).apply {
-                            webViewClient = object : WebViewClient() {
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    super.onPageFinished(view, url)
-                                    webUrl = url ?: ""
-                                    isWebLoading = false
-                                }
-
-                                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                    super.onPageStarted(view, url, favicon)
-                                    webUrl = url ?: ""
-                                    isWebLoading = true
-                                }
-                            }
-
-                            settings.javaScriptEnabled = true
-                            settings.cacheMode = WebSettings.LOAD_NO_CACHE
-                            loadUrl(key.url)
-                            webViewHolder.value = this
-                        }
-                    },
-                    update = {
-                        //不在此处重复加载 url
-                    }
-                )
-            }
-
-            DisposableEffect(Unit) {
-                onDispose {
-                    webViewHolder.value?.apply {
-                        stopLoading()
-                        loadUrl("about:blank")
-                        clearHistory()
-                        removeAllViews()
-                        destroy()
-                    }
-                    webViewHolder.value = null
-
-                    val webCache = context.getDir("webview", 0)
-                    FileUtils.deleteQuietly(webCache)
-                    CookieManager.getInstance().removeAllCookies(null)
-                }
-            }
-        }
-    }
+fun NavBackStack<TitledNavKey>.navigateToWeb(webUrl: String) {
+    openOxideBrowser(webUrl)
 }

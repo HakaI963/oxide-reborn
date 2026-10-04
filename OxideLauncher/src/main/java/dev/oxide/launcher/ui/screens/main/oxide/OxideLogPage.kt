@@ -231,7 +231,7 @@ fun OxideLogPage(
 
 /** 日志来源的一行：文件本身，不含任何推测；`detail` 读不到就留空 */
 @Immutable
-private data class OxideLogSource(val path: String, val label: String, val detail: String)
+internal data class OxideLogSource(val path: String, val label: String, val detail: String)
 
 /**
  * 收集真实的日志来源
@@ -289,7 +289,7 @@ private fun rememberLogSources(gameLog: File?): List<OxideLogSource> {
 
 /** 左侧的来源清单 */
 @Composable
-private fun OxideLogSourceList(
+internal fun OxideLogSourceList(
     metrics: OxideMetrics,
     sources: List<OxideLogSource>,
     activePath: String?,

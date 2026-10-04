@@ -203,7 +203,7 @@ internal fun visibleControlRows(prerequisites: OxideControlPrerequisites): List<
 // ---------------------------------------------------------------------------
 
 /** 一个虚拟鼠标指针热点：标题、指针形状，以及它写的是哪一个设置单元 */
-private data class OxideHotspotRow(
+internal data class OxideHotspotRow(
     val titleRes: Int,
     val shape: CursorShape,
     val unit: ParcelableSettingUnit<CursorHotspot>,
@@ -281,7 +281,7 @@ private fun ControlGroup(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun OxideMouseGroup(metrics: OxideMetrics, rows: Set<OxideControlRow>) {
+internal fun OxideMouseGroup(metrics: OxideMetrics, rows: Set<OxideControlRow>) {
     ControlGroup(index = 0, title = stringResource(R.string.oxide_set_section_mouse), metrics = metrics) {
         OxideEnumRow(
             label = stringResource(R.string.settings_control_mouse_control_mode_title),
@@ -367,7 +367,7 @@ private fun OxideMouseGroup(metrics: OxideMetrics, rows: Set<OxideControlRow>) {
  * 这里只负责把八种形状排出来，并显示当前坐标。
  */
 @Composable
-private fun OxideHotspotsGroup(
+internal fun OxideHotspotsGroup(
     metrics: OxideMetrics,
     onEdit: (OxideHotspotRow) -> Unit,
 ) {
@@ -440,7 +440,7 @@ private fun OxideHotspotsGroup(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun OxideGesturesGroup(metrics: OxideMetrics, rows: Set<OxideControlRow>) {
+internal fun OxideGesturesGroup(metrics: OxideMetrics, rows: Set<OxideControlRow>) {
     ControlGroup(index = 2, title = stringResource(R.string.oxide_set_section_gestures), metrics = metrics) {
         OxideToggleRow(
             label = stringResource(R.string.settings_control_gesture_control_title),

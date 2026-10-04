@@ -496,7 +496,7 @@ fun OxideAboutPanel(
  * 不在字符串里写死，因此改名时这一句跟着变。
  */
 @Composable
-private fun OxideAboutHero(
+internal fun OxideAboutHero(
     metrics: OxideMetrics,
     launcherName: String,
     productVersion: String,

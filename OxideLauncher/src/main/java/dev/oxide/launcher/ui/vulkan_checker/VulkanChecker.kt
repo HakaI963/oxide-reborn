@@ -162,7 +162,7 @@ fun VulkanChecker(
  * 两种形态也**绝不**同时出现两层竖向滚动。
  */
 @Composable
-private fun OxideVulkanDialog(
+internal fun OxideVulkanDialog(
     metrics: OxideMetrics,
     subtitle: String? = null,
     boundedResult: Boolean = false,
@@ -312,7 +312,7 @@ private fun OxideVulkanDialog(
  * 但对话框本身仍然是一个固定尺寸。
  */
 @Composable
-private fun OxideVulkanResultList(
+internal fun OxideVulkanResultList(
     metrics: OxideMetrics,
     listMaxHeight: Dp,
     data: VulkanCapabilities?,
