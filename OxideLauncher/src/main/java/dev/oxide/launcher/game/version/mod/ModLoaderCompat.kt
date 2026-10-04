@@ -94,11 +94,26 @@ private fun loaderNamesOf(sources: Iterable<String>): Set<String> =
 fun modLoaderVerdict(
     instanceLoaders: Collection<ModLoader>,
     declaredLoaders: Collection<ModLoaderDisplayLabel>,
+): ModLoaderVerdict = modLoaderVerdictByName(
+    instanceNames = instanceLoaders.map { it.displayName },
+    declaredNames = declaredLoaders.map { it.getDisplayName() },
+)
+
+/**
+ * 同一条判定，只是输入已经是显示名
+ *
+ * 单独暴露出来是为了让"忽略大小写比对"这一条能被单测直接覆盖：把它藏在
+ * 枚举取名的那一层里，测试就得先造一个假的 `ModLoaderDisplayLabel`
+ * （而它是 `Parcelable`），那不是一个纯 JVM 测试该干的事。
+ */
+fun modLoaderVerdictByName(
+    instanceNames: Collection<String>,
+    declaredNames: Collection<String>,
 ): ModLoaderVerdict {
-    val declared = loaderNamesOf(declaredLoaders.map { it.getDisplayName() })
+    val declared = loaderNamesOf(declaredNames)
     if (declared.isEmpty()) return ModLoaderVerdict.Loaderless
 
-    val instance = loaderNamesOf(instanceLoaders.map { it.displayName })
+    val instance = loaderNamesOf(instanceNames)
     if (instance.isEmpty()) return ModLoaderVerdict.NoInstanceLoader
 
     val compatible = instance.any { loader ->

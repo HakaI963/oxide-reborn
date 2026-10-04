@@ -98,6 +98,7 @@ fun OxideDestinationBackdrop(
  * 没有自己的点击处理器的区域（比如面板的留白、标题行）都会把点击漏到底板上，
  * 于是"在面板里点一下"变成了关闭。给面板挂上这个空点击处理器，漏下去的点击就停在面板上。
  */
+@Composable
 fun Modifier.oxideDestinationPanelInput(): Modifier = clickable(
     interactionSource = remember { MutableInteractionSource() },
     indication = null,

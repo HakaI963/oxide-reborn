@@ -1,5 +1,5 @@
 /*
- * Zalith Launcher 2
+ * Oxide Launcher
  * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -9,8 +9,8 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
@@ -18,25 +18,22 @@
 
 package dev.oxide.launcher.ui.screens.game.elements
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,9 +41,10 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
@@ -55,6 +53,7 @@ import dev.oxide.launcher.R
 import dev.oxide.launcher.bridge.LoggerBridge
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.screens.game.elements.log_parser.LogHighlighter
+import dev.oxide.launcher.ui.theme.Oxide
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -69,6 +68,28 @@ import kotlinx.coroutines.withContext
 import java.util.Collections
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * 游戏内日志框
+ *
+ * 收集、缓冲、刷新与自动滚动这条链**一字未改**：`LoggerBridge` 的监听仍然是
+ * 同一个单例回调，缓冲区仍然是那个线程安全的列表，刷新间隔仍然取
+ * `AllSettings.logBufferFlushInterval`，日志仍然通过同一个通道推给
+ * `LazyColumn`。谁在读这份日志（崩溃日志、问题反馈）拿到的仍然是同一份文本。
+ *
+ * 换掉的是外面那两层壳：
+ *
+ * - 原来是 `Color.Black.copy(0.5f)` 加 `Color.White`。半透明的黑压在任何一帧
+ *   游戏画面上都会让日志时隐时现——雪地场景下白字直接看不见。
+ *   现在是 [Oxide.PopoverBg]（98% 不透明）配中性前景色。
+ * - 右边那列按钮原来是 Material 的 `IconButton`，四个图标的
+ *   `contentDescription` **全是 null**：读屏软件只会念出"按钮"，用户不知道
+ *   哪一个是关闭、哪一个是清空。现在每一个都有一句朗读文本，自动滚动那一枚
+ *   还把"跟着/不跟着"作为状态说出去，因此不只靠底色深浅表达。
+ *
+ * 这一块**不**加 [consumeTouches]：它是一块 HUD 而不是模态面板，
+ * 日志开着的时候玩家还要操作游戏。落在日志正文与按钮以外的触摸照旧漏给游戏，
+ * 列表自己的拖动与四个按钮各自的事件照旧被消费。
+ */
 @Composable
 fun LogBox(
     enableLog: Boolean,
@@ -152,16 +173,19 @@ fun LogBox(
         }
     }
 
-    if (enableLog) {
-        Row(
-            modifier = modifier.fillMaxSize()
-        ) {
-            Surface(
-                modifier = modifier
+    if (!enableLog) return
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        // 按钮的热区跟着游戏窗口与界面缩放走，不写死
+        val bounds = rememberGameOverlayBounds()
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            //日志正文
+            Box(
+                modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(),
-                color = Color.Black.copy(alpha = 0.5f),
-                contentColor = Color.White
+                    .fillMaxHeight()
+                    .background(Oxide.PopoverBg)
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -178,8 +202,12 @@ fun LogBox(
                         }
 
                         Text(
+                            // 高亮的颜色是日志级别的一部分（见 LogLevelRule），不是配色：
+                            // 换掉它就分不出 INFO / WARN / ERROR 了
                             text = log,
-                            modifier = Modifier.fillParentMaxWidth(),
+                            modifier = Modifier
+                                .fillParentMaxWidth()
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
                             fontSize = fontSize,
                             lineHeight = lineHeight
                         )
@@ -187,51 +215,60 @@ fun LogBox(
                 }
             }
 
-            //右侧控制区域
-            VerticalDivider(
-                modifier = Modifier.fillMaxHeight(),
-                color = Color.White.copy(0.4f)
+            //分隔用的发丝线
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Oxide.Line)
             )
-            Surface(
-                modifier = Modifier.fillMaxHeight(),
-                color = Color.Black.copy(alpha = 0.7f),
-                contentColor = Color.White
+
+            //右侧控制区域
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .background(Oxide.BgElevated)
             ) {
                 Column(
                     modifier = Modifier
-                        .padding(horizontal = 4.dp, vertical = 12.dp)
+                        .padding(horizontal = 4.dp, vertical = 8.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     //关闭
-                    LogBoxIconButton(
+                    GameOverlayIconButton(
+                        painter = painterResource(R.drawable.ic_close),
+                        description = stringResource(R.string.oxide_ingame_log_close),
                         onClick = onClose,
-                        toggle = false
-                    ) {
-                        Icon(
-                            modifier = Modifier.size(18.dp),
-                            painter = painterResource(R.drawable.ic_close),
-                            contentDescription = null
-                        )
-                    }
+                        size = bounds.buttonHeight,
+                        enabled = true,
+                        selected = false
+                    )
                     //清理
-                    LogBoxIconButton(
+                    GameOverlayIconButton(
+                        painter = painterResource(R.drawable.ic_delete_outlined),
+                        description = stringResource(R.string.oxide_ingame_log_clear),
                         onClick = {
                             synchronized(buffer) {
                                 logList.clear()
                                 buffer.clear()
                             }
                         },
-                        toggle = false
-                    ) {
-                        Icon(
-                            modifier = Modifier.size(18.dp),
-                            painter = painterResource(R.drawable.ic_delete_outlined),
-                            contentDescription = null
-                        )
-                    }
+                        size = bounds.buttonHeight,
+                        enabled = true,
+                        selected = false
+                    )
                     //自动滚动
-                    LogBoxIconButton(
+                    GameOverlayIconButton(
+                        painter = painterResource(R.drawable.ic_list_down),
+                        description = stringResource(
+                            if (autoScrollDown) {
+                                R.string.oxide_ingame_log_auto_scroll_on
+                            } else {
+                                R.string.oxide_ingame_log_auto_scroll_off
+                            }
+                        ),
                         onClick = {
                             val value = !autoScrollDown
                             autoScrollDown = value
@@ -239,49 +276,23 @@ fun LogBox(
                                 scrollChannel.value?.trySend(Unit)
                             }
                         },
-                        toggle = autoScrollDown,
-                    ) {
-                        Icon(
-                            modifier = Modifier.size(18.dp),
-                            painter = painterResource(R.drawable.ic_list_down),
-                            contentDescription = null
-                        )
-                    }
+                        size = bounds.buttonHeight,
+                        enabled = true,
+                        selected = autoScrollDown,
+                    )
                     //滚动到底部
-                    LogBoxIconButton(
+                    GameOverlayIconButton(
+                        painter = painterResource(R.drawable.ic_arrow_cool_down),
+                        description = stringResource(R.string.oxide_ingame_log_scroll_to_end),
                         onClick = {
                             scrollChannel.value?.trySend(Unit)
                         },
-                        toggle = false
-                    ) {
-                        Icon(
-                            modifier = Modifier.size(18.dp),
-                            painter = painterResource(R.drawable.ic_arrow_cool_down),
-                            contentDescription = null
-                        )
-                    }
+                        size = bounds.buttonHeight,
+                        enabled = true,
+                        selected = false
+                    )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun LogBoxIconButton(
-    onClick: () -> Unit,
-    toggle: Boolean,
-    icon: @Composable (() -> Unit)
-) {
-    IconButton(
-        onClick = onClick,
-        colors = IconButtonDefaults.iconButtonColors(
-            containerColor = if (toggle) {
-                Color.White.copy(0.4f)
-            } else {
-                Color.Transparent
-            }
-        ),
-        shape = MaterialTheme.shapes.medium,
-        content = icon
-    )
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.setting.enums.FpsDisplayMode
 import dev.oxide.launcher.ui.screens.main.oxide.OxideGuiScaleDefaultPercent
 import dev.oxide.launcher.ui.screens.main.oxide.oxideGuiScaleFactor
+import kotlin.math.min
 
 /**
  * 游戏内浮层的纯逻辑
@@ -244,6 +245,38 @@ fun gameOverlayListOverflows(itemCount: Int, maxHeight: Dp, rowHeight: Dp): Bool
 // ---------------------------------------------------------------------------
 // 帧率图
 // ---------------------------------------------------------------------------
+
+/** 帧率图在正常窗口下的尺寸（未乘界面缩放，单位 dp），与改造前那块一致 */
+const val GameFpsChartWidth: Float = 180f
+const val GameFpsChartHeight: Float = 120f
+
+/** 帧率图有多大 */
+@Immutable
+data class GameFpsChartSize(val width: Dp, val height: Dp)
+
+/**
+ * 帧率图尺寸：跟着游戏窗口收，但正常窗口下仍是原来那块
+ *
+ * 悬浮球是在窗口里拖动的，而窗口可以是分屏或自由窗口下的一小块。
+ * 图本身不缩到比窗口还宽，否则 [dev.oxide.launcher.ui.components.FloatingBall]
+ * 会把球夹回左上角，图却仍然往屏幕外伸。
+ *
+ * 纯函数，可直接单测。
+ */
+fun gameFpsChartSize(windowWidthDp: Int, windowHeightDp: Int): GameFpsChartSize {
+    val width = windowWidthDp.coerceAtLeast(0).dp
+    val height = windowHeightDp.coerceAtLeast(0).dp
+    if (width <= 0.dp || height <= 0.dp) {
+        return GameFpsChartSize(GameOverlayAbsoluteMin, GameOverlayAbsoluteMin)
+    }
+    // 球上还挂着菜单图标与留白，四周至少留出两块最小留白
+    val availableWidth = (width - GameOverlayEdgeMarginMin * 2).coerceAtLeast(GameOverlayAbsoluteMin)
+    val availableHeight = (height - GameOverlayEdgeMarginMin * 2).coerceAtLeast(GameOverlayAbsoluteMin)
+    return GameFpsChartSize(
+        width = minOf(GameFpsChartWidth.dp, availableWidth),
+        height = minOf(GameFpsChartHeight.dp, availableHeight),
+    )
+}
 
 /** 纵轴分几段 */
 const val GameFpsAxisSegments: Int = 5

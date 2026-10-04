@@ -102,7 +102,7 @@ fun OxideModsSurface(
 ) {
     val viewModel: OxideModsViewModel = viewModel(
         key = "OxideMods-${version.getVersionName()}"
-    ) { OxideModsViewModel(version) }
+    ) { OxideModsViewModel(version = version, eventViewModel = rememberOxideEventViewModel()) }
 
     val content: @Composable () -> Unit = { OxideModsContent(metrics = metrics, viewModel = viewModel) }
 
@@ -372,11 +372,9 @@ private fun OxideModsContent(
                             selected = row.key in selected,
                             selectionMode = selectedRows.isNotEmpty(),
                             busy = state.busy,
-                            labels = labels,
                             onToggleSelect = { viewModel.toggleSelected(row.key) },
                             onToggleEnabled = { viewModel.setEnabled(row.key, !row.enabled) },
                             onOpenDetails = { viewModel.openDetails(row.key) },
-                            onRefreshRemote = { viewModel.refreshRemote(row) },
                             onUpdate = { viewModel.startUpdate(listOf(row.key)) },
                             onDelete = { viewModel.requestDelete(listOf(row.key)) },
                         )
@@ -417,6 +415,10 @@ private fun OxideModsContent(
                 row = row,
                 details = details,
                 labels = labels,
+                busy = state.busy,
+                // "重新读一次远端信息"放在详情层而不是行尾：一行上已经有
+                // 更新、详情、删除、开关四个动作，再塞一个会把 360dp 宽的行挤扁
+                onRefreshRemote = { viewModel.refreshRemote(row) },
                 onDismiss = viewModel::closeDetails,
             )
         }
@@ -434,15 +436,12 @@ private fun OxideModRowItem(
     selected: Boolean,
     selectionMode: Boolean,
     busy: Boolean,
-    labels: OxideModMetaLabels,
     onToggleSelect: () -> Unit,
     onToggleEnabled: () -> Unit,
     onOpenDetails: () -> Unit,
-    onRefreshRemote: () -> Unit,
     onUpdate: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val meta = remember(row, labels) { oxideModsMeta(row, labels) }
     val loaders = remember(row) { oxideModsLoaderLabels(row) }
 
     Row(
@@ -714,6 +713,8 @@ private fun OxideModDetailsDialog(
     row: OxideModRow,
     details: OxideModDetails,
     labels: OxideModMetaLabels,
+    busy: Boolean,
+    onRefreshRemote: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     OxideDialogShell(
@@ -784,6 +785,13 @@ private fun OxideModDetailsDialog(
             }
         },
         actions = {
+            if (row.checkRemote) {
+                OxideButton(
+                    text = stringResource(R.string.generic_refresh),
+                    onClick = onRefreshRemote,
+                    enabled = !busy,
+                )
+            }
             OxideButton(
                 text = stringResource(R.string.generic_close),
                 onClick = onDismiss,

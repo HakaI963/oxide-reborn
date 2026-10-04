@@ -166,7 +166,7 @@ internal data class OxideModSelection(
 )
 
 /** 算变更内容所需的那一份输入 */
-internal data class OxideModState(
+internal data class OxideModifyState(
     val originalGameVersion: String,
     val targetGameVersion: String,
     val installed: List<OxideModLoader>,
@@ -212,7 +212,7 @@ internal fun oxideModReloadableLoaders(mcVer: String): Set<ModLoader> =
  * [equivalent] 负责"选中的版本与已装版本是否算同一个"（OptiFine 有额外规则）。
  */
 internal fun oxideModDiffs(
-    state: OxideModState,
+    state: OxideModifyState,
     equivalent: (OxideModLoader, String) -> Boolean,
 ): ModifyDiffs? {
     val diffs = buildList {
@@ -517,7 +517,7 @@ private class OxideModAddonsViewModel(
     /** 重算变更内容 */
     fun updateDiffs() {
         currentDiffs = oxideModDiffs(
-            state = OxideModState(
+            state = OxideModifyState(
                 originalGameVersion = originalGameVersion,
                 targetGameVersion = gameVersion,
                 installed = installedLoaders,

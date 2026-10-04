@@ -31,7 +31,6 @@ import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionFolders
 import dev.oxide.launcher.game.version.installed.VersionInfo
 import dev.oxide.launcher.game.version.mod.AllModReader
-import dev.oxide.launcher.game.version.mod.LocalMod
 import dev.oxide.launcher.game.version.mod.RemoteMod
 import dev.oxide.launcher.game.version.mod.isEnabled
 import dev.oxide.launcher.game.version.mod.matchInstalledMods
@@ -43,6 +42,8 @@ import dev.oxide.launcher.game.version.mod.update.SelectableModManifest
 import dev.oxide.launcher.game.version.mod.update.toSelectableList
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.string.getMessageOrToString
+import dev.oxide.launcher.viewmodel.EventViewModel
+import dev.oxide.launcher.viewmodel.sendKeepScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Dispatchers
@@ -138,7 +139,10 @@ data class OxideModsState(
  *     `FileUtils.deleteQuietly` 对不存在的路径返回 false 且不抛异常，
  *     把它当成成功，就是"删除点了没反应"的直接来源。
  */
-internal class OxideModsViewModel(private val version: Version) : ViewModel() {
+internal class OxideModsViewModel(
+    private val version: Version,
+    private val eventViewModel: EventViewModel,
+) : ViewModel() {
 
     var state by mutableStateOf(OxideModsState())
         private set
@@ -180,10 +184,18 @@ internal class OxideModsViewModel(private val version: Version) : ViewModel() {
      *
      * 整个过程在 IO 上、可取消；组合期只读已经拿回来的 [OxideModRow]。
      */
-    fun rescan() {
+    fun rescan() = scan(showLoading = true)
+
+    /**
+     * 重扫目录
+     *
+     * @param showLoading false 时不把列表换成"正在读"：一次启用/禁用之后的
+     *   重扫只是为了让行重新来自文件系统，把整张列表闪一下没有任何好处。
+     */
+    private fun scan(showLoading: Boolean) {
         scanJob?.cancel()
         scanJob = viewModelScope.launch {
-            state = state.copy(loading = true, error = null)
+            if (showLoading) state = state.copy(loading = true, error = null)
             val info = version.getVersionInfo()
             val read = withContext(Dispatchers.IO) {
                 runCatching { AllModReader(modsDir).readAllForRemote() }
@@ -298,24 +310,26 @@ internal class OxideModsViewModel(private val version: Version) : ViewModel() {
         if (keys.isEmpty()) return
         viewModelScope.launch {
             state = state.copy(busy = true)
+            // 目标状态与当前状态相反的那些才真的需要搬文件
             val attempted = withContext(Dispatchers.IO) {
                 val wanted = keys.toSet()
-                val pending = remoteMods
+                remoteMods
                     .filter { it.localMod.file.modBaseName() in wanted }
                     .filter { it.localMod.file.isEnabled() != enabled }
-                pending to pending.count { it.localMod.setEnabled(enabled) }
             }
-            rescan()
-            val changed = attempted.second
+            val changed = withContext(Dispatchers.IO) {
+                attempted.count { it.localMod.setEnabled(enabled) }
+            }
+            scan(showLoading = false)
             state = state.copy(
                 busy = false,
                 error = null,
-                outcome = if (attempted.first.isEmpty()) {
+                outcome = if (attempted.isEmpty()) {
                     OxideModsOutcome.NothingToDo
                 } else {
                     OxideModsOutcome.Toggled(
                         changed = changed,
-                        skipped = (attempted.first.size - changed).coerceAtLeast(0),
+                        skipped = (attempted.size - changed).coerceAtLeast(0),
                     )
                 },
             )
@@ -344,7 +358,7 @@ internal class OxideModsViewModel(private val version: Version) : ViewModel() {
     /**
      * 确认删除
      *
-     * 走的是 [LocalMod.delete]，也就是**此刻**磁盘上的真实路径；禁用态的模组
+     * 走的是 `LocalMod.delete`，也就是**此刻**磁盘上的真实路径；禁用态的模组
      * 在磁盘上叫 `x.jar.disabled`，按 `x.jar` 去删什么也删不掉。删不掉的那几条
      * 会被点名，而不是整批报成功。
      */
@@ -358,7 +372,7 @@ internal class OxideModsViewModel(private val version: Version) : ViewModel() {
                 remoteMods.filter { it.localMod.file.modBaseName() in wanted }
                     .count { it.localMod.delete() }
             }
-            rescan()
+            scan(showLoading = false)
             state = state.copy(
                 busy = false,
                 error = null,
@@ -392,6 +406,8 @@ internal class OxideModsViewModel(private val version: Version) : ViewModel() {
         if (mods.isEmpty()) return
 
         state = state.copy(updating = true, error = null)
+        // 更新是一串下载，屏幕会暗下去；与旧界面一样在这期间保持常亮
+        eventViewModel.sendKeepScreen(true)
         updater = ModUpdater(
             mods = mods,
             modsDir = modsDir,
@@ -444,6 +460,7 @@ internal class OxideModsViewModel(private val version: Version) : ViewModel() {
         updater?.cancel()
         updater = null
         pendingUpdateWait = null
+        eventViewModel.sendKeepScreen(false)
         state = state.copy(updating = false, updateManifests = null)
     }
 
@@ -486,14 +503,14 @@ internal class OxideModsViewModel(private val version: Version) : ViewModel() {
         val versionId = row.remoteVersionId ?: return emptyList()
         val platform = row.platformEnum() ?: return emptyList()
         return runCatching {
-            val version = getVersionById(
+            val platformVersion = getVersionById(
                 versionId = versionId,
                 platform = platform,
                 projectId = projectId,
                 printLog = false,
             )
             val installed = resolveInstalledProjects()
-            version.platformDependencies()
+            platformVersion.platformDependencies()
                 .mapNotNull { dep ->
                     val id = dep.projectId ?: return@mapNotNull null
                     OxideModDependency(

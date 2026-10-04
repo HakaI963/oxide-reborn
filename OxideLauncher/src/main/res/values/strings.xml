@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="generic_cancel">Cancel</string>
+    <string name="oxide_ins_dismiss">Dismiss</string>
     <string name="generic_confirm">Confirm</string>
     <string name="generic_error">Error</string>
     <string name="generic_tip">Tip</string>
@@ -2109,6 +2110,56 @@
     <string name="oxide_mgr_empty_screenshots">No screenshots yet</string>
     <string name="oxide_mgr_empty_screenshots_detail">Take a screenshot in game and it will appear in this instance\'s screenshots folder.</string>
 
+    <!-- Oxide: the per-instance mods surface (rebuilt) -->
+    <string name="oxide_mod_title">Mods · %1$s</string>
+    <string name="oxide_mod_section">Installed mods</string>
+    <string name="oxide_mod_instance_facts">This instance: Minecraft %1$s · loader %2$s</string>
+    <string name="oxide_mod_state_all">All</string>
+    <string name="oxide_mod_state_enabled">Enabled</string>
+    <string name="oxide_mod_state_disabled">Disabled</string>
+    <string name="oxide_mod_filter_count">%1$s %2$d</string>
+    <string name="oxide_mod_disabled">Disabled — the file is renamed with a .disabled suffix</string>
+    <string name="oxide_mod_reading_badge">Reading</string>
+    <string name="oxide_mod_bulk_enable">Enable</string>
+    <string name="oxide_mod_bulk_disable">Disable</string>
+    <string name="oxide_mod_action_update_one">Check for a newer version of this mod</string>
+    <string name="oxide_mod_loader_mismatch_row">Not for this instance: it needs %2$s, this instance runs %1$s</string>
+    <string name="oxide_mod_delete_confirm">These files will be deleted from the mods folder. This cannot be undone.\n\n%1$s</string>
+
+    <!-- Oxide: mods metadata field names -->
+    <string name="oxide_mod_field_file_name">File name</string>
+    <string name="oxide_mod_field_file_size">File size</string>
+    <string name="oxide_mod_field_version">Mod version</string>
+    <string name="oxide_mod_field_author">Authors</string>
+    <string name="oxide_mod_field_loader">Loader</string>
+    <string name="oxide_mod_field_game_version">Minecraft</string>
+    <string name="oxide_mod_field_compatibility">Compatibility</string>
+
+    <!-- Oxide: mods compatibility verdicts. "Cannot tell" and "will not load" are different claims. -->
+    <string name="oxide_mod_compat_loaderless">This file declares no mod loader, so its loader compatibility cannot be checked.</string>
+    <string name="oxide_mod_compat_no_instance_loader">This instance has no mod loader, so loader compatibility cannot be checked.</string>
+    <string name="oxide_mod_compat_mismatch">This mod is not for this instance\'s loader. It will not load, and it will not be updated in place.</string>
+    <string name="oxide_mod_unknown_file">This file could not be read as a mod. Only its name and size are known.</string>
+
+    <!-- Oxide: mods details -->
+    <string name="oxide_mod_section_project">Project</string>
+    <string name="oxide_mod_section_dependencies">Dependencies</string>
+    <string name="oxide_mod_dependencies_failed">Dependencies could not be read from the platform.</string>
+    <string name="oxide_mod_dependencies_none">This mod declares no dependencies on the platform.</string>
+    <string name="oxide_mod_dependency_type">%1$s</string>
+    <string name="oxide_mod_dependency_installed">Installed</string>
+    <string name="oxide_mod_dependency_missing">Missing</string>
+
+    <!-- Oxide: mods one-shot outcomes. Counts are facts, never a blanket "done". -->
+    <string name="oxide_mod_done_toggled">%1$d mod(s) changed.</string>
+    <string name="oxide_mod_done_toggled_partial">%1$d changed, %2$d could not be renamed.</string>
+    <string name="oxide_mod_done_deleted">%1$d mod(s) deleted.</string>
+    <string name="oxide_mod_done_deleted_partial">%1$d deleted, %2$d could not be deleted.</string>
+    <string name="oxide_mod_done_updated">Mods updated.</string>
+    <string name="oxide_mod_done_up_to_date">Everything is already up to date.</string>
+    <string name="oxide_mod_no_version_info">This instance has no readable version information, so versions cannot be matched.</string>
+    <string name="oxide_mod_nothing_to_do">Nothing to change.</string>
+
     <!-- Oxide: the secondary surfaces (accounts, multiplayer, files, logs, launch) -->
     <string name="oxide_sec_topbar_account">Account</string>
     <string name="oxide_sec_topbar_back">Back</string>
@@ -2505,4 +2556,20 @@
     <string name="oxide_dlg_empty_options">Nothing to choose from</string>
     <string name="oxide_dlg_working">Working…</string>
     <string name="oxide_dlg_entry_invalid">This value can\'t be used yet</string>
+    <!-- 游戏内浮层：统一前缀 oxide_ingame_，只在这份文件里定义 -->
+    <!-- 悬浮球：球的按钮语义与它的开关状态 -->
+    <string name="oxide_ingame_ball_menu">Game menu</string>
+    <string name="oxide_ingame_ball_opened">Menu open</string>
+    <string name="oxide_ingame_ball_closed">Menu closed</string>
+    <!-- 日志框：四个图标按钮的朗读文本（原来全是 null，读屏念不到） -->
+    <string name="oxide_ingame_log_close">Close the log</string>
+    <string name="oxide_ingame_log_clear">Clear the log</string>
+    <string name="oxide_ingame_log_auto_scroll_on">Following new log lines</string>
+    <string name="oxide_ingame_log_auto_scroll_off">Not following new log lines</string>
+    <string name="oxide_ingame_log_scroll_to_end">Scroll to the last log line</string>
+    <!-- 浏览目录：空目录说明与删除按钮的朗读文本 -->
+    <string name="oxide_ingame_folder_empty">This folder has no files in it</string>
+    <string name="oxide_ingame_folder_delete">Delete %1$s</string>
+    <!-- 多人联机：房间还没有人时的说明（原来是一个空白列表） -->
+    <string name="oxide_ingame_mp_no_players">Nobody has joined the room yet</string>
 </resources>

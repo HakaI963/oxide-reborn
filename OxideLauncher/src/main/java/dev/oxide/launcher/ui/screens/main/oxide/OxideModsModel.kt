@@ -254,7 +254,7 @@ fun oxideModsMatches(row: OxideModRow, query: String): Boolean {
 }
 
 /** 搜索 + 状态筛选 */
-fun filterOxideMods(
+internal fun filterOxideMods(
     rows: List<OxideModRow>,
     query: String,
     state: OxideModState,

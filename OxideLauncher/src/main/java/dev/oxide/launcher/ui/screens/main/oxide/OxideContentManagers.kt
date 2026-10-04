@@ -47,7 +47,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -67,26 +66,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.oxide.launcher.R
-import dev.oxide.launcher.game.addons.modloader.ModLoader
 import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionFolders
-import dev.oxide.launcher.game.version.installed.VersionInfo
-import dev.oxide.launcher.game.version.mod.AllModReader
-import dev.oxide.launcher.game.version.mod.RemoteMod
-import dev.oxide.launcher.game.version.mod.isEnabled
-import dev.oxide.launcher.game.version.mod.update.ModManifest
-import dev.oxide.launcher.game.version.mod.update.ModUpdater
-import dev.oxide.launcher.game.version.mod.update.SelectableModManifest
-import dev.oxide.launcher.game.version.mod.update.toSelectableList
 import dev.oxide.launcher.game.version.resource_pack.ResourcePackInfo
 import dev.oxide.launcher.game.version.resource_pack.parseResourcePack
 import dev.oxide.launcher.game.version.saves.SaveData
 import dev.oxide.launcher.game.version.saves.isCompatible
 import dev.oxide.launcher.game.version.saves.parseLevelDatFile
-import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.screens.content.versions.elements.ShaderPackInfo
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.file.formatFileSize
@@ -96,24 +83,14 @@ import dev.oxide.launcher.utils.string.getMessageOrToString
 import dev.oxide.launcher.utils.string.stripColorCodes
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
-import dev.oxide.launcher.viewmodel.sendKeepScreen
-import dev.oxide.launcher.viewmodel.sendToast
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.apache.commons.io.FileUtils
 import java.io.File
-import kotlin.coroutines.resume
 
 private const val TAG = "OxideContentManagers"
-
-/** 同时读取远端信息的模组数上限，与旧界面一致 */
-private const val MOD_REMOTE_CONCURRENCY = 8
 
 /** 改名 / 备份输入框里的字符上限，避免超长目录名把卡片撑开 */
 private const val RENAME_MAX_LENGTH = 120
@@ -389,7 +366,6 @@ internal fun OxideContentPanel(
 
     var loading by remember(category) { mutableStateOf(true) }
     var rawEntries by remember(category) { mutableStateOf<List<OxideContentEntry>>(emptyList()) }
-    var mods by remember(category) { mutableStateOf<List<RemoteMod>>(emptyList()) }
 
     var query by remember(category) { mutableStateOf("") }
     var stateFilter by remember(category) { mutableStateOf(OxideContentState.All) }
@@ -412,11 +388,8 @@ internal fun OxideContentPanel(
     val minecraftVersion = versionInfo?.minecraftVersion.orEmpty()
     val canQuickPlay = versionInfo?.quickPlay?.isQuickPlaySingleplayer == true
 
-    val updater = remember(version) { ModUpdateController(scope) }
-
     // 下面这些在非组合的回调里也要用，因此先读一次：stringResource 是 @Composable，
     // 不能在 onClick / suspend lambda 里调用。
-    val noVersionInfoText = stringResource(R.string.oxide_mgr_no_version_info)
     val doneText = stringResource(R.string.oxide_mgr_done)
     val nameExistsText = stringResource(R.string.oxide_mgr_name_exists)
     val refreshLabel = stringResource(R.string.generic_refresh)
@@ -429,7 +402,6 @@ internal fun OxideContentPanel(
     val noMatchingLabel = stringResource(R.string.generic_no_matching_items)
     val renameLabel = stringResource(R.string.generic_rename)
     val backupLabel = stringResource(R.string.oxide_mgr_action_backup)
-    val updateLabel = stringResource(R.string.oxide_mgr_action_update)
     val selectAllLabel = stringResource(R.string.oxide_mgr_action_select_all)
     val clearLabel = stringResource(R.string.oxide_mgr_action_clear_selection)
     val deleteSelectedLabel = stringResource(R.string.oxide_mgr_action_delete_selected)
@@ -446,35 +418,11 @@ internal fun OxideContentPanel(
         loading = false
         read.onSuccess { result ->
             rawEntries = result.entries
-            mods = result.mods
         }.onFailure { e ->
             if (e is CancellationException) throw e
             Logger.error(TAG, "Failed to read ${category.folder.folderName}.", e)
             rawEntries = emptyList()
             errorMessage = e.getMessageOrToString()
-        }
-    }
-
-    // 模组的远端信息：与旧界面一样，一次最多八个在读，可取消
-    LaunchedEffect(version, category, refreshKey, mods) {
-        if (category != OxideContentCategory.Mods || mods.isEmpty()) return@LaunchedEffect
-        val semaphore = Semaphore(MOD_REMOTE_CONCURRENCY)
-        mods.forEach { mod ->
-            if (mod.isLoaded || mod.isLoading) return@forEach
-            launch {
-                semaphore.withPermit {
-                    runCatching { mod.load(loadFromCache = true) }
-                        .onFailure { e ->
-                            if (e !is CancellationException) {
-                                Logger.warning(
-                                    TAG,
-                                    "Failed to read remote info for ${mod.localMod.name}.",
-                                    e,
-                                )
-                            }
-                        }
-                }
-            }
         }
     }
 
@@ -489,7 +437,6 @@ internal fun OxideContentPanel(
     val selectedEntries = remember(visible, selection) {
         visible.filter { entry -> entry.key in selection }
     }
-    val updatable = oxideContentUpdatableSelection(category, selectedEntries)
     val counts = remember(rawEntries) { oxideContentStateCounts(rawEntries) }
     val everythingSelected = visible.isNotEmpty() && selection.size == visible.size
 
@@ -501,8 +448,8 @@ internal fun OxideContentPanel(
     /**
      * 所有磁盘写操作都从这里走
      *
-     * [after] 在 IO 之后、主线程之上跑：启用/禁用用它就地改那一行，
-     * 不用像旧界面那样为了一个开关把整个模组目录重读一遍。
+     * [after] 在 IO 之后、主线程之上跑。模组那一块不走这里：它有自己的状态
+     * 持有者与"每次写完重扫目录"的纪律。
      */
     fun runIo(refresh: Boolean = true, after: () -> Unit = {}, block: suspend () -> Unit) {
         scope.launch {
@@ -608,16 +555,6 @@ internal fun OxideContentPanel(
                     )
                     Spacer(Modifier.height(metrics.secRowGap))
                 }
-                val manifest = updater.manifest
-                if (manifest != null) {
-                    OxideModUpdateConfirm(
-                        metrics = metrics,
-                        manifests = manifest,
-                        onCancel = { updater.cancelSelection() },
-                        onConfirm = { chosen -> updater.confirmSelection(chosen) },
-                    )
-                    Spacer(Modifier.height(metrics.secRowGap))
-                }
             }
         }
 
@@ -660,7 +597,7 @@ internal fun OxideContentPanel(
                         )
                         OxideIconButton(
                             onClick = { refreshKey++ },
-                            enabled = !loading && !busy && !updater.running,
+                            enabled = !loading && !busy,
                             glyph = "↻",
                             modifier = Modifier.oxideIconDescription(refreshLabel),
                         )
@@ -709,33 +646,6 @@ internal fun OxideContentPanel(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
                         ) {
-                            if (category.canUpdate && updatable.isNotEmpty()) {
-                                OxideButton(
-                                    text = updateLabel,
-                                    onClick = {
-                                        val wanted = updatable.map { it.fileName }.toSet()
-                                        val remotes = mods.filter { mod ->
-                                            mod.localMod.file.name in wanted
-                                        }
-                                        val info = versionInfo
-                                        if (remotes.isNotEmpty() && info != null) {
-                                            updater.start(
-                                                mods = remotes,
-                                                modsDir = folderDir,
-                                                versionInfo = info,
-                                                eventViewModel = eventViewModel,
-                                                submitError = submitError,
-                                                onFinished = { refreshKey++ },
-                                            )
-                                        } else {
-                                            errorMessage = noVersionInfoText
-                                        }
-                                    },
-                                    enabled = !updater.running,
-                                    tone = OxideButtonTone.Primary,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
                             OxideButton(
                                 text = deleteSelectedLabel,
                                 onClick = {
@@ -837,24 +747,6 @@ internal fun OxideContentPanel(
                                 selection.add(entry.key)
                             }
                         },
-                        onToggleEnabled = {
-                            val mod = mods.firstOrNull {
-                                it.localMod.file.name == entry.fileName
-                            } ?: return@OxideContentRow
-                            runIo(refresh = false, after = {
-                                // 就地更新这一行：启用/禁用只是文件名多了一个后缀
-                                val nowEnabled = mod.localMod.file.isEnabled()
-                                rawEntries = rawEntries.map { row ->
-                                    if (row.key == entry.key) row.copy(enabled = nowEnabled) else row
-                                }
-                            }) {
-                                if (mod.localMod.file.isEnabled()) {
-                                    mod.localMod.disable()
-                                } else {
-                                    mod.localMod.enable()
-                                }
-                            }
-                        },
                         onRename = { renameTarget = entry },
                         onBackup = { backupTarget = entry },
                         onQuickPlay = {
@@ -904,7 +796,6 @@ private fun OxideContentRow(
     canQuickPlay: Boolean,
     minecraftVersion: String,
     onToggle: () -> Unit,
-    onToggleEnabled: () -> Unit,
     onRename: () -> Unit,
     onBackup: () -> Unit,
     onQuickPlay: () -> Unit,
@@ -1029,25 +920,6 @@ private fun OxideContentRow(
                     stringResource(R.string.oxide_mgr_action_open_image)
                 ),
             )
-        }
-        if (category.canEnable) {
-            // 状态由这一小块承担：它本身是 Role.Switch，朗读时也知道是个开关。
-            // 里面的开关自己不再重复朗读，否则同一信息会被念两遍。
-            Box(
-                modifier = Modifier.toggleable(
-                    value = entry.enabled,
-                    role = Role.Switch,
-                    onValueChange = { onToggleEnabled() },
-                ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(modifier = Modifier.clearAndSetSemantics { }) {
-                    OxideToggle(
-                        checked = entry.enabled,
-                        onCheckedChange = { onToggleEnabled() },
-                    )
-                }
-            }
         }
         if (entry.canRename) {
             OxideIconButton(
@@ -1199,234 +1071,34 @@ private fun OxideRenameForm(
     }
 }
 
-/** 模组更新前的那一次确认，与旧界面的清单对话框等价，只是就地贴在列表上方 */
-@Composable
-private fun OxideModUpdateConfirm(
-    metrics: OxideMetrics,
-    manifests: List<SelectableModManifest>,
-    onCancel: () -> Unit,
-    onConfirm: (List<SelectableModManifest>) -> Unit,
-) {
-    OxideSurface(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(
-            horizontal = metrics.cardGap,
-            vertical = metrics.secRowGap,
-        ),
-    ) {
-        Text(
-            text = stringResource(R.string.oxide_mgr_update_confirm_title, manifests.size),
-            color = Oxide.FgStrong,
-            fontSize = Oxide.Type.BodyStrong.fontSize,
-            lineHeight = Oxide.Type.BodyStrong.lineHeight,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(metrics.secRowGap))
-        manifests.forEach { manifest ->
-            val checked by manifest.selected.collectAsStateWithLifecycle()
-            OxideSecPickerRow(
-                label = manifest.data.project.title,
-                value = manifest.new.platformDisplayName(),
-                selected = checked,
-                onClick = { manifest.updateSelected(!checked) },
-            )
-            Spacer(Modifier.height(metrics.secRowGap))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap)) {
-            OxideButton(
-                text = stringResource(R.string.generic_cancel),
-                onClick = onCancel,
-                modifier = Modifier.weight(1f),
-            )
-            OxideButton(
-                text = stringResource(R.string.mods_update),
-                onClick = {
-                    // 读取勾选状态的那一刻才是准的，不缓存到重组里
-                    onConfirm(manifests.filter { it.selected.value })
-                },
-                tone = OxideButtonTone.Primary,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 模组更新
-// ---------------------------------------------------------------------------
-
-/**
- * 模组更新的挂起点
- *
- * 与旧界面同一条链路：[ModUpdater] 负责检查与下载，这里只提供"等用户确认"
- * 这一个挂起点，以及保持屏幕常亮。任务跑在面板的协程作用域里，
- * 面板离开组合时被取消，因此不会留下一个还在改文件的孤儿任务。
- */
-@Stable
-private class ModUpdateController(private val scope: CoroutineScope) {
-
-    var running by mutableStateOf(false)
-        private set
-
-    /** 非空时界面上贴出那张确认清单 */
-    var manifest by mutableStateOf<List<SelectableModManifest>?>(null)
-        private set
-
-    private var waiting: kotlinx.coroutines.CancellableContinuation<List<SelectableModManifest>>? = null
-    private var updater: ModUpdater? = null
-
-    fun start(
-        mods: List<RemoteMod>,
-        modsDir: File,
-        versionInfo: VersionInfo,
-        eventViewModel: EventViewModel,
-        submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
-        onFinished: () -> Unit,
-    ) {
-        if (running || mods.isEmpty()) return
-        running = true
-        eventViewModel.sendKeepScreen(true)
-
-        val created = ModUpdater(
-            mods = mods,
-            modsDir = modsDir,
-            minecraft = versionInfo.minecraftVersion,
-            modLoader = versionInfo.primaryLoader?.loader ?: ModLoader.UNKNOWN,
-            scope = scope,
-            waitForUserConfirm = { list: List<ModManifest> ->
-                suspendCancellableCoroutine { cont ->
-                    manifest = list.toSelectableList()
-                    waiting = cont
-                }
-            },
-        )
-        updater = created
-
-        created.updateAll(
-            onUpdated = {
-                finish()
-                eventViewModel.sendKeepScreen(false)
-                onFinished()
-            },
-            onNoModUpdates = {
-                finish()
-                eventViewModel.sendKeepScreen(false)
-                eventViewModel.sendToast(androidText(R.string.mods_update_no_mods_update))
-            },
-            onCancelled = {
-                finish()
-                eventViewModel.sendKeepScreen(false)
-            },
-            onError = { th ->
-                finish()
-                eventViewModel.sendKeepScreen(false)
-                onFinished()
-                Logger.error(TAG, "Failed to update mods.", th)
-                submitError(
-                    ErrorViewModel.ThrowableMessage(
-                        title = androidText(R.string.generic_error),
-                        message = androidText(th.getMessageOrToString()),
-                    )
-                )
-            },
-        )
-    }
-
-    /** 用户确认：把勾上的那些交回给 [ModUpdater] */
-    fun confirmSelection(chosen: List<SelectableModManifest>) {
-        val cont = waiting
-        waiting = null
-        manifest = null
-        cont?.resume(chosen)
-    }
-
-    /** 用户取消：交回空列表，[ModUpdater] 会自行中止安装 */
-    fun cancelSelection() {
-        val cont = waiting
-        waiting = null
-        manifest = null
-        cont?.resume(emptyList())
-    }
-
-    private fun finish() {
-        updater?.cancel()
-        updater = null
-        running = false
-        manifest = null
-        waiting = null
-    }
-}
-
 // ---------------------------------------------------------------------------
 // 读取与映射
 // ---------------------------------------------------------------------------
 
-/** 一次读取的结果：行 + 那些行背后真正的模组对象 */
+/**
+ * 一次读取的结果
+ *
+ * 模组不在这里：它由 [OxideModsSurface] 自己读、自己渲染。
+ */
 private class ContentRead(
     val entries: List<OxideContentEntry>,
-    val mods: List<RemoteMod> = emptyList(),
 )
 
 /**
  * 在 IO 上读一个分类的真实内容
  *
  * 每一类都走旧界面同样的入口，因此读到的就是同一批文件：
- * 模组 `AllModReader`、资源包 `parseResourcePack`、光影只收 zip、
- * 存档 `parseLevelDatFile`、截图只收 png。
+ * 资源包 `parseResourcePack`、光影只收 zip、存档 `parseLevelDatFile`、截图只收 png。
  */
 private suspend fun readContentEntries(
     version: Version,
     category: OxideContentCategory,
 ): ContentRead = when (category) {
-    OxideContentCategory.Mods -> readMods(version)
+    OxideContentCategory.Mods -> ContentRead(entries = emptyList())
     OxideContentCategory.ResourcePacks -> readResourcePacks(version)
     OxideContentCategory.Shaders -> readShaders(version)
     OxideContentCategory.Saves -> readSaves(version)
     OxideContentCategory.Screenshots -> readScreenshots(version)
-}
-
-private suspend fun readMods(version: Version): ContentRead {
-    val modsDir = VersionFolders.MOD.getDir(version.getGameDir())
-    val mods = AllModReader(modsDir).readAllForRemote()
-    return ContentRead(
-        entries = mods.map { mod -> mod.toContentEntry() },
-        mods = mods,
-    )
-}
-
-/** 一个模组 → 一行；显示名优先用项目标题，其次用本地元数据名，最后退回文件名 */
-private fun RemoteMod.toContentEntry(): OxideContentEntry {
-    val local = localMod
-    val remoteLoaders = remoteFile?.loaders?.toList().orEmpty()
-    val badge = when {
-        remoteLoaders.isNotEmpty() -> remoteLoaders.joinToString(" + ") { loader ->
-            loader.getDisplayName()
-        }
-
-        local.loader != ModLoader.UNKNOWN -> local.loader.displayName
-        else -> local.version
-    }
-    val title = projectInfo?.title?.takeIf { it.isNotBlank() } ?: local.name
-    val detail = buildList {
-        add(local.file.name)
-        local.version?.takeIf { it.isNotBlank() && it != title }?.let { add("v$it") }
-        local.authors.takeIf { it.isNotEmpty() }?.let { add(it.joinToString(", ")) }
-    }.joinToString(" · ")
-    return OxideContentEntry(
-        key = local.file.name,
-        fileName = local.file.name,
-        displayName = title,
-        detail = detail,
-        badge = badge,
-        enabled = local.file.isEnabled(),
-        // 与旧界面一致：只有能对上远端的模组才允许被勾选去更新
-        selectable = local.checkRemote,
-        valid = true,
-        size = local.fileSize.takeIf { it > 0L },
-        modifiedAt = local.file.lastModified(),
-        loading = isLoading,
-    )
 }
 
 private suspend fun readResourcePacks(version: Version): ContentRead {

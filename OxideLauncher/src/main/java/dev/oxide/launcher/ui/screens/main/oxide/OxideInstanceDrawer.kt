@@ -181,9 +181,10 @@ fun OxideInstanceDrawer(
     // 走 host 的 openFiles，而不是发 OpenFileManager 事件：
     // 那个事件会启动旧的 FileManagerActivity，也就是旧的那套 Material 文件浏览器。
     // v1.6.0 只改了 SupportDrawers 里的桥接，这两处自己定义 openFolder 的地方漏掉了。
-    val openFolder: (File) -> Unit = { dir ->
-        LocalOxideHostActions.current.openFiles(dir.absolutePath)
-    }
+    // 在组合期把动作取出来：CompositionLocal 只能在组合期读，
+    // 而这个 lambda 是从 onClick 调的，不在组合作用域里。
+    val openFilesAction = LocalOxideHostActions.current.openFiles
+    val openFolder: (File) -> Unit = { dir -> openFilesAction(dir.absolutePath) }
     // 五类内容现在进的是 Oxide 自己的管理表面，不再推旧界面的那五块整页
     val openContent: (OxideContentCategory) -> Unit = { category ->
         hostActions.openInstanceContent(version, category)

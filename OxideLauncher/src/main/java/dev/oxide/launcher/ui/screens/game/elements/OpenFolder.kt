@@ -1,5 +1,5 @@
 /*
- * Zalith Launcher 2
+ * Oxide Launcher
  * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -9,8 +9,8 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
@@ -23,68 +23,57 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.nonInteractiveScrollbar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.oxide.launcher.R
 import dev.oxide.launcher.context.copyLocalFile
 import dev.oxide.launcher.context.getFileName
-import dev.oxide.launcher.ui.components.BackgroundCard
-import dev.oxide.launcher.ui.components.CardTitleLayout
-import dev.oxide.launcher.ui.components.MarqueeText
-import dev.oxide.launcher.ui.components.ProgressDialog
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
-import dev.oxide.launcher.ui.screens.content.elements.BaseFileItem
-import dev.oxide.launcher.ui.theme.OxideTheme
-import dev.oxide.launcher.ui.theme.itemColor
-import dev.oxide.launcher.ui.theme.onItemColor
-import dev.oxide.launcher.ui.theme.showThemed
-import dev.oxide.launcher.utils.animation.getAnimateTween
-import dev.oxide.launcher.utils.animation.getAnimateTweenJellyBounce
+import dev.oxide.launcher.ui.screens.main.oxide.OxideConfirmDialog
+import dev.oxide.launcher.ui.screens.main.oxide.OxideTaskDialog
+import dev.oxide.launcher.ui.screens.main.oxide.showOxideMessageDialog
+import dev.oxide.launcher.ui.theme.Oxide
+import dev.oxide.launcher.utils.file.formatFileSize
+import dev.oxide.launcher.utils.formatDate
 import dev.oxide.launcher.utils.string.getMessageOrToString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -94,18 +83,47 @@ import kotlinx.coroutines.withContext
 import org.apache.commons.io.FileUtils
 import java.io.File
 import java.io.IOException
+import java.util.Date
 
 sealed interface OpenFolderOperation {
     data object None : OpenFolderOperation
+
     /** 开始浏览目录 */
     data class OpenFolder(val initialPath: File) : OpenFolderOperation
 }
 
 /**
- * 游戏内打开的浏览目录菜单，可在这个菜单内导入文件、删除文件等操作
- * 这是一个较为简单的临时页面，所有数据均不长期保存
- * @param requestClose 发起关闭请求
- * @param lifecycleScope 可用的生命周期协程作用域，用于执行删除、导入任务
+ * 游戏内打开的浏览目录面板
+ *
+ * 它不是弹窗，而是画在游戏层上的一层浮层（`VMActivity` 里
+ * `OpenFolderLayer(modifier = Modifier.fillMaxSize())`），因此这里量到的
+ * `maxWidth` / `maxHeight` **就是游戏窗口**——分屏或自由窗口下它可能只有屏幕的
+ * 一小块。面板的宽高全部由它推出，不写死任何与窗口有关的 dp。
+ *
+ * 行为一个没少：
+ *
+ * - 点遮罩关掉这一层（[requestClose]），关的动作立刻生效、不等动画；
+ * - 目录内容仍然在 `Dispatchers.IO` 上读，仍然用同一套排序键
+ *   （目录在前、再按小写名、再按原名、最后按绝对路径）；
+ * - 删除仍然是"确认 → 在 [lifecycleScope] 的 IO 上 `deleteQuietly` →
+ *   重新读一次目录"，删除期间也仍然有一块进度面板挡在上面；
+ * - 导入仍然用 `GetMultipleContents` 挑文件，仍然逐个 `copyLocalFile`，
+ *   某一个失败时报一次错并继续下一个，最后才回调完成。
+ *
+ * 换掉的是外壳与条目：
+ *
+ * - 原来是 `BackgroundCard` + `CardTitleLayout` + `Surface(onClick)`：
+ *   一层毛玻璃、一层半透明标题条、一个 Material 卡片。现在是一块不透明的
+ *   [GameOverlayPanel] 加一条发丝线。
+ * - 原来的条目借 `BaseFileItem`，字号来自 `MaterialTheme.typography`。
+ *   名字、修改时间与大小这三个**真实读数**照旧，只是排版换了；
+ *   名字改成单行截断而不是无限跑马灯——跑马灯每帧重新测量一次文本，
+ *   而这块面板可能整晚开着。条目上那个 `Animatable` 缩放进场也一并去掉：
+ *   几百个条目就是几百个动画对象，而列表本来就是从上往下读的。
+ * - 删除按钮带上一句"删除哪个文件"的朗读文本。原来只有一句"删除"，
+ *   读屏用户不知道删的是哪一个。
+ * - 长目录在**被夹住的**滚动区里，因此面板不会因为目录里有几万个条目
+ *   而被顶出屏幕。
  */
 @Composable
 fun OpenFolderLayer(
@@ -121,6 +139,9 @@ fun OpenFolderLayer(
     // 一次性保存不可变列表：之前在 IO 线程上 clear()/addAll() 修改快照列表，
     // 每次导航都会触发跨线程的全局快照应用与通知。
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
+
+    var deleteFile by remember { mutableStateOf<File?>(null) }
+    var deleteJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(operation) {
         internalPath = when (operation) {
@@ -145,11 +166,13 @@ fun OpenFolderLayer(
         files = loaded
     }
 
+    val browsing = operation is OpenFolderOperation.OpenFolder
+
     Box(
         modifier = modifier,
         contentAlignment = Alignment.CenterEnd
     ) {
-        if (operation is OpenFolderOperation.OpenFolder) {
+        if (browsing) {
             //这里不给动画，尽快恢复触控
             Box(
                 modifier = Modifier
@@ -162,210 +185,275 @@ fun OpenFolderLayer(
             )
         }
 
-        Box(
-            modifier = Modifier.fillMaxWidth(0.4f)
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth(0.55f)
         ) {
             AnimatedVisibility(
-                visible = operation is OpenFolderOperation.OpenFolder,
+                visible = browsing,
                 enter = fadeIn() + slideInHorizontally(
-                    animationSpec = getAnimateTweenJellyBounce()
+                    animationSpec = tween(Oxide.Motion.PopoverMs)
                 ) {
                     if (isRtl) -40 else 40
                 },
-                exit = fadeOut() + slideOutHorizontally {
+                exit = fadeOut() + slideOutHorizontally(
+                    animationSpec = tween(Oxide.Motion.PopoverMs)
+                ) {
                     if (isRtl) -40 else 40
                 }
             ) {
-                BackgroundCard(
-                    modifier = Modifier.padding(all = 12.dp),
-                    influencedByBackground = false,
-                    shape = MaterialTheme.shapes.extraLarge
+                val bounds = rememberGameOverlayBounds()
+                val path = internalPath
+
+                GameOverlayPanel(
+                    bounds = bounds,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bounds.edgeMargin),
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
+                    GameOverlayHeader(
+                        title = stringResource(R.string.files_browse_folder),
+                        bounds = bounds,
+                        closeDescription = stringResource(R.string.generic_close),
+                        onClose = requestClose,
+                    )
+                    GameOverlayHairline()
+
+                    //当前路径：玩家判断"删的是不是对的文件"的唯一依据
+                    Text(
+                        text = path?.absolutePath ?: stringResource(R.string.generic_loading),
+                        color = Oxide.FgMuted,
+                        fontSize = Oxide.Type.Mono.fontSize,
+                        lineHeight = Oxide.Type.Mono.lineHeight,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(
+                            start = bounds.padding,
+                            end = bounds.padding,
+                            top = bounds.rowGap,
+                            bottom = bounds.rowGap,
+                        ),
+                    )
+
+                    GameOverlayHairline()
+
+                    //文件浏览区域：高度先被夹住，长目录在**这一块自己**里滚
+                    GameOverlayScrollArea(
+                        maxHeight = bounds.contentMaxHeight,
+                        modifier = Modifier.padding(
+                            start = bounds.padding,
+                            end = bounds.padding,
+                            top = bounds.rowGap,
+                        ),
                     ) {
-                        CardTitleLayout(
-                            modifier = Modifier.fillMaxWidth(),
-                            blur = 0
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(all = 12.dp)
-                            ) {
-                                Text(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    text = stringResource(R.string.files_browse_folder),
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                internalPath?.let { file ->
-                                    MarqueeText(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        text = file.absolutePath,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            var deleteFile by remember { mutableStateOf<File?>(null) }
-                            var deleteJob by remember { mutableStateOf<Job?>(null) }
-
-                            //文件浏览区域
+                        if (files.isEmpty()) {
+                            GameOverlayNote(text = stringResource(R.string.oxide_ingame_folder_empty))
+                        } else {
                             val scrollState = rememberLazyListState()
                             LazyColumn(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .nonInteractiveScrollbar(
-                                        state = scrollState.scrollIndicatorState!!,
-                                        orientation = Orientation.Vertical,
-                                    ),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                contentPadding = PaddingValues(all = 12.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
                                 state = scrollState,
                             ) {
                                 items(files, key = { it.absolutePath }) { file ->
                                     FileItem(
                                         modifier = Modifier.fillMaxWidth(),
+                                        bounds = bounds,
                                         file = file,
-                                        onDelete = {
-                                            deleteFile = file
-                                        }
+                                        onDelete = { deleteFile = file },
                                     )
                                 }
                             }
-
-                            //删除文件对话框
-                            deleteFile?.let { file0 ->
-                                SimpleAlertDialog(
-                                    title = stringResource(R.string.generic_delete),
-                                    text = stringResource(R.string.files_delete_file, file0.name),
-                                    onConfirm = {
-                                        deleteJob?.cancel()
-                                        deleteJob = lifecycleScope.launch(Dispatchers.IO) {
-                                            FileUtils.deleteQuietly(file0)
-                                            refreshFiles = !refreshFiles
-                                            deleteJob = null
-                                        }
-                                        deleteFile = null
-                                    },
-                                    onDismiss = {
-                                        deleteFile = null
-                                    }
-                                )
-                            }
-
-                            //开始执行删除任务
-                            if (deleteJob != null) {
-                                ProgressDialog()
-                            }
-
-                            internalPath?.let { currentPath ->
-                                var importOperation by remember {
-                                    mutableStateOf<ImportFileOperation>(ImportFileOperation.None)
-                                }
-                                val context = LocalContext.current
-
-                                //导入文件到当前目录
-                                val launcher = rememberLauncherForActivityResult(
-                                    contract = ActivityResultContracts.GetMultipleContents()
-                                ) { uris ->
-                                    uris.takeIf { it.isNotEmpty() }?.let { uris0 ->
-                                        importOperation = ImportFileOperation.Import(uris0, currentPath)
-                                    }
-                                }
-
-                                ImportFileOperation(
-                                    context = context,
-                                    operation = importOperation,
-                                    onImported = { refreshFiles = !refreshFiles },
-                                    onFinished = { importOperation = ImportFileOperation.None }
-                                )
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp)
-                                        .padding(top = 12.dp, bottom = 10.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
-                                ) {
-                                    //关闭按钮
-                                    FilledTonalButton(
-                                        onClick = requestClose
-                                    ) {
-                                        Text(text = stringResource(R.string.generic_close))
-                                    }
-                                    //导入按钮
-                                    Button(
-                                        onClick = {
-                                            launcher.launch("*/*")
-                                        }
-                                    ) {
-                                        Text(text = stringResource(R.string.generic_import))
-                                    }
-                                }
-                            }
                         }
+                    }
+
+                    if (path != null) {
+                        GameOverlayHairline()
+                        FolderFooter(
+                            bounds = bounds,
+                            targetDir = path,
+                            onImported = { refreshFiles = !refreshFiles },
+                            onRequestClose = requestClose,
+                        )
                     }
                 }
             }
         }
     }
+
+    //删除文件对话框
+    deleteFile?.let { target ->
+        OxideConfirmDialog(
+            title = stringResource(R.string.generic_delete),
+            message = stringResource(R.string.files_delete_file, target.name),
+            confirmText = stringResource(R.string.generic_delete),
+            onConfirm = {
+                deleteJob?.cancel()
+                deleteJob = lifecycleScope.launch(Dispatchers.IO) {
+                    FileUtils.deleteQuietly(target)
+                    //组合期状态只能在主线程写：原来这两个赋值跑在 IO 上，
+                    //改目录的瞬间正好撞上一次重组就会抛
+                    withContext(Dispatchers.Main) {
+                        refreshFiles = !refreshFiles
+                        deleteJob = null
+                    }
+                }
+                deleteFile = null
+            },
+            onDismiss = {
+                deleteFile = null
+            },
+        )
+    }
+
+    //开始执行删除任务
+    if (deleteJob != null) {
+        OxideTaskDialog(
+            title = stringResource(R.string.generic_in_progress),
+            progress = null,
+        )
+    }
 }
 
+/** 底栏：关闭 + 导入。导入仍然挑 `*/*`，一个文件一个文件地拷 */
+@Composable
+private fun FolderFooter(
+    bounds: GameOverlayBounds,
+    targetDir: File,
+    onImported: () -> Unit,
+    onRequestClose: () -> Unit,
+) {
+    val context = LocalContext.current
+    var importOperation by remember { mutableStateOf<ImportFileOperation>(ImportFileOperation.None) }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        uris.takeIf { it.isNotEmpty() }?.let { uris0 ->
+            importOperation = ImportFileOperation.Import(uris0, targetDir)
+        }
+    }
+
+    ImportFileOperation(
+        context = context,
+        operation = importOperation,
+        onImported = onImported,
+        onFinished = { importOperation = ImportFileOperation.None }
+    )
+
+    GameOverlayFooter(bounds = bounds) {
+        //关闭按钮
+        GameOverlayButton(
+            text = stringResource(R.string.generic_close),
+            onClick = onRequestClose,
+            minHeight = bounds.buttonHeight,
+        )
+        //导入按钮
+        GameOverlayButton(
+            text = stringResource(R.string.generic_import),
+            onClick = {
+                launcher.launch("*/*")
+            },
+            minHeight = bounds.buttonHeight,
+            tone = GameOverlayButtonTone.Primary,
+        )
+    }
+}
+
+/**
+ * 目录里的一个条目
+ *
+ * 三个读数——名字、修改时间、大小——一个不少，都是真实的。
+ * 名字单行截断而不是无限跑马灯：跑马灯每帧重新测量一次文本，
+ * 而这块面板可能整晚开着。
+ */
 @Composable
 private fun FileItem(
     modifier: Modifier = Modifier,
+    bounds: GameOverlayBounds,
     file: File,
-    onClick: () -> Unit = {},
-    onDelete: () -> Unit = {},
-    color: Color = itemColor(),
-    contentColor: Color = onItemColor(),
+    onDelete: () -> Unit,
 ) {
-    val scale = remember { Animatable(initialValue = 0.95f) }
-    LaunchedEffect(Unit) {
-        scale.animateTo(targetValue = 1f, animationSpec = getAnimateTween())
-    }
-    Surface(
-        modifier = modifier.graphicsLayer(scaleY = scale.value, scaleX = scale.value),
-        color = color,
-        contentColor = contentColor,
-        shape = MaterialTheme.shapes.large,
-        onClick = onClick
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = bounds.buttonHeight)
+            .clip(Oxide.RadiusBlock)
+            .background(Oxide.BgButton)
+            .border(BorderStroke(1.dp, Oxide.Line), Oxide.RadiusBlock)
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        BaseFileItem(
-            file = file,
-            modifier = Modifier.padding(all = 12.dp),
-            suffix = {
-                IconButton(
-                    onClick = onDelete
-                ) {
-                    Icon(
-                        modifier = Modifier.size(24.dp),
-                        painter = painterResource(R.drawable.ic_delete_outlined),
-                        contentDescription = stringResource(R.string.generic_delete)
+        GameOverlayIcon(
+            painter = painterResource(
+                if (file.isDirectory) {
+                    R.drawable.ic_folder_outlined
+                } else {
+                    R.drawable.ic_description_outlined
+                }
+            ),
+            //文件类型由旁边的名字说明，不必再念一遍"文件夹"
+            contentDescription = null,
+            size = 14.dp,
+            tint = Oxide.FgGhost,
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = file.name,
+                color = Oxide.Fg,
+                fontSize = Oxide.Type.Body.fontSize,
+                lineHeight = Oxide.Type.Body.lineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = formatDate(
+                        date = Date(file.lastModified()),
+                        pattern = stringResource(R.string.date_format)
+                    ),
+                    color = Oxide.FgFaint,
+                    fontSize = Oxide.Type.MicroLabel.fontSize,
+                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                    maxLines = 1,
+                )
+                if (file.isFile) {
+                    Text(
+                        text = formatFileSize(FileUtils.sizeOf(file)),
+                        color = Oxide.FgFaint,
+                        fontSize = Oxide.Type.MicroLabel.fontSize,
+                        lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                        maxLines = 1,
                     )
                 }
             }
+        }
+        Spacer(Modifier.width(8.dp))
+        GameOverlayIconButton(
+            painter = painterResource(R.drawable.ic_delete_outlined),
+            // 光说"删除"会让人不知道删的是哪一个文件，因此带上名字
+            description = stringResource(R.string.oxide_ingame_folder_delete, file.name),
+            onClick = onDelete,
+            size = bounds.buttonHeight,
         )
     }
 }
 
 private sealed interface ImportFileOperation {
     data object None : ImportFileOperation
+
     /** 正式开始导入文件 */
     data class Import(val uris: List<Uri>, val targetDir: File) : ImportFileOperation
 }
 
 /**
  * 简单的导入文件任务
+ *
+ * 导入本身一行没改：仍然逐个 `copyLocalFile`，某一个失败就报一次错、
+ * 然后继续下一个，最后才回调 [onFinished]。
+ * 换掉的只有两处呈现：进度提示与错误说明都改用启动器那套 Oxide 面板
+ * （[OxideTaskDialog] 与 [showOxideMessageDialog]），不再是
+ * `ProgressDialog` 与 `MaterialAlertDialogBuilder`。
  */
 @Composable
 private fun ImportFileOperation(
@@ -376,17 +464,19 @@ private fun ImportFileOperation(
 ) {
     when (operation) {
         is ImportFileOperation.Import -> {
+            // 文案在组合期取一次；协程里不能调 stringResource
             val errorTitle = stringResource(R.string.generic_error)
             val errorMessage = stringResource(R.string.error_import_file)
 
             val uris = operation.uris
             val targetDir = operation.targetDir
 
-            LaunchedEffect(Unit) {
+            LaunchedEffect(uris, targetDir) {
                 launch(Dispatchers.IO) {
                     uris.forEach { uri ->
                         try {
-                            val fileName = context.getFileName(uri) ?: throw IOException("Failed to get file name")
+                            val fileName = context.getFileName(uri)
+                                ?: throw IOException("Failed to get file name")
                             val outputFile = File(targetDir, fileName)
                             context.copyLocalFile(uri, outputFile)
                             onImported()
@@ -395,12 +485,11 @@ private fun ImportFileOperation(
                             val messageString = errorMessage + "\n" + eString
 
                             withContext(Dispatchers.Main) {
-                                MaterialAlertDialogBuilder(context)
-                                    .setTitle(errorTitle)
-                                    .setMessage(messageString)
-                                    .setPositiveButton(R.string.generic_confirm) { dialog, _ ->
-                                        dialog.dismiss()
-                                    }.showThemed()
+                                showOxideMessageDialog(
+                                    context = context,
+                                    title = errorTitle,
+                                    message = messageString,
+                                )
                             }
                         }
                     }
@@ -408,27 +497,12 @@ private fun ImportFileOperation(
                 }
             }
 
-            ProgressDialog(
-                title = stringResource(R.string.files_importing)
+            OxideTaskDialog(
+                title = stringResource(R.string.files_importing),
+                progress = null,
             )
         }
-        is ImportFileOperation.None -> {}
-    }
-}
 
-@Preview(showBackground = true)
-@Composable
-private fun OpenFolderLayerPreview() {
-    OxideTheme {
-        Box(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            OpenFolderLayer(
-                modifier = Modifier.fillMaxSize(),
-                operation = OpenFolderOperation.OpenFolder(File("")),
-                requestClose = {},
-                lifecycleScope = rememberCoroutineScope()
-            )
-        }
+        is ImportFileOperation.None -> {}
     }
 }

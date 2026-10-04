@@ -403,6 +403,49 @@ internal fun GameOverlayIconButton(
 }
 
 /**
+ * 图标按钮：矢量图标 + 必给的朗读文本
+ *
+ * Material 的 `IconButton` 默认 48dp，在游戏上会挤掉整条控制栏；
+ * 这里取 [size]，由调用点按游戏窗口给。图标本身**不**作为朗读内容——
+ * 一枚垃圾桶读出来只是"图片"，因此 [description] 是必须的，不是可选的。
+ */
+@Composable
+internal fun GameOverlayIconButton(
+    painter: Painter,
+    description: String,
+    onClick: () -> Unit,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(Oxide.RadiusBadge)
+            .background(if (selected) Oxide.BgTabActive else Oxide.BgButton)
+            .border(
+                BorderStroke(1.dp, if (selected) Oxide.Line2 else Oxide.Line),
+                Oxide.RadiusBadge
+            )
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        GameOverlayIcon(
+            painter = painter,
+            contentDescription = null,
+            size = size * 0.45f,
+            tint = when {
+                !enabled -> Oxide.FgFaint
+                selected -> Oxide.Fg
+                else -> Oxide.FgMuted
+            },
+        )
+    }
+}
+
+/**
  * 一张可点的卡片动作（选择房主/房客、退出房间……）
  *
  * 整块都是热区，因此手指不必瞄准文字本身；不可点时整块一起变暗并停止响应，

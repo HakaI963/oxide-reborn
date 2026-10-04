@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.control_editor
 
+import dev.oxide.launcher.ui.theme.Oxide
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background

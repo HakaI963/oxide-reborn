@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.control_editor
 
+import dev.oxide.launcher.ui.theme.Oxide
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween

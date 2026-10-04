@@ -84,6 +84,7 @@ fun ShareLinkOperation(
         is ShareLinkOperation.Error -> {
             OxideConfirmDialog(
                 title = stringResource(R.string.crash_link_share_failed),
+                confirmText = stringResource(R.string.generic_confirm),
                 message = when (val error = operation.error) {
                     is LinkNotFoundException -> {
                         stringResource(R.string.crash_link_share_failed_link_not_found)

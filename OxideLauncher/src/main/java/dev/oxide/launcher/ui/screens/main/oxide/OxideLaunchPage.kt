@@ -601,9 +601,11 @@ private fun OxideLaunchStageRow(
             Spacer(Modifier.height(metrics.rowGap))
             OxideProgressBar(progress = snapshot.progress.coerceIn(0f, 1f))
         }
-        if (rate != null && rate > 0L) {
+        // rate 是委托属性，判空之后编译器不能把它收窄成 Long，先落到局部变量
+        val rateValue = rate
+        if (rateValue != null && rateValue > 0L) {
             Text(
-                text = stringResource(R.string.oxide_sec_launch_rate, formatFileSize(rate)),
+                text = stringResource(R.string.oxide_sec_launch_rate, formatFileSize(rateValue)),
                 color = Oxide.FgFaint,
                 fontSize = Oxide.Type.MicroLabel.fontSize,
                 lineHeight = Oxide.Type.MicroLabel.lineHeight,

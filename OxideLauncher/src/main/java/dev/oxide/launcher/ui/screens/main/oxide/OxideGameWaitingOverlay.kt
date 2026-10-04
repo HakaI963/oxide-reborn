@@ -210,7 +210,7 @@ private const val OXIDE_GAME_WAITING_WIDTH_IN_CARD_UNITS = 1.6f
  * 传 null 就完全没有计时器，面板上也就不会出现那个会自己动的数字。
  */
 @Composable
-fun OxideGameWaitingOverlay(
+internal fun OxideGameWaitingOverlay(
     metrics: OxideMetrics,
     facts: OxideGameWaitingFacts,
     visible: Boolean,

@@ -67,7 +67,7 @@ class OxideModifyVersionLogicTest {
         target: String = original,
         installedLoaders: List<OxideModLoader> = emptyList(),
         selections: Map<ModLoader, OxideModSelection> = emptyMap(),
-    ) = OxideModState(
+    ) = OxideModifyState(
         originalGameVersion = original,
         targetGameVersion = target,
         installed = installedLoaders,

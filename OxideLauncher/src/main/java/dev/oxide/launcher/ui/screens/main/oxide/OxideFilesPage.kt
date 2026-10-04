@@ -512,7 +512,7 @@ private fun OxideFilesBrowser(
                             // 后者把 key 加进 store 自己的集合却不推状态，于是确认条上
                             // 的条数会与真正被删掉的条数对不上，取消之后那一条还留在
                             // 集合里。点叉的语义就是"把这一条也纳入这次删除"。
-                            if (!selected) viewModel.toggleSelection(entry)
+                            viewModel.toggleSelection(entry)
                             onRequestDelete()
                         },
                     )

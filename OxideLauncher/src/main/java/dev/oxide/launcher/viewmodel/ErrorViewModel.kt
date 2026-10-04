@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.viewmodel
 
+import dev.oxide.launcher.ui.theme.Oxide
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

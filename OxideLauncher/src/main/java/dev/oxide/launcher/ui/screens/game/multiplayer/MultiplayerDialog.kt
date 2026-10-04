@@ -1,5 +1,5 @@
 /*
- * Zalith Launcher 2
+ * Oxide Launcher
  * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -9,8 +9,8 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
@@ -18,38 +18,21 @@
 
 package dev.oxide.launcher.ui.screens.game.multiplayer
 
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.nonInteractiveScrollbar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,10 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -69,40 +51,69 @@ import dev.oxide.launcher.R
 import dev.oxide.launcher.terracotta.TerracottaState
 import dev.oxide.launcher.terracotta.profile.TerracottaProfile
 import dev.oxide.launcher.ui.AndroidStringText
-import dev.oxide.launcher.ui.components.BackgroundCard
-import dev.oxide.launcher.ui.components.MarqueeText
-import dev.oxide.launcher.ui.components.rememberDialogMaxHeight
-import dev.oxide.launcher.ui.components.verticalScrollWithBar
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.itemColor
-import dev.oxide.launcher.ui.theme.onCardColor
-import dev.oxide.launcher.ui.theme.onItemColor
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayBounds
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayButton
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayButtonTone
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayCardButton
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayFooter
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayHairline
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayHeader
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayIcon
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayNote
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayPanel
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayProgressBar
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayRowButton
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayScrollArea
+import dev.oxide.launcher.ui.screens.game.elements.GameOverlayWorkingText
+import dev.oxide.launcher.ui.screens.game.elements.gameOverlayBoundsFor
+import dev.oxide.launcher.ui.screens.game.elements.gameOverlayListHeight
+import dev.oxide.launcher.ui.screens.game.elements.gameOverlayListOverflows
+import dev.oxide.launcher.ui.screens.game.elements.multiplayerLogToggle
+import dev.oxide.launcher.ui.screens.game.elements.rememberGameOverlayBounds
+import dev.oxide.launcher.ui.theme.Oxide
 
 sealed interface TerracottaLogOperation {
     /** 正常情况下，不展示日志内容，显示对话框 UI */
     data object None : TerracottaLogOperation
+
     /** 正在收集日志 */
     data object CollectingLog : TerracottaLogOperation
+
     /** 切换到展示日志的模式 */
     data class EnableLog(val logString: String) : TerracottaLogOperation
 }
 
 /**
- * 多人联机菜单Dialog
- * @param logOperation 陶瓦联机核心日志展示状态
- * @param onShowLog 联机菜单请求切换到日志展示状态
- * @param onHideLog 联机菜单请求退出日志展示状态
- * @param isWaitingInteractive 在等待页面是否可以进行交互
- * @param terracottaVer 陶瓦联机核心版本号
- * @param easyTierVer EasyTier版本号
- * @param profiles 陶瓦联机当前房间所有玩家配置
- * @param onHostRoleClick 用户选择成为房主
- * @param onHostCopyCode 房主复制房间邀请码
- * @param onGuestPositive 房客正确输入邀请码
- * @param onGuestCopyUrl 房客复制备用链接
- * @param onBack 退出当前步骤
+ * 多人联机面板
+ *
+ * 八种联机状态一个没少，连接链路也没有动：
+ * `onHostRoleClick` / `onGuestPositive` / `onHostCopyCode` / `onGuestCopyUrl`
+ * 仍然分别交给 `TerracottaViewModel`，日志仍然由
+ * [TerracottaLogOperation.CollectingLog] 与 `EnableLog` 这一对状态驱动。
+ *
+ * 换掉的是那张 Material 卡片与它周围的一整套排版：
+ *
+ * - 面板改成 [GameOverlayPanel]：**不透明**的 `BgElevated`、14dp 圆角、
+ *   1px 发丝线。原来是 `cardColor(false)` 配 `shadowElevation = 6dp`——
+ *   一层半透明的卡压在一块正在跑的游戏画面上。
+ * - 尺寸由**承载游戏的那个窗口**夹住（见
+ *   [rememberGameOverlayBounds][dev.oxide.launcher.ui.screens.game.elements.BoxWithConstraintsScope.rememberGameOverlayBounds]）。
+ *   原来这一层是 `fillMaxWidth(0.7f)` 加 `rememberDialogMaxHeight()`，
+ *   而弹窗自己的窗口 `MATCH_PARENT` 铺的是整块显示区：分屏或自由窗口下，
+ *   一块只有屏幕十分之一的游戏上方会盖着一张按整屏算出来的面板。
+ * - 每一片内容都在**被夹住的**滚动区里。联机日志动辄上千行，玩家列表也可能是
+ *   二十个人，原来那些 `verticalScroll` 挂在一个 `weight(1f, fill = false)`
+ *   上，高度上限只来自"面板高度 − 标题"，而面板高度又是按显示区算的——
+ *   这就是那个 P0 崩溃的路子。现在先夹再滚，见 [gameOverlayListHeight]。
+ * - `LoadingIndicator` 与 `LinearProgressIndicator` 换成了不发光的进度条：
+ *   Material 的 `LoadingIndicator` 是一段永不停歇的动画，叠在一块正在跑的游戏上
+ *   既吵又耗电，而且**不提供任何新信息**——这一层只知道"在等"，不知道等多久。
+ * - 玩家名与厂商名原来是无限跑马灯。跑马灯每帧重新测量一次文本，
+ *   而这块面板可能整晚开着；现在是单行截断。
+ *
+ * 底栏那两个按钮的行为一字未改：看日志 / 刷新换字，收集期间不可点
+ * （见 [multiplayerLogToggle]）。
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MultiplayerDialog(
     onClose: () -> Unit,
@@ -130,181 +141,172 @@ fun MultiplayerDialog(
         )
     ) {
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth(0.7f)
-                .heightIn(max = rememberDialogMaxHeight())
-                .fillMaxHeight(),
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(all = 6.dp)
-                    .heightIn(max = (maxHeight - 12.dp).coerceAtMost(rememberDialogMaxHeight()))
-                    .wrapContentHeight(),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = cardColor(false),
-                contentColor = onCardColor(),
-                shadowElevation = 6.dp
-            ) {
-                Column(
-                    modifier = Modifier.padding(all = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.terracotta_menu),
-                        style = MaterialTheme.typography.titleLarge
+            val bounds = rememberGameOverlayBounds()
+            GameOverlayPanel(bounds = bounds) {
+                GameOverlayHeader(
+                    title = stringResource(R.string.terracotta_menu),
+                    bounds = bounds,
+                )
+                GameOverlayHairline()
+
+                val contentModifier = Modifier
+                    .weight(1f, fill = false)
+                    .padding(
+                        start = bounds.padding,
+                        end = bounds.padding,
+                        top = bounds.rowGap,
                     )
 
-                    val commonModifier = Modifier
-                        .weight(1f, fill = false)
-                        .fillMaxWidth()
+                when (logOperation) {
+                    is TerracottaLogOperation.None, TerracottaLogOperation.CollectingLog -> {
+                        when (dialogState) {
+                            null -> WaitingCoreRow(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                            )
 
-                    when (logOperation) {
-                        is TerracottaLogOperation.None, TerracottaLogOperation.CollectingLog -> {
-                            when (dialogState) {
-                                null -> {
-                                    Box(
-                                        modifier = commonModifier,
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        LoadingIndicator()
-                                    }
-                                }
-                                is TerracottaState.Waiting -> {
-                                    WaitingUI(
-                                        modifier = commonModifier,
-                                        onHostClick = onHostRoleClick,
-                                        onGuestPositive = onGuestPositive,
-                                        isInteractive = isWaitingInteractive,
-                                        onShowToast = onShowToast
+                            is TerracottaState.Waiting -> WaitingUI(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                                onHostClick = onHostRoleClick,
+                                onGuestPositive = onGuestPositive,
+                                isInteractive = isWaitingInteractive,
+                                onShowToast = onShowToast
+                            )
+
+                            is TerracottaState.HostScanning -> CommonProgressLayout(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                                progress = stringResource(R.string.terracotta_status_host_scanning),
+                                text = {
+                                    GameOverlayNote(
+                                        text = stringResource(
+                                            R.string.terracotta_status_host_scanning_desc
+                                        )
                                     )
-                                }
-                                is TerracottaState.HostScanning -> {
-                                    CommonProgressLayout(
-                                        modifier = commonModifier,
-                                        progress = stringResource(R.string.terracotta_status_host_scanning),
-                                        text = {
-                                            Text(
-                                                text = stringResource(R.string.terracotta_status_host_scanning_desc),
-                                                style = MaterialTheme.typography.labelMedium
-                                            )
-                                        },
-                                        backDescription = stringResource(R.string.terracotta_status_host_scanning_back),
-                                        onBack = onBack
-                                    )
-                                }
-                                is TerracottaState.HostStarting -> {
-                                    CommonProgressLayout(
-                                        modifier = commonModifier,
-                                        progress = stringResource(R.string.terracotta_status_host_starting),
-                                        backDescription = stringResource(R.string.terracotta_status_host_starting_back),
-                                        onBack = onBack
-                                    )
-                                }
-                                is TerracottaState.HostOK -> {
-                                    OkRoomUI(
-                                        modifier = commonModifier,
-                                        code = dialogState.code ?: "",//不会为null
-                                        profiles = profiles,
-                                        onCopy = {
-                                            onHostCopyCode(dialogState)
-                                        },
-                                        onExit = onBack,
-                                        okText = stringResource(R.string.terracotta_status_host_ok),
-                                        codeLabel = stringResource(R.string.terracotta_status_host_ok_code),
-                                        copyTitle = stringResource(R.string.terracotta_status_host_ok_code_copy),
-                                        copyDesc = stringResource(R.string.terracotta_status_host_ok_code_desc),
-                                        backDesc = stringResource(R.string.terracotta_status_host_ok_back)
-                                    )
-                                }
-                                is TerracottaState.GuestConnecting -> {
-                                    CommonProgressLayout(
-                                        modifier = commonModifier,
-                                        progress = stringResource(R.string.terracotta_status_guest_starting),
-                                        backDescription = stringResource(R.string.terracotta_status_guest_starting_back),
-                                        onBack = onBack
-                                    )
-                                }
-                                is TerracottaState.GuestStarting -> {
-                                    GuestStartingUI(
-                                        modifier = commonModifier,
-                                        difficulty = dialogState.difficulty,
-                                        onBack = onBack
-                                    )
-                                }
-                                is TerracottaState.GuestOK -> {
-                                    OkRoomUI(
-                                        modifier = commonModifier,
-                                        code = dialogState.url ?: "",
-                                        profiles = profiles,
-                                        onCopy = {
-                                            onGuestCopyUrl(dialogState)
-                                        },
-                                        onExit = onBack,
-                                        okText = stringResource(R.string.terracotta_status_guest_ok),
-                                        codeLabel = stringResource(R.string.terracotta_status_guest_ok_address),
-                                        copyTitle = stringResource(R.string.terracotta_status_guest_ok_address_copy),
-                                        copyDesc = stringResource(R.string.terracotta_status_guest_ok_address_desc),
-                                        backDesc = stringResource(R.string.terracotta_status_guest_ok_back)
-                                    )
-                                }
-                                is TerracottaState.Exception -> {
-                                    ExceptionUI(
-                                        modifier = commonModifier,
-                                        title = stringResource(dialogState.getEnumType().textRes),
-                                        onExit = onBack
-                                    )
-                                }
-                            }
-                        }
-                        is TerracottaLogOperation.EnableLog -> {
-                            LogUI(
-                                modifier = commonModifier,
-                                logString = logOperation.logString,
-                                onExit = onHideLog
+                                },
+                                backDescription = stringResource(
+                                    R.string.terracotta_status_host_scanning_back
+                                ),
+                                onBack = onBack
+                            )
+
+                            is TerracottaState.HostStarting -> CommonProgressLayout(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                                progress = stringResource(R.string.terracotta_status_host_starting),
+                                backDescription = stringResource(
+                                    R.string.terracotta_status_host_starting_back
+                                ),
+                                onBack = onBack
+                            )
+
+                            is TerracottaState.HostOK -> OkRoomUI(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                                code = dialogState.code ?: "",//不会为null
+                                profiles = profiles,
+                                onCopy = {
+                                    onHostCopyCode(dialogState)
+                                },
+                                onExit = onBack,
+                                okText = stringResource(R.string.terracotta_status_host_ok),
+                                codeLabel = stringResource(R.string.terracotta_status_host_ok_code),
+                                copyTitle = stringResource(R.string.terracotta_status_host_ok_code_copy),
+                                copyDesc = stringResource(R.string.terracotta_status_host_ok_code_desc),
+                                backDesc = stringResource(R.string.terracotta_status_host_ok_back)
+                            )
+
+                            is TerracottaState.GuestConnecting -> CommonProgressLayout(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                                progress = stringResource(R.string.terracotta_status_guest_starting),
+                                backDescription = stringResource(
+                                    R.string.terracotta_status_guest_starting_back
+                                ),
+                                onBack = onBack
+                            )
+
+                            is TerracottaState.GuestStarting -> GuestStartingUI(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                                difficulty = dialogState.difficulty,
+                                onBack = onBack
+                            )
+
+                            is TerracottaState.GuestOK -> OkRoomUI(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                                code = dialogState.url ?: "",
+                                profiles = profiles,
+                                onCopy = {
+                                    onGuestCopyUrl(dialogState)
+                                },
+                                onExit = onBack,
+                                okText = stringResource(R.string.terracotta_status_guest_ok),
+                                codeLabel = stringResource(R.string.terracotta_status_guest_ok_address),
+                                copyTitle = stringResource(R.string.terracotta_status_guest_ok_address_copy),
+                                copyDesc = stringResource(R.string.terracotta_status_guest_ok_address_desc),
+                                backDesc = stringResource(R.string.terracotta_status_guest_ok_back)
+                            )
+
+                            is TerracottaState.Exception -> ExceptionUI(
+                                bounds = bounds,
+                                modifier = contentModifier,
+                                title = stringResource(dialogState.getEnumType().textRes),
+                                onExit = onBack
                             )
                         }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    is TerracottaLogOperation.EnableLog -> LogUI(
+                        bounds = bounds,
+                        modifier = contentModifier,
+                        logString = logOperation.logString,
+                        onExit = onHideLog
+                    )
+                }
+
+                Spacer(Modifier.height(bounds.rowGap))
+                GameOverlayHairline()
+                GameOverlayFooter(bounds = bounds) {
+                    //版本号
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        //版本号
-                        Column(modifier = Modifier.weight(1f)) {
-                            val terracottaVer0 = terracottaVer ?: stringResource(R.string.generic_loading)
-                            val easyTierVer0 = easyTierVer ?: stringResource(R.string.generic_loading)
-                            Text(
-                                text = stringResource(R.string.terracotta_metadata_ver, terracottaVer0),
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.terracotta_metadata_easytier_ver, easyTierVer0),
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-
-                        //查看日志
-                        TextButton(
-                            onClick = onShowLog,
-                            enabled = logOperation !is TerracottaLogOperation.CollectingLog
-                        ) {
-                            if (logOperation is TerracottaLogOperation.EnableLog) {
-                                //切换文字到 -> 刷新
-                                Text(text = stringResource(R.string.generic_refresh))
-                            } else {
-                                Text(text = stringResource(R.string.terracotta_log))
-                            }
-                        }
-
-                        //关闭
-                        TextButton(
-                            onClick = onClose
-                        ) {
-                            Text(text = stringResource(R.string.generic_close))
-                        }
+                        val terracottaVer0 = terracottaVer ?: stringResource(R.string.generic_loading)
+                        val easyTierVer0 = easyTierVer ?: stringResource(R.string.generic_loading)
+                        GameOverlayNote(text = stringResource(R.string.terracotta_metadata_ver, terracottaVer0))
+                        GameOverlayNote(text = stringResource(R.string.terracotta_metadata_easytier_ver, easyTierVer0))
                     }
+
+                    //查看日志 / 刷新
+                    val toggle = multiplayerLogToggle(
+                        showingLog = logOperation is TerracottaLogOperation.EnableLog,
+                        collectingLog = logOperation is TerracottaLogOperation.CollectingLog,
+                    )
+                    GameOverlayButton(
+                        text = if (toggle.isRefresh) {
+                            stringResource(R.string.generic_refresh)
+                        } else {
+                            stringResource(R.string.terracotta_log)
+                        },
+                        onClick = onShowLog,
+                        minHeight = bounds.buttonHeight,
+                        enabled = toggle.enabled,
+                    )
+
+                    //关闭
+                    GameOverlayButton(
+                        text = stringResource(R.string.generic_close),
+                        onClick = onClose,
+                        minHeight = bounds.buttonHeight,
+                        tone = GameOverlayButtonTone.Primary,
+                    )
                 }
             }
         }
@@ -312,54 +314,71 @@ fun MultiplayerDialog(
 }
 
 /**
+ * 联机核心还没起来：只有一条说不清进度的槽，和一句"正在做什么"
+ *
+ * 原来是 Material 的 `LoadingIndicator`，一段无意义的永动动画。
+ * 这里刻意不循环：[GameOverlayWorkingText] 已经说明正在加载，
+ * 而一个停不下来的动画只会让这块面板一直亮着。
+ */
+@Composable
+private fun WaitingCoreRow(
+    bounds: GameOverlayBounds,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
+    ) {
+        GameOverlayProgressBar(progress = null)
+        GameOverlayNote(text = GameOverlayWorkingText())
+    }
+}
+
+/**
  * 等待选择角色
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun WaitingUI(
+    bounds: GameOverlayBounds,
     isInteractive: Boolean,
     onHostClick: () -> Unit,
     onGuestPositive: (roomCode: String) -> Unit,
     modifier: Modifier = Modifier,
     onShowToast: (AndroidStringText) -> Unit = {},
-    scrollState: ScrollState = rememberScrollState()
 ) {
     var guestOperation by remember { mutableStateOf<GuestWaitingOperation>(GuestWaitingOperation.None) }
 
-    Box(
-        modifier = modifier.verticalScroll(scrollState),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        GameOverlayScrollArea(maxHeight = bounds.contentMaxHeight) {
             //房主
-            SimpleCardButton(
-                modifier = Modifier.fillMaxWidth(),
+            GameOverlayCardButton(
                 icon = painterResource(R.drawable.ic_home_filled),
                 title = stringResource(R.string.terracotta_status_waiting_host_title),
                 description = stringResource(R.string.terracotta_status_waiting_host_desc),
                 onClick = onHostClick,
+                minHeight = bounds.buttonHeight,
                 enabled = isInteractive
             )
 
             //房客
-            SimpleCardButton(
-                modifier = Modifier.fillMaxWidth(),
+            GameOverlayCardButton(
                 icon = painterResource(R.drawable.ic_group_filled),
                 title = stringResource(R.string.terracotta_status_waiting_guest_title),
                 description = stringResource(R.string.terracotta_status_waiting_guest_desc),
                 onClick = {
                     guestOperation = GuestWaitingOperation.OnClick
                 },
+                minHeight = bounds.buttonHeight,
                 enabled = isInteractive
             )
         }
 
         //禁止交互时，提示用户正在加载中
         if (!isInteractive) {
-            LoadingIndicator()
+            GameOverlayProgressBar(progress = null)
         }
     }
 
@@ -375,6 +394,7 @@ private fun WaitingUI(
 @Composable
 private fun WaitingUIPreview() {
     WaitingUI(
+        bounds = gameOverlayBoundsFor(420, 320),
         isInteractive = true,
         onHostClick = {},
         onGuestPositive = {}
@@ -386,46 +406,45 @@ private fun WaitingUIPreview() {
  */
 @Composable
 private fun GuestStartingUI(
+    bounds: GameOverlayBounds,
     modifier: Modifier = Modifier,
     difficulty: TerracottaState.GuestStarting.Difficulty,
     onBack: () -> Unit
 ) {
     CommonProgressLayout(
+        bounds = bounds,
         modifier = modifier,
         progress = stringResource(R.string.terracotta_status_guest_starting),
         text = if (difficulty != TerracottaState.GuestStarting.Difficulty.UNKNOWN) (@Composable {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
+                GameOverlayIcon(
                     painter = when (difficulty) {
                         TerracottaState.GuestStarting.Difficulty.EASIEST,
                         TerracottaState.GuestStarting.Difficulty.SIMPLE ->
                             painterResource(R.drawable.ic_info_filled)
-                        else ->
-                            painterResource(R.drawable.ic_warning_filled)
+                        else -> painterResource(R.drawable.ic_warning_filled)
                     },
-                    contentDescription = null
+                    contentDescription = null,
+                    size = 13.dp,
+                    tint = Oxide.FgMuted,
                 )
-                if (difficulty != TerracottaState.GuestStarting.Difficulty.UNKNOWN) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            modifier = Modifier.fillMaxWidth(),
-                            text = stringResource(difficulty.textRes)
-                        )
-                        Text(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .alpha(0.7f),
-                            text = stringResource(R.string.terracotta_difficulty_estimate_only),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = stringResource(difficulty.textRes),
+                        color = Oxide.Fg,
+                        fontSize = Oxide.Type.Body.fontSize,
+                        lineHeight = Oxide.Type.Body.lineHeight,
+                    )
+                    GameOverlayNote(
+                        text = stringResource(R.string.terracotta_difficulty_estimate_only)
+                    )
                 }
             }
         }) else null,
@@ -438,6 +457,7 @@ private fun GuestStartingUI(
 @Composable
 private fun GuestStartingUIPreview() {
     GuestStartingUI(
+        bounds = gameOverlayBoundsFor(420, 320),
         difficulty = TerracottaState.GuestStarting.Difficulty.UNKNOWN,
         onBack = {}
     )
@@ -448,6 +468,7 @@ private fun GuestStartingUIPreview() {
  */
 @Composable
 private fun OkRoomUI(
+    bounds: GameOverlayBounds,
     modifier: Modifier = Modifier,
     code: String,
     profiles: List<TerracottaProfile>,
@@ -461,58 +482,57 @@ private fun OkRoomUI(
     backDesc: String,
     profilesLabel: String = stringResource(R.string.terracotta_player_list)
 ) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    // 半屏留给邀请码与两个动作，半屏留给玩家列表；
+    // 窗口窄的时候两块各占一半而不是挤成一条，最窄的那一侧仍然读得出
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-        ) {
-            //文字部分
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScrollWithBar(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(text = okText)
-                HorizontalDivider(modifier = Modifier.fillMaxWidth())
+        GameOverlayScrollArea(maxHeight = bounds.contentMaxHeight) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    text = codeLabel,
-                    style = MaterialTheme.typography.labelMedium
+                    text = okText,
+                    color = Oxide.Fg,
+                    fontSize = Oxide.Type.BodyStrong.fontSize,
+                    lineHeight = Oxide.Type.BodyStrong.lineHeight,
                 )
+                GameOverlayHairline()
+                GameOverlayNote(text = codeLabel)
+                //邀请码 / 地址：等宽，这一行换行与否都不影响可读性
                 Text(
                     text = code,
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-            //按钮部分
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                //复制按钮
-                SimpleRowButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = painterResource(R.drawable.ic_copy_all_filled),
-                    title = copyTitle,
-                    description = copyDesc,
-                    onClick = onCopy
-                )
-                //退出按钮
-                SimpleRowButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = painterResource(R.drawable.ic_arrow_back),
-                    title = backTitle,
-                    description = backDesc,
-                    onClick = onExit
+                    color = Oxide.FgMuted,
+                    fontSize = Oxide.Type.Mono.fontSize,
+                    lineHeight = Oxide.Type.Mono.lineHeight,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
 
+        //按钮
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            //复制按钮
+            GameOverlayRowButton(
+                icon = painterResource(R.drawable.ic_copy_all_filled),
+                title = copyTitle,
+                description = copyDesc,
+                onClick = onCopy,
+                minHeight = bounds.buttonHeight
+            )
+            //退出按钮
+            GameOverlayRowButton(
+                icon = painterResource(R.drawable.ic_arrow_back),
+                title = backTitle,
+                description = backDesc,
+                onClick = onExit,
+                minHeight = bounds.buttonHeight
+            )
+        }
+
         //玩家列表
         ProfileListPanel(
-            modifier = Modifier.weight(1f),
+            bounds = bounds,
             title = profilesLabel,
             profiles = profiles
         )
@@ -521,36 +541,76 @@ private fun OkRoomUI(
 
 /**
  * 通用房间玩家列表
+ *
+ * 列表高度由 [gameOverlayListHeight] 算出：人少时按行数铺开，人多时被内容区
+ * 上限夹住并在**这一块自己**里滚。因此这块面板的高度不随房间人数变化。
  */
 @Composable
 private fun ProfileListPanel(
+    bounds: GameOverlayBounds,
     title: String,
     profiles: List<TerracottaProfile>,
-    modifier: Modifier
 ) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(text = title)
-        HorizontalDivider()
+    val rowHeight = remember(bounds) { bounds.buttonHeight + 4.dp }
+    val overflows = remember(profiles.size, bounds) {
+        gameOverlayListOverflows(profiles.size, bounds.contentMaxHeight, rowHeight)
+    }
+    val listHeight = remember(profiles.size, bounds) {
+        gameOverlayListHeight(profiles.size, bounds.contentMaxHeight, rowHeight)
+    }
 
-        val scrollState = rememberLazyListState()
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .nonInteractiveScrollbar(
-                    state = scrollState.scrollIndicatorState!!,
-                    orientation = Orientation.Vertical,
-                ),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            state = scrollState,
-        ) {
-            items(items = profiles, key = { it.toString() }) { profile ->
-                TerracottaProfileLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    profile = profile
-                )
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                color = Oxide.Fg,
+                fontSize = Oxide.Type.BodyStrong.fontSize,
+                lineHeight = Oxide.Type.BodyStrong.lineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            // 人数是真实读数，写出来而不是靠"列表有多长"去猜
+            Text(
+                text = profiles.size.toString(),
+                color = Oxide.FgFaint,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                maxLines = 1,
+            )
+        }
+        GameOverlayHairline()
+
+        if (profiles.isEmpty()) {
+            GameOverlayNote(text = stringResource(R.string.oxide_ingame_mp_no_players))
+        } else if (overflows) {
+            // 装不下：高度先被夹住，再在这一块自己里滚
+            val scrollState = rememberLazyListState()
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = listHeight),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                state = scrollState,
+            ) {
+                items(items = profiles, key = { it.toString() }) { profile ->
+                    TerracottaProfileLayout(
+                        modifier = Modifier.fillMaxWidth(),
+                        bounds = bounds,
+                        profile = profile
+                    )
+                }
+            }
+        } else {
+            // 装得下：一两个人时不必挂一个懒列表，直接全部铺开
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                profiles.forEach { profile ->
+                    TerracottaProfileLayout(
+                        modifier = Modifier.fillMaxWidth(),
+                        bounds = bounds,
+                        profile = profile
+                    )
+                }
             }
         }
     }
@@ -558,24 +618,40 @@ private fun ProfileListPanel(
 
 @Composable
 private fun TerracottaProfileLayout(
+    bounds: GameOverlayBounds,
     profile: TerracottaProfile,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            maxLines = 2
-        ) {
-            //玩家名字
-            MarqueeText(text = profile.name ?: stringResource(R.string.terracotta_player_anonymous))
-            //身份/类别
-            Text(text = stringResource(profile.type.textRes))
-        }
-        MarqueeText(
-            modifier = Modifier.alpha(0.7f),
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        //玩家名字与身份：名字是玩家自己取的，可能很长，因此截断而不是跑马灯
+        Text(
+            text = profile.name ?: stringResource(R.string.terracotta_player_anonymous),
+            color = Oxide.Fg,
+            fontSize = Oxide.Type.Body.fontSize,
+            lineHeight = Oxide.Type.Body.lineHeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        //身份/类别
+        Text(
+            text = stringResource(profile.type.textRes),
+            color = Oxide.FgMuted,
+            fontSize = Oxide.Type.MicroLabel.fontSize,
+            lineHeight = Oxide.Type.MicroLabel.lineHeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        //厂商
+        Text(
             text = profile.vendor,
-            style = MaterialTheme.typography.labelSmall
+            color = Oxide.FgFaint,
+            fontSize = Oxide.Type.MicroLabel.fontSize,
+            lineHeight = Oxide.Type.MicroLabel.lineHeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -585,209 +661,109 @@ private fun TerracottaProfileLayout(
  */
 @Composable
 private fun ExceptionUI(
+    bounds: GameOverlayBounds,
+    modifier: Modifier = Modifier,
     title: String,
     onExit: () -> Unit,
-    modifier: Modifier = Modifier,
-    scrollState: ScrollState = rememberScrollState()
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
     ) {
-        //文字部分
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScrollWithBar(scrollState),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(text = title)
-            HorizontalDivider(modifier = Modifier.fillMaxWidth())
-            Text(
-                text = stringResource(R.string.terracotta_export_log),
-                style = MaterialTheme.typography.labelMedium
-            )
+        GameOverlayScrollArea(maxHeight = bounds.contentMaxHeight) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    color = Oxide.Fg,
+                    fontSize = Oxide.Type.BodyStrong.fontSize,
+                    lineHeight = Oxide.Type.BodyStrong.lineHeight,
+                )
+                GameOverlayHairline()
+                GameOverlayNote(text = stringResource(R.string.terracotta_export_log))
+            }
         }
         //退出按钮
-        SimpleRowButton(
-            modifier = Modifier.fillMaxWidth(),
+        GameOverlayRowButton(
             icon = painterResource(R.drawable.ic_arrow_back),
             title = stringResource(R.string.terracotta_back),
             description = stringResource(R.string.terracotta_status_exception_back),
-            onClick = onExit
+            onClick = onExit,
+            minHeight = bounds.buttonHeight
         )
     }
 }
 
 /**
  * 展示日志
+ *
+ * 联机核心的日志动辄上千行。它在**被夹住的**滚动区里，
+ * 所以面板的高度与日志长度无关。
  */
 @Composable
 private fun LogUI(
+    bounds: GameOverlayBounds,
     logString: String,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
-    scrollState: ScrollState = rememberScrollState()
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
     ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScrollWithBar(scrollState),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(text = logString)
+        GameOverlayScrollArea(maxHeight = bounds.contentMaxHeight) {
+            // 等宽：日志是对齐的，换成比例字体会把时间戳那一列推歪
+            Text(
+                text = logString,
+                color = Oxide.FgMuted,
+                fontSize = Oxide.Type.Mono.fontSize,
+                lineHeight = Oxide.Type.Mono.lineHeight,
+            )
         }
         //退出按钮
-        SimpleRowButton(
-            modifier = Modifier.fillMaxWidth(),
+        GameOverlayRowButton(
             icon = painterResource(R.drawable.ic_arrow_back),
             title = stringResource(R.string.terracotta_back),
             description = stringResource(R.string.terracotta_log_exit),
-            onClick = onExit
+            onClick = onExit,
+            minHeight = bounds.buttonHeight
         )
     }
 }
 
 @Composable
 private fun CommonProgressLayout(
+    bounds: GameOverlayBounds,
     modifier: Modifier = Modifier,
     progress: String,
     backTitle: String = stringResource(R.string.terracotta_back),
     backDescription: String,
     onBack: () -> Unit,
-    text: (@Composable ColumnScope.() -> Unit)? = null,
-    scrollState: ScrollState = rememberScrollState(),
+    text: (@Composable () -> Unit)? = null,
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
     ) {
-        //文字部分
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScrollWithBar(scrollState),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) c1@{
-            Text(text = progress)
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            text?.invoke(this@c1)
+        GameOverlayScrollArea(maxHeight = bounds.contentMaxHeight) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = progress,
+                    color = Oxide.Fg,
+                    fontSize = Oxide.Type.BodyStrong.fontSize,
+                    lineHeight = Oxide.Type.BodyStrong.lineHeight,
+                )
+                // 这些状态都只知道"在等"，不知道等多久：进度因此不可知
+                GameOverlayProgressBar(progress = null)
+                text?.invoke()
+            }
         }
         //退出按钮
-        SimpleCardButton(
-            modifier = Modifier.fillMaxWidth(),
+        GameOverlayCardButton(
             icon = painterResource(R.drawable.ic_arrow_left_rounded),
             title = backTitle,
             description = backDescription,
-            onClick = onBack
+            onClick = onBack,
+            minHeight = bounds.buttonHeight
         )
-    }
-}
-
-/**
- * 用Card实现的可点击按钮
- */
-@Composable
-private fun SimpleCardButton(
-    modifier: Modifier = Modifier,
-    icon: Painter,
-    title: String,
-    description: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    BackgroundCard(
-        modifier = modifier,
-        influencedByBackground = false,
-        onClick = onClick,
-        enabled = enabled,
-        colors = CardDefaults.cardColors(
-            containerColor = itemColor(false),
-            contentColor = onItemColor(),
-            disabledContainerColor = itemColor(false)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Icon(
-                painter = icon,
-                contentDescription = title
-            )
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                //标题
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                //描述
-                Text(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .alpha(0.7f),
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
-}
-
-/**
- * 紧凑型可点击按钮，这个按钮的[description]描述被锁定为单行显示
- */
-@Composable
-private fun SimpleRowButton(
-    modifier: Modifier = Modifier,
-    icon: Painter,
-    title: String,
-    description: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(all = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            modifier = Modifier.size(18.dp),
-            painter = icon,
-            contentDescription = title
-        )
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            //标题
-            Text(
-                modifier = Modifier.fillMaxWidth(),
-                text = title,
-                style = MaterialTheme.typography.titleSmall
-            )
-            //描述
-            MarqueeText(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(0.7f),
-                text = description,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
     }
 }
