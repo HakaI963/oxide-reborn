@@ -598,11 +598,11 @@ internal class OxideModsViewModel(
         selected = oxideModsClearVisibleSelection(visible, selected)
     }
 
-    fun setQuery(value: String) {
+    fun updateQuery(value: String) {
         query = value
     }
 
-    fun setStateFilter(value: OxideModState) {
+    fun updateStateFilter(value: OxideModState) {
         stateFilter = value
     }
 

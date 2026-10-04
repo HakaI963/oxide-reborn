@@ -232,7 +232,7 @@ private fun OxideModsContent(
             OxideSecInput(
                 metrics = metrics,
                 value = query,
-                onValueChange = viewModel::setQuery,
+                onValueChange = viewModel::updateQuery,
                 placeholder = stringResource(R.string.generic_search),
                 modifier = Modifier.weight(1f),
             )
@@ -265,7 +265,7 @@ private fun OxideModsContent(
                     ),
                     selected = filter == candidate,
                     metrics = metrics,
-                    onClick = { viewModel.setStateFilter(candidate) },
+                    onClick = { viewModel.updateStateFilter(candidate) },
                     modifier = Modifier.weight(1f),
                 )
             }
