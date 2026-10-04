@@ -1098,7 +1098,7 @@ fun OxideAdvancedDrawer(
     modifier: Modifier = Modifier,
 ) {
     val bridge = rememberOxideLauncherBridge()
-    var tab by rememberSaveable { mutableStateOf(0) }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
 
     val tabs = listOf(
         stringResource(R.string.oxide_set_tab_details),

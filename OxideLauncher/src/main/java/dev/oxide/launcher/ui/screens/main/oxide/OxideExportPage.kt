@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import androidx.compose.runtime.mutableIntStateOf
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -1124,7 +1125,7 @@ private fun OxideExportFilesStep(
     val isSelectingFolder by viewModel.selectingFolder.collectAsStateWithLifecycle()
 
     // 展开状态在节点自己身上，因此这里只需要一个计数让摊平结果重算一次
-    var expandTick by remember { mutableStateOf(0) }
+    var expandTick by remember { mutableIntStateOf(0) }
     val nodes = remember(allFiles, expandTick) { oxideExportVisibleNodes(allFiles) }
 
     Column(

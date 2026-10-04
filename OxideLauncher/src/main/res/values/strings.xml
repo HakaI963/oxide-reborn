@@ -1395,7 +1395,6 @@
     <string name="oxide_dis_task_stage_preparing">Preparing</string>
     <string name="oxide_dis_task_stage_running">Running</string>
     <string name="oxide_dis_task_stage_completed">Completed</string>
-    <string name="oxide_dis_modpack_dialog_title">Install modpack</string>
     <string name="oxide_dis_modpack_dialog_detail">A modpack is installed as its own instance, with its game version and mod loader.</string>
     <string name="oxide_dis_modpack_name_label">Instance name</string>
     <string name="oxide_dis_modpack_name_required">Enter a name for the new instance</string>

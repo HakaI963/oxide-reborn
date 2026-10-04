@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import androidx.compose.runtime.mutableIntStateOf
 import dev.oxide.launcher.utils.file.checkFilenameValidity
 import dev.oxide.launcher.utils.file.InvalidFilenameException
 import android.content.Context
@@ -2337,7 +2338,7 @@ private fun DiscoverDetailHost(
     onDownloadAll: () -> Unit,
     metrics: OxideMetrics
 ) {
-    var tab by remember { mutableStateOf(0) }
+    var tab by remember { mutableIntStateOf(0) }
 
     OxideDrawerHost(
         visible = detail != null,
