@@ -62,8 +62,11 @@ class OxideMarkGeometryTest {
     @Test
     fun verticesAreEvenlySpacedBy45Degrees() {
         val pts = octagonVertices(0f, 0f, 10f)
+        // atan2 返回的是 (-180, 180]，第四象限的顶点会拿到负角；归一化到 [0, 360)
+        // 之后相邻差值才都是正的 45 度，否则第四个顶点处会出现 -315
         val angles = pts.map {
-            Math.toDegrees(kotlin.math.atan2(it.y.toDouble(), it.x.toDouble()))
+            val deg = Math.toDegrees(kotlin.math.atan2(it.y.toDouble(), it.x.toDouble()))
+            if (deg < 0) deg + 360.0 else deg
         }
         for (i in 0 until angles.size - 1) {
             assertEquals(45.0, angles[i + 1] - angles[i], 0.001)
