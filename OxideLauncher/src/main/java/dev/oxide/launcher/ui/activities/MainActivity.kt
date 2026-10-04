@@ -145,7 +145,10 @@ class MainActivity : BaseAppCompatActivity() {
     /**
      * 错误信息ViewModel
      */
-    private val errorViewModel: ErrorViewModel by viewModels()
+    // Not private: the Oxide pages report through this exact instance. A bare viewModel()
+    // inside a Nav3 entry resolves against the entry's own store and yields an orphan whose
+    // SharedFlow has no collector, so errors vanish instead of being shown.
+    val errorViewModel: ErrorViewModel by viewModels()
 
     /**
      * 与Compose交互的事件ViewModel

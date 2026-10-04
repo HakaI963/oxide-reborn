@@ -176,7 +176,10 @@ internal fun rememberOxideLauncherBridge(): OxideLauncherBridge {
             openLogView = { path -> host.openLog(path) },
             checkUpdate = { events.sendEvent(EventViewModel.Event.CheckUpdate) },
             openLink = { link -> host.openLink(link) },
-            openFileManager = { path -> events.sendEvent(EventViewModel.Event.OpenFileManager(rootPath = path)) },
+            // Must go through the host action: sending OpenFileManager starts the legacy
+            // FileManagerActivity, which is the old Material file browser. Nine call sites
+            // across the Oxide GUI funnel through here.
+            openFileManager = { path -> host.openFiles(path) },
             showToast = { res -> events.sendToast(androidText(res)) },
             startEditor = { file -> startEditorActivity(context, file) },
             replayGuide = { events.sendEvent(EventViewModel.Event.Guide.StartGuide(GuideKeys.Main)) },

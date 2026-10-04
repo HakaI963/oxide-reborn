@@ -145,7 +145,7 @@ fun OxideContentManagerScreen(
     initialCategory: OxideContentCategory = OxideContentCategory.Mods,
 ) {
     val eventViewModel = rememberOxideEventViewModel()
-    val errorViewModel: ErrorViewModel = viewModel()
+    val errorViewModel: ErrorViewModel = rememberOxideErrorViewModel()
 
     var selected by remember { mutableStateOf(initialCategory) }
 

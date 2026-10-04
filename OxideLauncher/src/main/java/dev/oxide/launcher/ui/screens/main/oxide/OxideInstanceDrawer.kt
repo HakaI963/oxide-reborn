@@ -119,7 +119,7 @@ fun OxideInstanceDrawer(
     modifier: Modifier = Modifier,
 ) {
     val eventViewModel = rememberOxideEventViewModel()
-    val errorViewModel: ErrorViewModel = viewModel()
+    val errorViewModel: ErrorViewModel = rememberOxideErrorViewModel()
     // 宿主给出的真实深层入口（实例设置、五类内容、导出向导），由外壳决定怎么走
     val hostActions = LocalOxideHostActions.current
 

@@ -120,7 +120,7 @@ fun OxideVersionSettingsPage(
     openModifyVersion: (Version) -> Unit,
 ) {
     val eventViewModel = rememberOxideEventViewModel()
-    val errorViewModel: ErrorViewModel = viewModel()
+    val errorViewModel: ErrorViewModel = rememberOxideErrorViewModel()
 
     var tab by remember { mutableStateOf(OxideInstanceTab.Overview) }
 
