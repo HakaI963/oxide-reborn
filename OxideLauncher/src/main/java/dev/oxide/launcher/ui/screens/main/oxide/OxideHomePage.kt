@@ -796,14 +796,18 @@ private fun OxideHomeEnvironmentCard(
         if (rows.isEmpty()) {
             OxideLoadingRow(stringResource(R.string.oxide_common_loading))
         } else {
-            // 只有在父级给了确定高度时才允许 weight：可滚动容器里的 height 约束是无穷大，
-            // 那种情况下 weight 会把这一块压成 0。
+            // 只有在父级给了确定高度时才允许 weight，也才允许自己再套一层 verticalScroll：
+            // 可滚动容器把它内容的 height 上限设成 Constraints.Infinity，
+            // 内层滚动容器拿到无穷大的 maxHeight 会直接抛
+            // "Vertically scrollable component was measured with an infinity maximum height constraints"。
+            // fillHeight = false 只来自紧凑布局，而那里整页已经在滚（见 OxideHomeCompactBody），
+            // 所以这一支必须顺着外层滚，不能再滚一次。
             val listModifier = if (fillHeight) {
                 Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
             } else {
-                Modifier.verticalScroll(rememberScrollState())
+                Modifier
             }
             Column(modifier = listModifier) {
                 rows.forEachIndexed { index, row ->
