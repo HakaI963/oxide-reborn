@@ -18,24 +18,9 @@
 
 package dev.oxide.launcher.ui.screens.game
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MaterialExpressiveTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -44,17 +29,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -87,7 +68,6 @@ import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.enums.isLauncherInDarkTheme
 import dev.oxide.launcher.setting.enums.toAction
 import dev.oxide.launcher.terracotta.Terracotta
-import dev.oxide.launcher.ui.components.BackgroundCard
 import dev.oxide.launcher.ui.components.MenuState
 import dev.oxide.launcher.ui.components.rememberBoxSize
 import dev.oxide.launcher.ui.control.MinecraftHotbar
@@ -115,6 +95,10 @@ import dev.oxide.launcher.ui.screens.game.elements.SendKeycodeState
 import dev.oxide.launcher.ui.screens.game.multiplayer.TerracottaOperation
 import dev.oxide.launcher.ui.screens.game.multiplayer.rememberTerracottaViewModel
 import dev.oxide.launcher.ui.screens.main.control_editor.ControlEditor
+import dev.oxide.launcher.ui.screens.main.oxide.OxideGameWaitingFacts
+import dev.oxide.launcher.ui.screens.main.oxide.OxideGameWaitingOverlay
+import dev.oxide.launcher.ui.screens.main.oxide.OxideGameWaitingState
+import dev.oxide.launcher.ui.screens.main.oxide.rememberOxideMetrics
 import dev.oxide.launcher.utils.currentGameDisplayLayout
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.viewmodel.EditorViewModel
@@ -731,14 +715,35 @@ fun GameScreen(
             )
         }
 
-        GameInfoBox(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(all = 16.dp),
-            versionName = version.getVersionName(),
-            versionInfo = version.getVersionInfo()?.getInfoString(),
+        // 旧的那一块是 GameInfoBox（BackgroundCard + Material 字体 + IconButton），
+        // 写着 "The game is running. Waiting for the game screen to appear…" 与两行版本信息。
+        // 它用的是 Material 的材质与字体，跟启动器其余部分不是同一种语言，
+        // 因此读起来像一条与当前界面无关的旧通知。
+        //
+        // 现在这一块是 OxideGameWaitingOverlay：紧凑的居中卡片，写清游戏版本、加载器
+        // 与启动状态，可选地带上已经过去多久，并且只摆真正被支持的动作——
+        // 这一条链路上能按的只有"收起"，因此不会出现一个按了没反应的"关闭游戏"键。
+        //
+        // 出现与消失的时机一个字都没有改：仍然只在第一帧之前出现，
+        // 仍然由 GameHandler.onGraphicOutput() 把它关掉。
+        OxideGameWaitingOverlay(
+            metrics = rememberOxideMetrics(),
+            facts = OxideGameWaitingFacts(
+                // showGameInfo 为真本身就等于"第一帧还没画出来"这一个状态：
+                // GameHandler.onGraphicOutput() 在画出第一帧时把它关掉
+                state = OxideGameWaitingState.Waiting,
+                instanceName = version.getVersionName(),
+                minecraftVersion = version.getVersionInfo()?.minecraftVersion,
+                loaderLabel = version.getVersionInfo()?.primaryLoader?.let { loader ->
+                    loader.loader.displayName.takeIf { it.isNotBlank() }
+                        ?.plus(" ").plus(loader.version).trim()
+                },
+                // GameHandler 有真实的起跑时刻（launchT0），但它没有透出来，
+                // 因此耗时整行不出现，而不是显示一个从 0 开始假跑的计时器
+                startedAtMillis = null,
+            ),
             visible = showGameInfo,
-            onClose = onInfoBoxClose
+            onClose = onInfoBoxClose,
         )
 
         LogBox(
@@ -886,88 +891,6 @@ fun GameScreen(
                     else -> { /*忽略*/ }
                 }
             }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun GameInfoBox(
-    versionName: String,
-    versionInfo: String?,
-    visible: Boolean,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = modifier
-    ) {
-        BackgroundCard(
-            modifier = modifier,
-            influencedByBackground = false,
-            shape = MaterialTheme.shapes.extraLarge
-        ) {
-            Row {
-                Row(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .padding(vertical = 16.dp)
-                        .padding(start = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    LoadingIndicator(
-                        modifier = Modifier.align(Alignment.CenterVertically)
-                    )
-
-                    //提示信息
-                    Column(
-                        modifier = Modifier.weight(1f, fill = false),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.game_loading),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = stringResource(R.string.game_loading_version_name, versionName),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        versionInfo?.let { info ->
-                            Text(
-                                text = stringResource(R.string.game_loading_version_info, info),
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                        }
-                    }
-                }
-
-                IconButton(
-                    modifier = Modifier.padding(top = 4.dp, end = 4.dp),
-                    onClick = onClose
-                ) {
-                    Icon(
-                        modifier = Modifier.size(18.dp),
-                        painter = painterResource(R.drawable.ic_close),
-                        contentDescription = stringResource(R.string.generic_close)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Preview(showBackground = false)
-@Composable
-private fun PreviewGameInfoBox() {
-    MaterialExpressiveTheme {
-        GameInfoBox(
-            versionName = "1.21.11",
-            versionInfo = "1.21.11",
-            visible = true,
-            onClose = {}
-        )
     }
 }
 

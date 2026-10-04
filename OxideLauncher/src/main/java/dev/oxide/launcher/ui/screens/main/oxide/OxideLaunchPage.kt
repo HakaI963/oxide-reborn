@@ -18,22 +18,22 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,19 +44,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.TaskStage
 import dev.oxide.launcher.coroutine.TitledTask
-import dev.oxide.launcher.game.account.accountErrorText
 import dev.oxide.launcher.game.account.isMicrosoftAccount
 import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionsManager
@@ -70,27 +69,35 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
- * 启动页
+ * 启动表面：整块盖住窗口，中间一块居中面板
  *
- * 取代旧的"Starting"任务弹窗：这里是玩家按下 Play 之后真正会看到的那一屏。
+ * 这一层是 [OxideMainShell] 在 [oxideLaunchVisible] 为真时压在**最上面**的那一块，
+ * 因此"按下 Play 之后屏幕上是什么"在这里只有一种答案：这一块。
  *
- * **启动链路一个字都没有改。**
- * [dev.oxide.launcher.game.launch.GameLaunchFlow]、`GameLauncher`、
- * `Launcher.launchJvm` 以及快速加载的插桩（`LAUNCH T0`、`PREPARE EVAL`、
- * `PREPARE phase`、`GAME PROCESS first frame`）全部原样保留；
- * 这一页只读 [LaunchGameViewModel] 已经算出来的阶段列表与进度，
- * 并把 [LaunchGameViewModel.cancel] 交给界面上的取消按钮。
- * 换句话说：换掉的是**呈现**，不是启动。
+ * v1.6.0 的写法有两个问题，两者都被这一版的结构直接消掉：
  *
- * 这一屏同时也是**整段 pre-flight** 的宿主：实例名非法、渲染器或插件不支持、
- * 缺文件管理权限、账号需要重新登录、账号刷新失败——这些以前各自弹一个 Modal，
- * 现在都变成启动页上就地的一行说明加一组选择（见 [OxideLaunchPreflight]）。
- * 没有实例与没有账号那两条本来就只弹一次 toast，因此这里不为它们闪一行。
+ * - **底下的 Home 一直看得见。** 旧版这块的根节点没有底色，面板本身用的
+ *   [Oxide.SurfaceBase] 在暗色下只有 `0x170A0A0A`（约 9% 不透明），于是 Home 的
+ *   hero、卡片与壁纸整块透上来，和面板抢视觉。现在的根节点直接铺 [Oxide.Bg]，
+ *   并且在面板下面再压一层吞点击的阻断层，因此下面的页面既看不见也点不到——
+ *   这同时也是"启动期间不该出现叠层导航"的答案：启动时根本没有下层可叠。
+ * - **"Starting" 变成了一行巨字。** 旧版把 `oxide_sec_launch_title`（内容正是
+ *   "Starting"）当 hero 标题，用 [OxideMetrics.heroTitleDp]（最大 42sp 再乘界面缩放）
+ *   画在面板里，下面还跟着一个同样写着 "Starting" 的 22sp 页面标题；
+ *   而 hero 那一列用的是 `Arrangement.Bottom` 且不裁切，矮屏上内容会向上溢出面板。
+ *   现在面板里最大的字是实例名（[Oxide.Type.DrawerTitle]），"启动中" 只是一行小标签，
+ *   字号全部有上限，也就没有"巨字"这一说。
  *
- * 因此界面上每一个数字都来自真实的阶段：
- * 阶段标题与顺序来自 [TitledTask]，进度、消息与速率来自任务自己的 `StateFlow`，
- * 预启动阶段来自 `launchGameOperation`。没有阶段时显示"正在准备"，
- * 不会凭空画出一根进度条。
+ * **面板与字段的尺寸全部来自 [OxideMetrics]**（见 [oxideLaunchPanelGeometry]），
+ * 颜色全部来自 [Oxide]。640x360 上它是居中的一块紧凑板：宽高都被窗口夹住，
+ * 阶段列表那一块被固定高度封顶并在内部滚动，因此几条还是几十条阶段都不会把它撑开，
+ * 也拿不到 `maxHeight == Infinity`。
+ *
+ * **启动链路一个字都没有改。** [dev.oxide.launcher.game.launch.GameLaunchFlow]、
+ * `GameLauncher`、`Launcher.launchJvm` 以及快速加载的插桩（`LAUNCH T0`、`PREPARE EVAL`、
+ * `PREPARE phase`、`GAME PROCESS first frame`）全部原样保留；这一层只读
+ * [LaunchGameViewModel] 已经算出来的阶段与进度，并把 [LaunchGameViewModel.cancel]
+ * 交给面板上那个取消键。换掉的是**呈现**，不是启动，也没有任何为了好看而加的等待。
  */
 @Composable
 fun OxideLaunchPage(
@@ -111,22 +118,26 @@ fun OxideLaunchPage(
         emptyList()
     }
 
-    // 阶段状态集中在一张表里：行与 hero 共用同一份读数，
-    // 因此不会出现"行说完成了、进度条还停在上一格"的错位
-    val stageSnapshot = rememberLaunchStages(tasks)
+    val projectedOperation = oxidePreflightOperationOf(operation)
+    val surface = oxideLaunchSurface(flowActive = flow != null, operation = projectedOperation)
+    // 外壳已经按同一个判据决定要不要挂这一层；这里再挡一次是为了让"返回空"
+    // 而不是"返回一块透明的东西"，那样它在任何宿主上都是安全的
+    if (surface == OxideLaunchSurface.Hidden) return
 
-    // 新阶段进来就滚到底部，玩家不用手动追着跑
-    val listState = rememberLazyListState()
-    LaunchedEffect(tasks.size) {
-        if (tasks.isNotEmpty()) listState.animateScrollToItem(tasks.lastIndex)
+    // 面板上的准备状态、阶段列表与那根条共用同一份读数，
+    // 因此不会出现"行说完成了、进度条还停在上一格"的错位
+    val readings = rememberLaunchStageReadings(tasks)
+    val stages = tasks.map { task ->
+        OxideLaunchStageSnapshot(
+            id = task.task.id,
+            stage = readings.stages[task.task.id] ?: TaskStage.PREPARING,
+            progress = readings.progresses[task.task.id] ?: UNSET_PROGRESS,
+        )
     }
 
-    // 这一段就是"启动已经被人按下，但还没跑出阶段"的全部形状
-    val preflightBranch = oxidePreflightBranchOf(oxidePreflightOperationOf(operation))
-    val preflightAsk = preflightBranch
-        ?.let { oxidePreflightAsk(it) }
-        // 这两条在旧实现里只弹一次 toast 并立刻复位，界面上不该闪一行
-        ?.takeIf { !oxidePreflightToastOnly(it.branch) }
+    // 实例：operation 上带的那个最准（它就是这次要启动的），
+    // 阶段已经跑起来时 operation 会被复位成 None，这时退回后端记录的当前实例
+    val version = launchInstanceOf(operation) ?: currentVersion
 
     // 密码只跟着"同一个账号的第三方重新登录"这一次走：
     // 提交失败时 operation 会换成另一个实例，但密码不该被清掉（旧弹窗也没清）
@@ -142,289 +153,408 @@ fun OxideLaunchPage(
     val errorViewModel = rememberOxideErrorViewModel()
     val backStack = rememberOxideScreenBackStack()
 
-    val stageLabel = launchStageLabel(operation, currentVersion)
-    val errorText = launchStageError(operation)
-
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val sideBySide = maxWidth >= metrics.cardMinWidth * 1.3f
-
-        Column(modifier = Modifier.fillMaxSize()) {
-            OxidePageTitle(
-                modifier = Modifier.padding(horizontal = metrics.pagePaddingH),
-                text = stringResource(R.string.oxide_sec_launch_title),
-                trailing = {
-                    OxideButton(
-                        text = stringResource(R.string.oxide_sec_launch_cancel),
-                        onClick = { launchViewModel.cancel() },
-                        tone = OxideButtonTone.Secondary,
-                        // 还没跑出阶段时没有可取消的东西；那时要放弃的话用那一行自己的选择
-                        enabled = flow != null,
+    val preflightAsk = oxidePreflightBranchOf(projectedOperation)?.let { oxidePreflightAsk(it) }
+    val preflightTexts = if (surface == OxideLaunchSurface.Preflight) {
+        launchPreflightTexts(operation)
+    } else {
+        null
+    }
+    val preflight: OxideLaunchPreflightSlot? =
+        if (preflightTexts != null && preflightAsk != null) {
+            OxideLaunchPreflightSlot(
+                ask = preflightAsk,
+                texts = preflightTexts,
+                password = password,
+                onPasswordChange = { password = it },
+                onAction = { action ->
+                    performOxidePreflightAction(
+                        action = action,
+                        operation = operation,
+                        password = password,
+                        activity = activity,
+                        eventViewModel = eventViewModel,
+                        errorViewModel = errorViewModel,
+                        launchGameViewModel = launchViewModel,
+                        backStack = backStack,
                     )
                 },
             )
-            OxideSectionLabel(
-                modifier = Modifier.padding(horizontal = metrics.pagePaddingH),
-                text = stringResource(R.string.oxide_sec_launch_kicker),
-            )
-
-            Spacer(Modifier.height(metrics.sectionGap))
-
-            if (preflightAsk != null) {
-                // 等待一个决定时还没有任何真实阶段可列，
-                // 因此这一屏只讲清楚"哪一条没通过"和"接下来怎么办"，
-                // 而不是画一根 0% 的进度条加一句"正在准备"
-                val texts = launchPreflightTexts(operation)
-                if (texts != null) {
-                    // 面板自己铺满并滚动，因此这里只负责把标题与 kicker 让出来的那段
-                    // 高度交给它
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = metrics.pagePaddingH),
-                    ) {
-                        OxideLaunchPreflight(
-                            metrics = metrics,
-                            ask = preflightAsk,
-                            texts = texts,
-                            password = password,
-                            onPasswordChange = { password = it },
-                            onAction = { action ->
-                                performOxidePreflightAction(
-                                    action = action,
-                                    operation = operation,
-                                    password = password,
-                                    activity = activity,
-                                    eventViewModel = eventViewModel,
-                                    errorViewModel = errorViewModel,
-                                    launchGameViewModel = launchViewModel,
-                                    backStack = backStack,
-                                )
-                            },
-                        )
-                    }
-                }
-            } else if (sideBySide) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = metrics.pagePaddingH),
-                    horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
-                ) {
-                    OxideLaunchHero(
-                        metrics = metrics,
-                        stageLabel = stageLabel,
-                        errorText = errorText,
-                        total = tasks.size,
-                        done = stageSnapshot.values.count { it == TaskStage.COMPLETED },
-                        modifier = Modifier
-                            .weight(0.85f)
-                            .fillMaxHeight(),
-                    )
-                    OxideLaunchTaskList(
-                        metrics = metrics,
-                        tasks = tasks,
-                        stageSnapshot = stageSnapshot,
-                        listState = listState,
-                        modifier = Modifier
-                            .weight(1.15f)
-                            .fillMaxHeight(),
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = metrics.pagePaddingH),
-                    verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
-                ) {
-                    OxideLaunchHero(
-                        metrics = metrics,
-                        stageLabel = stageLabel,
-                        errorText = errorText,
-                        total = tasks.size,
-                        done = stageSnapshot.values.count { it == TaskStage.COMPLETED },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(0.4f),
-                    )
-                    OxideLaunchTaskList(
-                        metrics = metrics,
-                        tasks = tasks,
-                        stageSnapshot = stageSnapshot,
-                        listState = listState,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                    )
-                }
-            }
+        } else {
+            null
         }
+    val geometry = rememberLaunchPanelGeometry(metrics)
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Oxide.Bg),
+        contentAlignment = Alignment.Center,
+    ) {
+        // 阻断层：按 Play 之后下面的页面既看不见（根节点不透明）也不该还能被点到。
+        // 它在面板**之前**声明，而 Compose 的 Main pass 从叶子往根派发，
+        // 因此面板那一块仍然先拿到事件——面板内的滚动与按钮不受影响。
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                ),
+        )
+
+        OxideLaunchPanel(
+            metrics = metrics,
+            geometry = geometry,
+            surface = surface,
+            phase = oxideLaunchPhase(projectedOperation, stages),
+            progress = oxideLaunchPanelProgress(stages),
+            instanceName = version?.getVersionName()?.takeIf { it.isNotBlank() },
+            minecraftVersion = version?.getVersionInfo()?.minecraftVersion?.takeIf { it.isNotBlank() },
+            loaderLabel = launchLoaderLabel(version),
+            cancelSupported = oxideLaunchCancelSupported(flow != null, projectedOperation),
+            onCancel = { launchViewModel.cancel() },
+            preflight = preflight,
+            stages = stages,
+            tasks = tasks,
+        )
     }
 }
 
 /**
- * 收集每个阶段的当前状态
+ * 由当前可用尺寸算出面板几何
  *
- * 每个阶段起一个收集协程，写进同一张 [SnapshotStateMap]；
+ * 可用尺寸读 [LocalConfiguration]（分屏、多窗口、折叠屏展开时它小于整块屏幕），
+ * 其余全部由 [OxideMetrics] 推导，因此界面上不写死任何一个 dp。
+ */
+@Composable
+internal fun rememberLaunchPanelGeometry(metrics: OxideMetrics): OxideLaunchPanelGeometry {
+    val configuration = LocalConfiguration.current
+    return remember(metrics, configuration.screenWidthDp, configuration.screenHeightDp) {
+        oxideLaunchPanelGeometry(
+            metrics = metrics,
+            availableWidthDp = configuration.screenWidthDp,
+            availableHeightDp = configuration.screenHeightDp,
+        )
+    }
+}
+
+/**
+ * 这一次启动要启动的是哪个实例
+ *
+ * `TryLaunch` 里的实例可以为空（按下 Play 的那一瞬间还没有选中任何实例），
+ * 那时 [dev.oxide.launcher.game.launch.GameLaunchFlow] 会自己转成 NoVersion，
+ * 因此空就是空，不在这里替它编一个。
+ */
+private fun launchInstanceOf(operation: LaunchGameOperation): Version? = when (operation) {
+    is LaunchGameOperation.TryLaunch -> operation.version
+    is LaunchGameOperation.RealLaunch -> operation.version
+    is LaunchGameOperation.RendererNoStoragePermission -> operation.version
+    is LaunchGameOperation.UnsupportedRenderer -> operation.version
+    is LaunchGameOperation.UnsupportedPlugins -> operation.version
+    is LaunchGameOperation.AccountRelogin -> operation.version
+    is LaunchGameOperation.AccountRefreshFailed -> operation.version
+    is LaunchGameOperation.None,
+    is LaunchGameOperation.NoAccount,
+    is LaunchGameOperation.NoVersion,
+    is LaunchGameOperation.InvalidVersionName -> null
+}
+
+/**
+ * 加载器写什么
+ *
+ * 原版实例没有加载器：那一行整个不出现，而不是显示一个空的或"未知"的词。
+ * 版本清单还没读出来（`versionInfo` 为 null）时同样不出现。
+ */
+private fun launchLoaderLabel(version: Version?): String? {
+    val loader = version?.getVersionInfo()?.primaryLoader ?: return null
+    val name = loader.loader.displayName.trim()
+    if (name.isEmpty()) return null
+    val loaderVersion = loader.version.trim()
+    return if (loaderVersion.isEmpty()) name else "$name $loaderVersion"
+}
+
+/** pre-flight 那一段需要的四样东西，单独包一层让面板的参数保持可读 */
+private class OxideLaunchPreflightSlot(
+    val ask: OxidePreflightAsk,
+    val texts: OxidePreflightTexts,
+    val password: String,
+    val onPasswordChange: (String) -> Unit,
+    val onAction: (OxidePreflightAction) -> Unit,
+)
+
+/**
+ * 每个阶段的阶段与进度读数
+ *
+ * 写进同一批快照状态，组合期读它就等于订阅它，因此准备状态、阶段行与底部那根条
+ * 永远是同一份读数——不会出现"行说完成了、进度条还停在上一格"。
+ */
+private class LaunchStageReadings(
+    val stages: androidx.compose.runtime.snapshots.SnapshotStateMap<String, TaskStage>,
+    val progresses: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Float>,
+)
+
+/** 后端还没有报过任何进度时 [dev.oxide.launcher.coroutine.Task.progress] 的初值 */
+private const val UNSET_PROGRESS = -1f
+
+/**
+ * 收集每个阶段的阶段与进度
+ *
+ * 每个阶段起两个收集协程，写进同一批 [androidx.compose.runtime.snapshots.SnapshotStateMap]；
  * 协程都挂在 `LaunchedEffect` 的作用域里，阶段列表一变就会一起被取消。
  */
 @Composable
-private fun rememberLaunchStages(tasks: List<TitledTask>): SnapshotStateMap<String, TaskStage> {
-    val snapshot = remember { mutableStateMapOf<String, TaskStage>() }
+private fun rememberLaunchStageReadings(tasks: List<TitledTask>): LaunchStageReadings {
+    val stages = remember { mutableStateMapOf<String, TaskStage>() }
+    val progresses = remember { mutableStateMapOf<String, Float>() }
     LaunchedEffect(tasks) {
-        snapshot.keys.toList().filter { key -> tasks.none { it.task.id == key } }
-            .forEach { key -> snapshot.remove(key) }
+        val ids = tasks.map { it.task.id }
+        stages.keys.toList().filter { it !in ids }.forEach { stages.remove(it) }
+        progresses.keys.toList().filter { it !in ids }.forEach { progresses.remove(it) }
         tasks.forEach { task ->
-            launch {
-                task.task.stage.collect { stage -> snapshot[task.task.id] = stage }
-            }
+            launch { task.task.stage.collect { stages[task.task.id] = it } }
+            launch { task.task.progress.collect { progresses[task.task.id] = it } }
         }
     }
-    return snapshot
+    return remember(stages, progresses) { LaunchStageReadings(stages, progresses) }
 }
 
 /**
- * 左侧：正在发生什么
+ * 面板本体
  *
- * 标题字号跟着宽度走，与主页 hero 同一套比例；
- * 进度条是**已经完成的阶段数**除以阶段总数，因此不会编造一个百分比。
+ * 高度是**固定值**（[OxideLaunchPanelGeometry.heightDp]），不是 `heightIn`：
+ * 里面有一个可竖向滚动的阶段列表，高度一旦不封顶，那一层就会被以
+ * `maxHeight = Infinity` 测量并抛
+ * `Vertically scrollable component was measured with an infinity maximum height`。
+ * 固定高度同时让"面板永远放得进屏幕"这件事在 [oxideLaunchPanelGeometry] 里就可测。
  */
 @Composable
-private fun OxideLaunchHero(
+private fun OxideLaunchPanel(
     metrics: OxideMetrics,
-    stageLabel: String,
-    errorText: String?,
-    total: Int,
-    done: Int,
-    modifier: Modifier = Modifier,
+    geometry: OxideLaunchPanelGeometry,
+    surface: OxideLaunchSurface,
+    phase: OxideLaunchPhase,
+    progress: OxideLaunchPanelProgress,
+    instanceName: String?,
+    minecraftVersion: String?,
+    loaderLabel: String?,
+    cancelSupported: Boolean,
+    onCancel: () -> Unit,
+    preflight: OxideLaunchPreflightSlot?,
+    stages: List<OxideLaunchStageSnapshot>,
+    tasks: List<TitledTask>,
 ) {
-    OxideSurface(
-        modifier = modifier,
-        contentPadding = PaddingValues(all = metrics.cardGap),
+    Box(
+        modifier = Modifier
+            .width(geometry.widthDp.dp)
+            .height(geometry.heightDp.dp)
+            .clip(Oxide.RadiusPanel)
+            // DrawerBg 是这一套里唯一"接近不透明"的底板（暗色 0xFA），
+            // 与 [OxidePanelShell] 同一块底：面板必须压得住底下的页面，
+            // 否则就会退回 v1.6.0 那种两层抢视觉的状态
+            .background(Oxide.DrawerBg)
+            .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusPanel)
+            .padding(metrics.cardGap),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(metrics.cardGap),
-            verticalArrangement = Arrangement.Bottom,
-        ) {
-            Text(
-                text = stageLabel,
-                color = Oxide.FgDim,
-                fontSize = Oxide.Type.MicroLabel.fontSize,
-                lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+        Column(modifier = Modifier.fillMaxSize()) {
+            OxideLaunchPanelHeader(
+                metrics = metrics,
+                phase = phase,
+                instanceName = instanceName,
+                minecraftVersion = minecraftVersion,
+                loaderLabel = loaderLabel,
+                cancelSupported = cancelSupported,
+                onCancel = onCancel,
             )
-            Spacer(Modifier.height(metrics.cardGap))
-            Text(
-                text = stringResource(R.string.oxide_sec_launch_title),
-                color = Oxide.Fg,
-                fontSize = metrics.heroTitleDp.sp,
-                lineHeight = metrics.heroTitleDp.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+
             Spacer(Modifier.height(metrics.secRowGap))
-            Text(
-                text = errorText ?: stringResource(R.string.oxide_sec_launch_subtitle),
-                color = if (errorText != null) Oxide.FgMuted else Oxide.FgFaint,
-                fontSize = Oxide.Type.Body.fontSize,
-                lineHeight = Oxide.Type.Body.lineHeight,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (total > 0) {
-                Spacer(Modifier.height(metrics.cardGap))
-                OxideProgressBar(progress = done.toFloat() / total.toFloat())
-                Spacer(Modifier.height(5.dp))
-                Text(
-                    text = stringResource(
-                        R.string.oxide_sec_launch_stage_count,
-                        done,
-                        total,
-                    ),
-                    color = Oxide.FgMuted,
-                    fontSize = Oxide.Type.MicroLabel.fontSize,
-                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                if (surface == OxideLaunchSurface.Preflight && preflight != null) {
+                    OxideLaunchPreflight(
+                        metrics = metrics,
+                        ask = preflight.ask,
+                        texts = preflight.texts,
+                        password = preflight.password,
+                        onPasswordChange = preflight.onPasswordChange,
+                        onAction = preflight.onAction,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    OxideLaunchStageList(
+                        metrics = metrics,
+                        geometry = geometry,
+                        tasks = tasks,
+                        stages = stages,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
+
+            Spacer(Modifier.height(metrics.secRowGap))
+
+            OxideLaunchProgressFooter(metrics = metrics, progress = progress)
         }
     }
 }
 
-/** 右侧：真实阶段列表 */
+/**
+ * 面板头部：准备状态 + 这一次要启动的是谁
+ *
+ * 实例名用 [Oxide.Type.DrawerTitle]（16sp）而不是 hero 字号：
+ * 这一块面板的最大字必须是实例名本身，"启动中" 只作为一行小标签出现。
+ */
 @Composable
-private fun OxideLaunchTaskList(
+private fun OxideLaunchPanelHeader(
     metrics: OxideMetrics,
-    tasks: List<TitledTask>,
-    stageSnapshot: SnapshotStateMap<String, TaskStage>,
-    listState: LazyListState,
-    modifier: Modifier = Modifier,
+    phase: OxideLaunchPhase,
+    instanceName: String?,
+    minecraftVersion: String?,
+    loaderLabel: String?,
+    cancelSupported: Boolean,
+    onCancel: () -> Unit,
 ) {
-    OxideSurface(
-        modifier = modifier,
-        contentPadding = PaddingValues(
-            horizontal = metrics.cardGap,
-            vertical = metrics.secRowGap,
-        ),
-    ) {
-        OxideSectionLabel(text = stringResource(R.string.oxide_sec_launch_tasks))
-        Spacer(Modifier.height(metrics.secRowGap))
-        if (tasks.isEmpty()) {
-            OxideLoadingRow(stringResource(R.string.oxide_sec_launch_waiting))
-            return@OxideSurface
-        }
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            state = listState,
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(items = tasks, key = { task -> task.task.id }) { task ->
-                OxideLaunchTaskRow(
-                    metrics = metrics,
-                    task = task,
-                    stage = stageSnapshot[task.task.id] ?: TaskStage.PREPARING,
+            OxideSectionLabel(
+                text = launchPhaseLabel(phase),
+                modifier = Modifier.weight(1f),
+            )
+            if (cancelSupported) {
+                Spacer(Modifier.width(metrics.secRowGap))
+                OxideButton(
+                    text = stringResource(R.string.oxide_launch_cancel),
+                    onClick = onCancel,
+                    tone = OxideButtonTone.Ghost,
                 )
-                Spacer(Modifier.height(metrics.secRowGap))
             }
+        }
+
+        Spacer(Modifier.height(metrics.secRowGap))
+
+        Text(
+            text = instanceName ?: stringResource(R.string.oxide_launch_no_instance),
+            color = Oxide.Fg,
+            fontSize = Oxide.Type.DrawerTitle.fontSize,
+            lineHeight = Oxide.Type.DrawerTitle.lineHeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+
+        val target = listOfNotNull(
+            minecraftVersion?.let { stringResource(R.string.oxide_launch_minecraft, it) },
+            loaderLabel,
+        ).joinToString(" · ")
+        if (target.isNotEmpty()) {
+            Text(
+                text = target,
+                color = Oxide.FgFaint,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
+
+/**
+ * 阶段列表
+ *
+ * 高度由 [OxideLaunchPanelGeometry.stageViewportHeightDp] 封顶，超出的部分在列表内部滚动，
+ * 因此下载校验那一串阶段再多也只占那一块高度，不会把面板撑开，
+ * 也永远不会拿到无限高度约束。新阶段进来滚到底部，玩家不用手动追着跑。
+ */
+@Composable
+private fun OxideLaunchStageList(
+    metrics: OxideMetrics,
+    geometry: OxideLaunchPanelGeometry,
+    tasks: List<TitledTask>,
+    stages: List<OxideLaunchStageSnapshot>,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(tasks.size) {
+        if (tasks.isNotEmpty()) listState.animateScrollToItem(tasks.lastIndex)
+    }
+
+    LazyColumn(
+        // height 而不是 fillMaxSize：列表必须自己占那一块**固定**高度。
+        // 外层那个 weight(1f) 的父级虽然已经被面板的固定高度封住，但显式写死
+        // 这一层的高度，滚动容器拿到的 maxHeight 就一定有限，不会是 Infinity。
+        modifier = modifier
+            .fillMaxWidth()
+            .height(geometry.stageViewportHeightDp.dp),
+        state = listState,
+    ) {
+        item(key = STAGE_LIST_HEADER_KEY) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OxideSectionLabel(text = stringResource(R.string.oxide_launch_stages))
+                if (tasks.isEmpty()) {
+                    OxideLoadingRow(stringResource(R.string.oxide_sec_launch_waiting))
+                }
+            }
+        }
+        itemsIndexed(
+            items = tasks,
+            // 阶段 id 在列表里唯一（TitledTask 的 task 以 id 相等），直接拿来当 key
+            key = { _, task -> task.task.id },
+        ) { index, task ->
+            OxideLaunchStageRow(
+                metrics = metrics,
+                task = task,
+                // stages 与 tasks 同序同长；越界只可能来自两帧之间的列表变动，
+                // 那种情况下退回"还没有读数"而不是抛异常
+                snapshot = stages.getOrNull(index)
+                    ?: OxideLaunchStageSnapshot(
+                        id = task.task.id,
+                        stage = TaskStage.PREPARING,
+                        progress = UNSET_PROGRESS,
+                    ),
+            )
+        }
+    }
+}
+
+/** 列表里那个固定表头的 key，和任务的 key 空间不会撞 */
+private const val STAGE_LIST_HEADER_KEY = "oxide_launch_stage_header"
 
 /**
  * 一个阶段
  *
  * 阶段名来自 [TitledTask.title]——它可能是字符串资源，因此走 [resolveAndroidString]
- * 而不是 `toString()`；进度与速率来自任务自己的 `StateFlow`。
+ * 而不是 `toString()`；进度与速率来自任务自己的读数。
  * 状态除了颜色之外还有一行文字，因此不会只靠颜色区分。
  */
 @Composable
-private fun OxideLaunchTaskRow(
+private fun OxideLaunchStageRow(
     metrics: OxideMetrics,
     task: TitledTask,
-    stage: TaskStage,
+    snapshot: OxideLaunchStageSnapshot,
 ) {
     val title = resolveAndroidString(task.title).text
-    val progress by task.task.progress.collectAsStateWithLifecycle()
     val message by task.task.message.collectAsStateWithLifecycle()
     val rate by task.task.rateBytesPerSec.collectAsStateWithLifecycle()
 
-    val stageText = when (stage) {
-        TaskStage.PREPARING -> stringResource(R.string.oxide_common_loading)
-        TaskStage.RUNNING -> stringResource(R.string.oxide_sec_launch_indeterminate)
+    val determinate = oxideLaunchProgressOf(snapshot.progress) == OxideLaunchProgress.Determinate
+    val stageText = when (snapshot.stage) {
+        TaskStage.PREPARING -> stringResource(R.string.oxide_launch_state_preparing)
+        TaskStage.RUNNING -> stringResource(R.string.oxide_launch_state_running)
         TaskStage.COMPLETED -> stringResource(R.string.generic_done)
     }
     val messageText = message?.let { resolveAndroidString(it).text }.orEmpty()
-    val rateBytes = rate
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(top = metrics.secRowGap),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -432,7 +562,7 @@ private fun OxideLaunchTaskRow(
         ) {
             Text(
                 text = title,
-                color = if (stage == TaskStage.COMPLETED) Oxide.FgMuted else Oxide.Fg,
+                color = if (snapshot.stage == TaskStage.COMPLETED) Oxide.FgMuted else Oxide.Fg,
                 fontSize = Oxide.Type.BodyStrong.fontSize,
                 lineHeight = Oxide.Type.BodyStrong.lineHeight,
                 maxLines = 1,
@@ -442,10 +572,10 @@ private fun OxideLaunchTaskRow(
             Spacer(Modifier.width(metrics.secRowGap))
             Text(
                 // 负进度代表"不确定"，这时给阶段文字而不是一个假的百分比
-                text = if (progress >= 0f) {
+                text = if (determinate) {
                     stringResource(
                         R.string.oxide_sec_launch_progress_percent,
-                        (progress * 100).toInt(),
+                        (snapshot.progress.coerceIn(0f, 1f) * 100f).toInt(),
                     )
                 } else {
                     stageText
@@ -467,16 +597,13 @@ private fun OxideLaunchTaskRow(
             )
         }
         // 进度不确定时不画条，避免一根永远停在 0% 的进度条
-        if (progress >= 0f) {
-            Spacer(Modifier.height(4.dp))
-            OxideProgressBar(progress = progress)
+        if (determinate) {
+            Spacer(Modifier.height(metrics.rowGap))
+            OxideProgressBar(progress = snapshot.progress.coerceIn(0f, 1f))
         }
-        if (rateBytes != null && rateBytes > 0L) {
+        if (rate != null && rate > 0L) {
             Text(
-                text = stringResource(
-                    R.string.oxide_sec_launch_rate,
-                    formatFileSize(rateBytes),
-                ),
+                text = stringResource(R.string.oxide_sec_launch_rate, formatFileSize(rate)),
                 color = Oxide.FgFaint,
                 fontSize = Oxide.Type.MicroLabel.fontSize,
                 lineHeight = Oxide.Type.MicroLabel.lineHeight,
@@ -486,61 +613,56 @@ private fun OxideLaunchTaskRow(
     }
 }
 
-/** 当前处于启动前的哪个阶段；没有阶段时如实说是"正在准备" */
-@Composable
-private fun launchStageLabel(
-    operation: LaunchGameOperation,
-    version: Version?,
-): String = when (operation) {
-    LaunchGameOperation.None -> stringResource(R.string.oxide_sec_launch_stage_check)
-    LaunchGameOperation.NoVersion -> stringResource(R.string.oxide_sec_launch_op_no_version)
-    is LaunchGameOperation.InvalidVersionName ->
-        stringResource(R.string.oxide_sec_launch_op_invalid_name)
-
-    LaunchGameOperation.NoAccount -> stringResource(R.string.oxide_sec_launch_op_no_account)
-    is LaunchGameOperation.RendererNoStoragePermission ->
-        stringResource(R.string.oxide_sec_launch_op_storage_permission)
-
-    is LaunchGameOperation.UnsupportedRenderer -> stringResource(
-        R.string.oxide_sec_launch_op_unsupported_renderer,
-        operation.renderer.getRendererName(),
-    )
-
-    is LaunchGameOperation.UnsupportedPlugins ->
-        stringResource(R.string.oxide_sec_launch_op_unsupported_plugins)
-
-    is LaunchGameOperation.TryLaunch -> version?.getVersionName()
-        ?.takeIf { it.isNotBlank() }
-        ?: stringResource(R.string.oxide_sec_launch_stage_check)
-
-    is LaunchGameOperation.AccountRelogin -> stringResource(
-        R.string.oxide_sec_launch_op_relogin,
-        operation.account.username,
-    )
-
-    is LaunchGameOperation.AccountRefreshFailed -> stringResource(
-        R.string.oxide_sec_launch_op_refresh_failed,
-        operation.account.username,
-    )
-
-    is LaunchGameOperation.RealLaunch -> operation.version.getVersionName()
-        .takeIf { it.isNotBlank() }
-        ?: stringResource(R.string.oxide_sec_launch_stage_running)
-}
-
 /**
- * 当前阶段的错误描述
+ * 面板底部：进度
  *
- * 只有账号相关的两个阶段带真实异常，因此也只在这里把它翻译成可读文本；
- * 其余阶段没有可展示的异常，返回 null 让副标题回到正常的那一句。
+ * 只画后端真的给得出的那一种：[OxideLaunchPanelProgress.None] 时整块都不出现，
+ * 界面因此永远不会有"看起来在动、其实不知道在动什么"的一根条。
  */
 @Composable
-private fun launchStageError(operation: LaunchGameOperation): String? = when (operation) {
-    is LaunchGameOperation.AccountRelogin ->
-        operation.error?.let { resolveAndroidString(accountErrorText(it)).text }
+private fun OxideLaunchProgressFooter(
+    metrics: OxideMetrics,
+    progress: OxideLaunchPanelProgress,
+) {
+    when (progress) {
+        OxideLaunchPanelProgress.None -> Unit
 
-    is LaunchGameOperation.AccountRefreshFailed ->
-        resolveAndroidString(accountErrorText(operation.error)).text
+        is OxideLaunchPanelProgress.Stage -> {
+            OxideProgressBar(progress = progress.fraction)
+            Spacer(Modifier.height(metrics.rowGap))
+            Text(
+                text = stringResource(R.string.oxide_sec_launch_progress_percent, progress.percent),
+                color = Oxide.FgMuted,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                maxLines = 1,
+            )
+        }
 
-    else -> null
+        is OxideLaunchPanelProgress.Stages -> {
+            OxideProgressBar(progress = progress.fraction)
+            Spacer(Modifier.height(metrics.rowGap))
+            Text(
+                text = stringResource(
+                    R.string.oxide_launch_stage_count,
+                    progress.completed,
+                    progress.total,
+                ),
+                color = Oxide.FgMuted,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** 准备状态在面板上写什么 */
+@Composable
+private fun launchPhaseLabel(phase: OxideLaunchPhase): String = when (phase) {
+    OxideLaunchPhase.Checking -> stringResource(R.string.oxide_launch_state_checking)
+    OxideLaunchPhase.Preparing -> stringResource(R.string.oxide_launch_state_preparing)
+    OxideLaunchPhase.Running -> stringResource(R.string.oxide_launch_state_running)
+    OxideLaunchPhase.Handoff -> stringResource(R.string.oxide_launch_state_handoff)
 }

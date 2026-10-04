@@ -39,8 +39,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -104,7 +103,32 @@ import dev.oxide.launcher.viewmodel.AccountManageEffect
 import dev.oxide.launcher.viewmodel.AccountManageIntent
 import dev.oxide.launcher.viewmodel.AccountManageViewModel
 import dev.oxide.launcher.viewmodel.ErrorViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
+
+/**
+ * 账号数量那一行该用哪一条文案
+ *
+ * 1 个账号要说"1 account"，其余说"%d accounts"；让复数形式处理 1 会读成"1 accounts"。
+ * 纯函数，因此这个判断可以直接单测。
+ */
+internal fun oxideAccountCountLabelRes(count: Int): Int =
+    if (count == 1) {
+        R.string.oxide_sec_accounts_subtitle_one
+    } else {
+        R.string.oxide_sec_accounts_subtitle_other
+    }
+
+/**
+ * "刷新凭据"这一格现在能不能按
+ *
+ * 两个条件都来自真实后端：没有当前账号时按了没有任何对象，
+ * 离线账号也没有服务端凭据可刷新。返回 false 时那一格是**禁用**而不是消失，
+ * 这样底部那一行的宽度不会随着当前账号的类型来回跳。
+ */
+internal fun oxideAccountRefreshEnabled(hasAccount: Boolean, isLocalAccount: Boolean): Boolean =
+    hasAccount && !isLocalAccount
 
 /**
  * 账号页
@@ -119,9 +143,12 @@ import java.io.File
  * 皮肤与披风能显示什么，由 [AccountsManager] 与 ViewModel 的真实状态决定，
  * 拿不到就不显示那一行，绝不补一个假的状态。
  *
- * 版面：左侧一列固定的"当前账号 / 皮肤披风 / 账号库"，右侧是可滚动的账号列表。
- * 宽度不够时上下叠放：上块占一个固定比例、下块的列表吃掉剩余高度，
- * 因此列表始终可滚，条目再多也不会把页面撑破。
+ * 版面：这块表面不是整页，而是一块居中的紧凑面板（见 [OxidePanelShell]）。
+ * 面板的宽高由真实可用区域与 metrics 共同决定（[oxidePanelBoundsFor]），
+ * 内容在**被夹住的面板内部**滚动，底部一行常驻动作。
+ * 面板够宽时并排放两列：左边一列"当前账号 / 皮肤披风 / 账号库"，右边是账号列表；
+ * 不够宽时上下叠成一条。两种版式里都没有第二个滚动容器，
+ * 因此条目再多也只会让面板内部滚动，不会把面板撑破。
  */
 @Composable
 fun OxideAccountPage(
@@ -289,46 +316,43 @@ fun OxideAccountPage(
 
     Box(modifier = modifier.fillMaxSize()) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val sideBySide = maxWidth >= metrics.cardMinWidth * 1.35f
+            // 面板的宽高来自这一块表面的真实可用区域（BoxWithConstraints 量到的那一块），
+            // 而不是物理屏幕：分屏、多窗口与折叠屏展开时窗口会小于整块屏幕。
+            val bounds = oxidePanelBoundsFor(maxWidth, maxHeight, metrics)
+            val twoColumns = oxidePanelTwoColumns(bounds.width, metrics)
+            val subtitle = stringResource(
+                oxideAccountCountLabelRes(accounts.size),
+                accounts.size,
+            )
 
-            Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OxideIconButton(
-                        onClick = onDismiss,
-                        glyph = "←",
-                        modifier = Modifier.oxideIconDescription(
-                            stringResource(R.string.oxide_sec_topbar_back)
+            OxidePanelShell(
+                title = stringResource(R.string.oxide_sec_accounts_title),
+                subtitle = subtitle,
+                metrics = metrics,
+                bounds = bounds,
+                onClose = onDismiss,
+                footer = {
+                    OxideButton(
+                        text = stringResource(R.string.oxide_ac_refresh_account),
+                        onClick = {
+                            current?.let { account ->
+                                viewModel.onIntent(AccountManageIntent.RefreshAccount(account))
+                            }
+                        },
+                        // 离线账号没有服务端凭据可刷新，禁用而不是把这一格藏起来，
+                        // 这样底部这一行不会随着当前账号的类型来回跳
+                        enabled = oxideAccountRefreshEnabled(
+                            hasAccount = current != null,
+                            isLocalAccount = current?.isLocalAccount() == true,
                         ),
                     )
-                    Spacer(Modifier.width(6.dp))
-                    OxidePageTitle(
-                        text = stringResource(R.string.oxide_sec_accounts_title),
-                        modifier = Modifier.weight(1f),
-                        trailing = {
-                            OxideButton(
-                                text = stringResource(R.string.oxide_sec_accounts_add),
-                                onClick = { sheet = AccountSheet.Menu },
-                                tone = OxideButtonTone.Primary,
-                            )
-                        },
+                    OxideButton(
+                        text = stringResource(R.string.oxide_sec_accounts_add),
+                        onClick = { sheet = AccountSheet.Menu },
+                        tone = OxideButtonTone.Primary,
                     )
-                }
-                OxideSectionLabel(
-                    text = stringResource(
-                        if (accounts.size == 1) {
-                            R.string.oxide_sec_accounts_subtitle_one
-                        } else {
-                            R.string.oxide_sec_accounts_subtitle_other
-                        },
-                        accounts.size,
-                    )
-                )
-
-                Spacer(Modifier.height(metrics.sectionGap))
-
+                },
+            ) {
                 failure?.let { message ->
                     OxideSecErrorRow(
                         metrics = metrics,
@@ -337,7 +361,6 @@ fun OxideAccountPage(
                         dismissText = stringResource(R.string.oxide_sec_accounts_dismiss),
                         onDismiss = { failure = null },
                     )
-                    Spacer(Modifier.height(metrics.cardGap))
                 }
 
                 deleteTarget?.let { target ->
@@ -355,19 +378,17 @@ fun OxideAccountPage(
                         },
                         onDismiss = { deleteTarget = null },
                     )
-                    Spacer(Modifier.height(metrics.cardGap))
                 }
 
-                if (sideBySide) {
+                // 两列与一列是同一批内容的两种排布，没有任何一个块自己再开滚动：
+                // 面板内部那一个滚动容器就是这一整列内容的滚动容器
+                if (twoColumns) {
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
                     ) {
                         Column(
-                            modifier = Modifier
-                                .width(metrics.cardMinWidth)
-                                .fillMaxHeight()
-                                .verticalScroll(rememberScrollState()),
+                            modifier = Modifier.width(metrics.cardMinWidth),
                             verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
                         ) {
                             OxideAccountCurrentCard(
@@ -384,12 +405,16 @@ fun OxideAccountPage(
                                 }.orEmpty(),
                                 onOpenSkin = { account -> sheet = AccountSheet.Skin(account) },
                                 onFetchCapes = { account ->
-                                    viewModel.onIntent(AccountManageIntent.FetchMicrosoftCapes(account))
+                                    viewModel.onIntent(
+                                        AccountManageIntent.FetchMicrosoftCapes(account)
+                                    )
                                 },
                             )
                             OxideAccountStoreCard(
                                 metrics = metrics,
-                                onBackup = { viewModel.onIntent(AccountManageIntent.PrepareBackup) },
+                                onBackup = {
+                                    viewModel.onIntent(AccountManageIntent.PrepareBackup)
+                                },
                                 onRestore = startRestore,
                             )
                         }
@@ -398,9 +423,7 @@ fun OxideAccountPage(
                             metrics = metrics,
                             accounts = accounts,
                             current = current,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
+                            modifier = Modifier.weight(1f),
                             onUse = { account -> AccountsManager.setCurrentAccount(account) },
                             onRefresh = { account ->
                                 viewModel.onIntent(AccountManageIntent.RefreshAccount(account))
@@ -412,47 +435,42 @@ fun OxideAccountPage(
                         )
                     }
                 } else {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(0.46f)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
-                        ) {
-                            OxideAccountCurrentCard(
-                                metrics = metrics,
-                                current = current,
-                                accountsCount = accounts.size,
-                                onAdd = { sheet = AccountSheet.Menu },
-                            )
-                            OxideAccountStoreCard(
-                                metrics = metrics,
-                                onBackup = { viewModel.onIntent(AccountManageIntent.PrepareBackup) },
-                                onRestore = startRestore,
-                            )
-                        }
-
-                        OxideAccountListCard(
-                            metrics = metrics,
-                            accounts = accounts,
-                            current = current,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            onUse = { account -> AccountsManager.setCurrentAccount(account) },
-                            onRefresh = { account ->
-                                viewModel.onIntent(AccountManageIntent.RefreshAccount(account))
-                            },
-                            onCopyUuid = { account ->
-                                copyText(COPY_LABEL_ACCOUNT_UUID, account.profileId, context, true)
-                            },
-                            onDelete = { account -> deleteTarget = account },
-                        )
-                    }
+                    OxideAccountCurrentCard(
+                        metrics = metrics,
+                        current = current,
+                        accountsCount = accounts.size,
+                        onAdd = { sheet = AccountSheet.Menu },
+                    )
+                    OxideAccountWardrobeCard(
+                        metrics = metrics,
+                        account = current,
+                        capes = current?.let {
+                            profileUiState.accountCapeOpMap[it.uniqueUUID]
+                        }.orEmpty(),
+                        onOpenSkin = { account -> sheet = AccountSheet.Skin(account) },
+                        onFetchCapes = { account ->
+                            viewModel.onIntent(AccountManageIntent.FetchMicrosoftCapes(account))
+                        },
+                    )
+                    OxideAccountStoreCard(
+                        metrics = metrics,
+                        onBackup = { viewModel.onIntent(AccountManageIntent.PrepareBackup) },
+                        onRestore = startRestore,
+                    )
+                    OxideAccountListCard(
+                        metrics = metrics,
+                        accounts = accounts,
+                        current = current,
+                        modifier = Modifier.fillMaxWidth(),
+                        onUse = { account -> AccountsManager.setCurrentAccount(account) },
+                        onRefresh = { account ->
+                            viewModel.onIntent(AccountManageIntent.RefreshAccount(account))
+                        },
+                        onCopyUuid = { account ->
+                            copyText(COPY_LABEL_ACCOUNT_UUID, account.profileId, context, true)
+                        },
+                        onDelete = { account -> deleteTarget = account },
+                    )
                 }
             }
         }
@@ -651,7 +669,9 @@ private fun OxideAccountCurrentCard(
  * 皮肤与披风
  *
  * 只显示真实存在的东西：皮肤文件在不在、披风文件在不在、微软账号抓回来的披风列表。
- * 组合期只读已经解析好的路径，不做 IO；换账号时重新读一次。
+ * 文件在不在**不在组合期问**：`File.exists()` 是一次磁盘 IO，而组合期会被反复调用，
+ * 每一次重组都问一遍既慢又可能撞上 IO 线程。所以换账号时在 IO 线程上问一次，
+ * 问完之前那两行不写值，而不是先猜一个再改。
  */
 @Composable
 private fun OxideAccountWardrobeCard(
@@ -661,8 +681,20 @@ private fun OxideAccountWardrobeCard(
     onOpenSkin: (Account) -> Unit,
     onFetchCapes: (Account) -> Unit,
 ) {
-    val skinPresent = remember(account) { account?.hasSkinFile == true }
-    val capePresent = remember(account) { account?.getCapeFile()?.exists() == true }
+    val uuid = account?.uniqueUUID
+    var presence by remember(uuid) { mutableStateOf<OxideWardrobePresence?>(null) }
+    LaunchedEffect(uuid, account) {
+        presence = if (account == null) {
+            null
+        } else {
+            withContext(Dispatchers.IO) {
+                OxideWardrobePresence(
+                    skinPresent = account.hasSkinFile,
+                    capePresent = account.getCapeFile().exists(),
+                )
+            }
+        }
+    }
     val usingCape = remember(capes) { capes.findUsing() }
 
     OxideSurface(
@@ -682,26 +714,22 @@ private fun OxideAccountWardrobeCard(
         }
         OxideSettingRow(
             label = stringResource(R.string.account_change_skin),
-            value = stringResource(
-                if (skinPresent) {
-                    R.string.oxide_sec_accounts_skin_present
-                } else {
-                    R.string.oxide_sec_accounts_skin_default
-                }
-            ),
+            value = when (presence?.skinPresent) {
+                null -> ""
+                true -> stringResource(R.string.oxide_sec_accounts_skin_present)
+                else -> stringResource(R.string.oxide_sec_accounts_skin_default)
+            },
         )
         OxideSettingRow(
             label = stringResource(R.string.account_change_cape),
             value = if (usingCape != null) {
                 capeName(usingCape)
             } else {
-                stringResource(
-                    if (capePresent) {
-                        R.string.oxide_sec_accounts_cape_present
-                    } else {
-                        R.string.oxide_sec_accounts_cape_none
-                    }
-                )
+                when (presence?.capePresent) {
+                    null -> ""
+                    true -> stringResource(R.string.oxide_sec_accounts_cape_present)
+                    else -> stringResource(R.string.oxide_sec_accounts_cape_none)
+                }
             },
         )
         Spacer(Modifier.height(metrics.secRowGap))
@@ -722,6 +750,17 @@ private fun OxideAccountWardrobeCard(
         }
     }
 }
+
+/**
+ * 皮肤 / 披风文件是否真的在磁盘上
+ *
+ * 整个数据类没有默认值，因此"还没量到"只能是 `null` 而不是两个 false——
+ * 后者会和"量过了，两份文件都不在"混成同一个答案，界面上就分不出这两种情况了。
+ */
+private data class OxideWardrobePresence(
+    val skinPresent: Boolean,
+    val capePresent: Boolean,
+)
 
 /** 账号库的备份与恢复：与旧账号管理页里的两个按钮是同一条链路 */
 @Composable
@@ -798,12 +837,12 @@ private fun OxideAccountListCard(
             )
             return@OxideSurface
         }
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        ) {
-            items(items = accounts, key = { account -> account.uniqueUUID }) { account ->
+        // 这里刻意不是 LazyColumn：面板内部已经有一个纵向滚动容器（面板外壳那一个），
+        // 再嵌一个同轴的懒列表就是两套滚动容器抢同一个方向。
+        // 账号列表只有个位数的条目，整列展开即可，key 保证删除或切换当前账号时
+        // 每一行的组合状态跟着账号本身走，而不是跟着下标走。
+        accounts.forEach { account ->
+            key(account.uniqueUUID) {
                 OxideAccountRow(
                     metrics = metrics,
                     account = account,
@@ -813,8 +852,8 @@ private fun OxideAccountListCard(
                     onCopyUuid = { onCopyUuid(account) },
                     onDelete = { onDelete(account) },
                 )
-                Spacer(Modifier.height(metrics.secRowGap))
             }
+            Spacer(Modifier.height(metrics.secRowGap))
         }
     }
 }

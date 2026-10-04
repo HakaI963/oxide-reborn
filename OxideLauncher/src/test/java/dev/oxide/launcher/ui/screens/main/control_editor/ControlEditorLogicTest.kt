@@ -316,8 +316,17 @@ class ControlEditorPadTest {
     }
 
     @Test
-    fun `旋钮中心就是比例乘板宽`() {
+    fun `旋钮中心就是比例乘板宽 并夹在板内`() {
+        // 旋钮半径 4、板宽 200：比例 0.5 想落在 100，但 100+4 会越过右边界，
+        // 因此被夹到 196。纵方向比例 0.25 落在 25，离上下边界都还远
         val point = editorPadKnob(0.5f, 0.25f, width = 200f, height = 100f, knobRadius = 4f)
+        assertEquals(196f, point.x, 0.001f)
+        assertEquals(25f, point.y, 0.001f)
+    }
+
+    @Test
+    fun `旋钮半径为零时就是比例乘板宽`() {
+        val point = editorPadKnob(0.5f, 0.25f, width = 200f, height = 100f, knobRadius = 0f)
         assertEquals(100f, point.x, 0.001f)
         assertEquals(25f, point.y, 0.001f)
     }
@@ -353,9 +362,8 @@ class ControlEditorPadTest {
     @Test
     fun `编辑器用的步长是半个百分点`() {
         assertEquals(50, EditorNudgeStep)
-        // 半个百分点 = 存储刻度 10000 里的 50
-        assertEquals(5000, editorNudge(5000, EditorNudgeStep, 1))
         assertEquals(5050, editorNudge(5000, EditorNudgeStep, 1))
+        assertEquals(4950, editorNudge(5000, EditorNudgeStep, -1))
     }
 }
 

@@ -18,26 +18,16 @@
 
 package dev.oxide.launcher.ui.screens.main.crashlogs
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.onCardColor
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogOption
+import dev.oxide.launcher.ui.screens.main.oxide.OxideListDialog
+
+/** 菜单里每一行的稳定标识：回调按它走，列表也用它当 itemKey */
+private const val KEY_VIEW = "view"
+private const val KEY_SHARE = "share"
+private const val KEY_UPLOAD = "upload"
 
 sealed interface LogShareMenuOperation {
     data object None : LogShareMenuOperation
@@ -45,6 +35,18 @@ sealed interface LogShareMenuOperation {
     data object ShowMenu : LogShareMenuOperation
 }
 
+/**
+ * 实例设置里"分享日志"点开的那张菜单
+ *
+ * 这一块过去是四个竖着的 Material 按钮撑出来的一张 Surface，底色只有 `cardColor`
+ * 那一档透明度。现在它就是 [OxideListDialog] 的动作模式（`selectable = false`）：
+ * 行为不变——点一行立刻干活并收起菜单，只是行不再画单选标记，也不画图标，
+ * 每个动作靠自己的文字说清自己是什么。
+ *
+ * 关闭不再是一行：面板自带标题栏的 ✕、遮罩点击和返回键，三条路都还在，
+ * 而"关闭"作为一个菜单项本来就在重复面板自己的行为。分享链接不可用时那一行
+ * 被标成不可选，并在第二行写明原因，而不是像旧版那样灰着仍然可点。
+ */
 @Composable
 fun LogShareMenu(
     operation: LogShareMenuOperation,
@@ -57,89 +59,34 @@ fun LogShareMenu(
     when (operation) {
         is LogShareMenuOperation.None -> {}
         is LogShareMenuOperation.ShowMenu -> {
-            Dialog(
-                onDismissRequest = {
-                    onChange(LogShareMenuOperation.None)
-                }
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(all = 6.dp),
-                    color = cardColor(false),
-                    contentColor = onCardColor(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    shadowElevation = 6.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(all = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        //查看日志
-                        Button(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                onView()
-                                onChange(LogShareMenuOperation.None)
-                            }
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_assignment_filled),
-                                contentDescription = null
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(text = stringResource(R.string.generic_view))
-                        }
-                        //分享日志
-                        Button(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                onShare()
-                                onChange(LogShareMenuOperation.None)
-                            }
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_share_filled),
-                                contentDescription = null
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(text = stringResource(R.string.crash_share_logs))
-                        }
-                        //分享链接
-                        Button(
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = canUpload,
-                            onClick = {
-                                onUpload()
-                                onChange(LogShareMenuOperation.None)
-                            }
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_link),
-                                contentDescription = null
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(text = stringResource(R.string.crash_link_share_button))
-                        }
-                        //关闭
-                        Button(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                onChange(LogShareMenuOperation.None)
-                            }
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_close),
-                                contentDescription = null
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(text = stringResource(R.string.generic_close))
-                        }
+            OxideListDialog(
+                title = stringResource(R.string.crash_share_logs),
+                options = listOf(
+                    OxideDialogOption(
+                        key = KEY_VIEW,
+                        label = stringResource(R.string.generic_view),
+                    ),
+                    OxideDialogOption(
+                        key = KEY_SHARE,
+                        label = stringResource(R.string.crash_share_logs),
+                    ),
+                    OxideDialogOption(
+                        key = KEY_UPLOAD,
+                        label = stringResource(R.string.crash_link_share_button),
+                        enabled = canUpload,
+                    ),
+                ),
+                onOptionSelected = { key ->
+                    when (key) {
+                        KEY_VIEW -> onView()
+                        KEY_SHARE -> onShare()
+                        KEY_UPLOAD -> onUpload()
                     }
-                }
-            }
+                    onChange(LogShareMenuOperation.None)
+                },
+                onDismiss = { onChange(LogShareMenuOperation.None) },
+                selectable = false,
+            )
         }
     }
 }

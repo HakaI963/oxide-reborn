@@ -26,6 +26,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,7 +52,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.oxide.layercontroller.data.lang.createTranslatable
@@ -134,6 +134,15 @@ internal data class OxideAboutEntry(
  * 并且被 [oxideAboutEntries] 放在最前面——任何精简名单的改动都会先撞到它。
  */
 internal const val OXIDE_ABOUT_ACCOUNT_CODE_KEY: String = "account-code"
+
+/**
+ * 协议清单里"本产品自己那一行"的键
+ *
+ * GPLv3 §4：随附的程序必须带上它自己的协议全文。`res/raw` 里原本只有被复用项目的
+ * 协议，因此这一行此前根本不存在；它与致谢名单分开记，是因为它不是"别人的东西"，
+ * 而是这个产品自己的条款，混进致谢名单里会让那份名单不再是名单。
+ */
+internal const val OXIDE_ABOUT_LAUNCHER_LICENCE_KEY: String = "launcher-licence"
 
 /**
  * 关于面板要列出的致谢名单
@@ -251,6 +260,43 @@ internal fun oxideAboutLicenseEntries(entries: List<OxideAboutEntry>): List<Oxid
     entries.filter { it.licenseRaw != 0 }
 
 /**
+ * 启动器自己那一行协议
+ *
+ * GPLv3 §4/§5：随附的程序必须带上它的协议全文，而 `res/raw` 里原本只有
+ * 被复用项目的协议（LPL-3 / FCL / HMCL），本产品自己的 GPL 全文无处可读——
+ * 面板写着"以 GPLv3 发布"，却打不开那份协议。补上这一条才说得通。
+ *
+ * [raw] 显式传进来而不是在这里写死，是为了让"清单里第一条是本产品的协议"
+ * 这条规则可以被单测钉住。
+ */
+internal fun oxideAboutLauncherLicenceEntry(raw: Int): OxideAboutEntry = OxideAboutEntry(
+    key = OXIDE_ABOUT_LAUNCHER_LICENCE_KEY,
+    titleRes = R.string.oxide_about_licence_launcher_title,
+    detailRes = R.string.oxide_about_licence_launcher_detail,
+    takesLauncherName = false,
+    // 协议那一行点开的是协议全文，不是项目页，因此不给链接：
+    // 项目链接已经在产品卡上，那是它唯一该出现的地方
+    url = null,
+    licenseRaw = raw,
+)
+
+/**
+ * 关于面板要列出的协议清单
+ *
+ * 本产品的协议排在最前，其余**从致谢名单派生**而不是另抄一份：
+ * 名单里少一条带协议的致谢，这里的清单就跟着少一条，两者不会各说各话。
+ * [launcherLicenceRaw] 为 0 时（`res/raw` 里没有那份文本）不渲染第一条，
+ * 面板上不会出现一个点开是空白的按钮。
+ */
+internal fun oxideAboutLicenceEntries(
+    entries: List<OxideAboutEntry>,
+    launcherLicenceRaw: Int,
+): List<OxideAboutEntry> = buildList {
+    if (launcherLicenceRaw > 0) add(oxideAboutLauncherLicenceEntry(launcherLicenceRaw))
+    addAll(oxideAboutLicenseEntries(entries))
+}
+
+/**
  * 关于面板显示的产品版本
  *
  * 必须是 [BuildKeys.LAUNCHER_DISPLAY_VERSION]：GitHub 上的发行号与
@@ -284,13 +330,22 @@ internal fun oxideControlLayoutsSideBySide(availableWidth: Dp, cardMinWidth: Dp)
  * 取代 `AboutInfoScreen`（以及它背后的 `NestedNavKey.Settings.AboutInfo` 嵌套栈）：
  * 旧界面带的是它上游那套图标顶栏与粉色强调色强调轨，和新界面的配色是两套语言。
  *
+ * 版面照参考稿重新排过一遍：
+ * - 顶部只有**一层**大标题，副标题降一级；页面内部不再出现第二份同权重标题；
+ * - 第一块是产品卡：产品名（hero 字号）+ 产品版本徽章 + 一句话说明 +
+ *   检查更新与项目链接这两个真实去处。检查更新此前在页头和"操作"分组里
+ *   各出现一次，是同一个动作的两枚控件，现在只留产品卡里这一处；
+ * - 其余是协议、致谢、插件项目、已加载插件与依赖库五组，宽屏两列、窄屏一列，
+ *   列规则来自 [oxideContentLayoutFor]，和文件页、日志页同一套。
+ *
  * 面板里仍然必须说清楚三件事：
  * 1. 这是什么产品、**哪个版本**（[oxideAboutProductVersion]，只看产品版本，不看构建身份）；
  * 2. 检查更新与项目链接这两个真实去处；
- * 3. 完整的致谢与署名——包括改编来的账号代码（[OXIDE_ABOUT_ACCOUNT_CODE_KEY]）。
+ * 3. 完整的协议、致谢与署名——包括改编来的账号代码（[OXIDE_ABOUT_ACCOUNT_CODE_KEY]）。
  *
  * 所有尺寸来自 [metrics]，页面自身不写死 dp；竖向滚动，因此在 640x360 的小横屏上
- * 也只是需要滚动，不会裁切或重叠。
+ * 也只是需要滚动，不会裁切或重叠。底色是 [Oxide.Bg]（不透明），因此面板压在外壳上
+ * 时底下那一层界面不会透出来。
  */
 @Composable
 fun OxideAboutPanel(
@@ -311,143 +366,121 @@ fun OxideAboutPanel(
 
     val entries = remember { oxideAboutEntries() }
     val pluginProjects = remember { oxideAboutPluginProjectEntries() }
+    // 协议清单从致谢名单派生，只多一条"本产品自己的 GPL"
+    val licences = remember(entries) {
+        oxideAboutLicenceEntries(entries, R.raw.gpl_3_license)
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(Oxide.Bg)
     ) {
-        OxideAboutHeader(
+        OxideContentHeader(
             metrics = metrics,
+            title = stringResource(R.string.settings_tab_info_about),
+            subtitle = stringResource(R.string.oxide_about_page_subtitle),
             onDismiss = onDismiss,
-            trailing = {
-                OxideButton(
-                    text = stringResource(R.string.oxide_set_action_check_update),
-                    onClick = bridge.checkUpdate,
-                    tone = OxideButtonTone.Secondary,
-                )
-            },
+            modifier = Modifier.padding(horizontal = metrics.pagePaddingH),
         )
 
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(
-                    start = metrics.pagePaddingH,
-                    end = metrics.pagePaddingH,
-                    bottom = Oxide.PagePaddingB,
-                ),
-            verticalArrangement = Arrangement.spacedBy(metrics.groupGap),
+                .weight(1f)
         ) {
-            // ---- 这个产品是什么、是什么版本 ----
-            OxideSettingsGroup(
-                title = stringResource(R.string.oxide_about_section_launcher),
-                metrics = metrics,
-            ) {
-                OxideSettingRow(
-                    label = launcherName,
-                    hint = stringResource(R.string.oxide_about_product_version_hint),
-                    value = productVersion,
-                )
-                OxideTextBlock(
-                    metrics = metrics,
-                    title = stringResource(R.string.about_launcher_modified_title),
-                    text = stringResource(R.string.about_launcher_modified_text),
-                )
-            }
+            // 两列的门槛与文件页、日志页共用一条规则，三块表面在同一个宽度上
+            // 做出一致的选择，而不是各自拍一个阈值
+            val layout = oxideContentLayoutFor(
+                availableWidth = maxWidth - metrics.pagePaddingH * 2,
+                cardMinWidth = metrics.cardMinWidth,
+            )
 
-            // ---- 两个真实去处 ----
-            OxideSettingsGroup(
-                title = stringResource(R.string.oxide_about_section_actions),
-                metrics = metrics,
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(
+                        start = metrics.pagePaddingH,
+                        end = metrics.pagePaddingH,
+                        bottom = Oxide.PagePaddingB,
+                    ),
+                verticalArrangement = Arrangement.spacedBy(metrics.groupGap),
             ) {
-                OxideActionRow(
-                    label = stringResource(R.string.oxide_set_action_check_update),
-                    hint = stringResource(R.string.oxide_set_action_check_update_detail),
-                    onClick = bridge.checkUpdate,
-                )
-                OxideActionRow(
-                    label = stringResource(R.string.about_launcher_project_link),
-                    hint = stringResource(R.string.oxide_about_project_link_detail),
-                    onClick = { bridge.openLink(URL_PROJECT) },
-                )
-            }
-
-            // ---- 协议全文：只列 res/raw 里真实存在的那些 ----
-            val licenseEntries = remember(entries) { oxideAboutLicenseEntries(entries) }
-            if (licenseEntries.isNotEmpty()) {
-                OxideSettingsGroup(
-                    title = stringResource(R.string.oxide_about_section_licences),
+                // ---- 产品卡：名字、版本、说明与两个真实去处 ----
+                OxideAboutHero(
                     metrics = metrics,
-                ) {
-                    licenseEntries.forEach { entry ->
-                        OxideActionRow(
-                            label = stringResource(entry.titleRes),
-                            hint = aboutDetailText(entry, launcherName),
-                            value = stringResource(R.string.oxide_about_read_licence),
-                            onClick = { openLicense(entry.licenseRaw) },
-                        )
+                    launcherName = launcherName,
+                    productVersion = productVersion,
+                    summary = stringResource(R.string.oxide_about_product_summary, launcherName),
+                    onCheckUpdate = bridge.checkUpdate,
+                    onOpenProject = { bridge.openLink(URL_PROJECT) },
+                )
+
+                if (layout.sideBySide) {
+                    // 宽屏：左列放短的那几组，右列放长的那几组，
+                    // 两列各自成一条竖线，谁先读完都不会剩下半屏空白
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(metrics.groupGap),
+                        ) {
+                            OxideAboutLicenceSection(
+                                metrics = metrics,
+                                launcherName = launcherName,
+                                licences = licences,
+                                openLicense = openLicense,
+                            )
+                            OxideAboutPluginProjectSection(
+                                metrics = metrics,
+                                launcherName = launcherName,
+                                pluginProjects = pluginProjects,
+                                openLink = bridge.openLink,
+                            )
+                            OxideAboutLoadedPluginSection(metrics = metrics)
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(metrics.groupGap),
+                        ) {
+                            OxideAboutAcknowledgementSection(
+                                metrics = metrics,
+                                launcherName = launcherName,
+                                entries = entries,
+                                openLink = bridge.openLink,
+                            )
+                            OxideAboutLibrarySection(
+                                metrics = metrics,
+                                openLicense = openLicense,
+                                openLink = bridge.openLink,
+                            )
+                        }
                     }
-                }
-            }
-
-            // ---- 致谢：名单只增不减 ----
-            OxideSettingsGroup(
-                title = stringResource(R.string.about_acknowledgements_title),
-                metrics = metrics,
-            ) {
-                entries.forEach { entry ->
-                    OxideAboutEntryRow(
-                        entry = entry,
+                } else {
+                    OxideAboutLicenceSection(
+                        metrics = metrics,
                         launcherName = launcherName,
+                        licences = licences,
                         openLicense = openLicense,
+                    )
+                    OxideAboutAcknowledgementSection(
+                        metrics = metrics,
+                        launcherName = launcherName,
+                        entries = entries,
                         openLink = bridge.openLink,
                     )
-                }
-            }
-
-            // ---- 插件项目 ----
-            OxideSettingsGroup(
-                title = stringResource(R.string.oxide_about_section_plugin_projects),
-                metrics = metrics,
-            ) {
-                pluginProjects.forEach { entry ->
-                    OxideAboutEntryRow(
-                        entry = entry,
+                    OxideAboutPluginProjectSection(
+                        metrics = metrics,
                         launcherName = launcherName,
-                        openLicense = openLicense,
+                        pluginProjects = pluginProjects,
                         openLink = bridge.openLink,
                     )
-                }
-            }
-
-            // ---- 已加载的 APK 插件：只列已经真的加载进来的 ----
-            val plugins = remember { PluginLoader.allPlugins }
-            if (plugins.isNotEmpty()) {
-                OxideSettingsGroup(
-                    title = stringResource(R.string.about_plugin_title),
-                    metrics = metrics,
-                ) {
-                    plugins.forEach { plugin ->
-                        OxideSettingRow(
-                            label = plugin.appName,
-                            hint = plugin.packageName,
-                            value = plugin.appVersion.takeIf { it.isNotBlank() },
-                        )
-                    }
-                }
-            }
-
-            // ---- 依赖库：逐条列出协议与项目链接 ----
-            OxideSettingsGroup(
-                title = stringResource(R.string.about_library_title),
-                metrics = metrics,
-            ) {
-                libraryData.forEach { info ->
-                    OxideLibraryRow(
-                        info = info,
+                    OxideAboutLoadedPluginSection(metrics = metrics)
+                    OxideAboutLibrarySection(
+                        metrics = metrics,
                         openLicense = openLicense,
                         openLink = bridge.openLink,
                     )
@@ -457,66 +490,214 @@ fun OxideAboutPanel(
     }
 }
 
-/** 面板顶部：返回 + 标题 + 副标题 */
+/**
+ * 产品卡
+ *
+ * 产品名用 hero 字号，产品版本用徽章——两者是同一块卡里唯一的一组"大字 + 值"，
+ * 页面其余部分不再重复这个组合。说明文字里的产品名来自 `BuildKeys.LAUNCHER_NAME`，
+ * 不在字符串里写死，因此改名时这一句跟着变。
+ */
 @Composable
-private fun OxideAboutHeader(
+private fun OxideAboutHero(
     metrics: OxideMetrics,
-    onDismiss: () -> Unit,
-    trailing: @Composable () -> Unit,
+    launcherName: String,
+    productVersion: String,
+    summary: String,
+    onCheckUpdate: () -> Unit,
+    onOpenProject: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = metrics.pagePaddingH)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OxideIconButton(
-                onClick = onDismiss,
-                glyph = "←",
-                modifier = Modifier.oxideIconDescription(
-                    stringResource(R.string.oxide_sec_topbar_back)
-                ),
-            )
-            Spacer(Modifier.width(metrics.secRowGap * 2))
-            OxidePageTitle(
-                text = stringResource(R.string.settings_tab_info_about),
+    OxideSurface(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(
+            horizontal = metrics.cardGap,
+            vertical = metrics.cardGap,
+        ),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = launcherName,
+                    color = Oxide.Fg,
+                    style = Oxide.Type.heroTitle(metrics.heroTitleDp),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(metrics.secRowGap))
+                Text(
+                    text = summary,
+                    color = Oxide.FgFaint,
+                    fontSize = Oxide.Type.Body.fontSize,
+                    lineHeight = Oxide.Type.Body.lineHeight,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // 版本号不给按钮也不给链接：它不是一个动作，只是一个值
+            Spacer(Modifier.width(metrics.cardGap))
+            OxideBadge(text = productVersion, tone = OxideBadgeTone.Active)
+        }
+
+        Spacer(Modifier.height(metrics.cardGap))
+        OxideSecDivider()
+        Spacer(Modifier.height(metrics.cardGap))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap)) {
+            OxideButton(
+                text = stringResource(R.string.oxide_about_action_check_update),
+                onClick = onCheckUpdate,
+                tone = OxideButtonTone.Primary,
                 modifier = Modifier.weight(1f),
             )
-            trailing()
+            OxideButton(
+                text = stringResource(R.string.about_launcher_project_link),
+                onClick = onOpenProject,
+                modifier = Modifier.weight(1f),
+            )
         }
-        OxideSectionLabel(text = stringResource(R.string.oxide_about_page_subtitle))
-        Spacer(Modifier.height(metrics.sectionGap))
+
+        Spacer(Modifier.height(metrics.secRowGap))
+        // 项目地址本身写出来：那不只是一个按钮的标签，而是这个产品的出处
+        Text(
+            text = URL_PROJECT,
+            color = Oxide.FgFaint,
+            fontSize = Oxide.Type.MicroLabel.fontSize,
+            lineHeight = Oxide.Type.MicroLabel.lineHeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** 协议全文：先说本产品自己的 GPL，其余从致谢名单派生 */
+@Composable
+private fun OxideAboutLicenceSection(
+    metrics: OxideMetrics,
+    launcherName: String,
+    licences: List<OxideAboutEntry>,
+    openLicense: (Int) -> Unit,
+) {
+    if (licences.isEmpty()) return
+    OxideSettingsGroup(
+        title = stringResource(R.string.oxide_about_section_licences),
+        metrics = metrics,
+    ) {
+        licences.forEach { entry ->
+            OxideActionRow(
+                label = stringResource(entry.titleRes),
+                hint = aboutDetailText(entry, launcherName),
+                value = stringResource(R.string.oxide_about_read_licence),
+                onClick = { openLicense(entry.licenseRaw) },
+            )
+        }
+    }
+}
+
+/**
+ * 致谢：名单只增不减
+ *
+ * 这一组只回答"哪些是别人的东西"，因此只有项目链接；协议全文在"协议"那一组里，
+ * 同一个协议不出现两枚按钮。
+ */
+@Composable
+private fun OxideAboutAcknowledgementSection(
+    metrics: OxideMetrics,
+    launcherName: String,
+    entries: List<OxideAboutEntry>,
+    openLink: (String) -> Unit,
+) {
+    OxideSettingsGroup(
+        title = stringResource(R.string.about_acknowledgements_title),
+        metrics = metrics,
+    ) {
+        entries.forEach { entry ->
+            OxideAboutCreditRow(
+                entry = entry,
+                launcherName = launcherName,
+                openLink = openLink,
+            )
+        }
+    }
+}
+
+/** 插件项目的致谢：与普通致谢同一枚行，因此读法一致 */
+@Composable
+private fun OxideAboutPluginProjectSection(
+    metrics: OxideMetrics,
+    launcherName: String,
+    pluginProjects: List<OxideAboutEntry>,
+    openLink: (String) -> Unit,
+) {
+    OxideSettingsGroup(
+        title = stringResource(R.string.oxide_about_section_plugin_projects),
+        metrics = metrics,
+    ) {
+        pluginProjects.forEach { entry ->
+            OxideAboutCreditRow(
+                entry = entry,
+                launcherName = launcherName,
+                openLink = openLink,
+            )
+        }
     }
 }
 
 /**
  * 一条致谢
  *
- * 有项目链接就整行点开它，有协议全文就在右侧给一个按钮——两者都不是装饰：
- * 点下去真的会打开浏览器或启动器自己的协议阅读页。
+ * 有项目链接就整行点开它；没有链接的那一行就是纯文字（BMCL 只有镜像源署名，
+ * 没有可指的项目页），不渲染成一颗按下去没反应的东西。
  */
 @Composable
-private fun OxideAboutEntryRow(
+private fun OxideAboutCreditRow(
     entry: OxideAboutEntry,
     launcherName: String,
-    openLicense: (Int) -> Unit,
     openLink: (String) -> Unit,
 ) {
     OxideSettingRow(
         label = stringResource(entry.titleRes),
         hint = aboutDetailText(entry, launcherName),
         onClick = entry.url?.let { url -> { openLink(url) } },
-        trailing = if (entry.licenseRaw != 0) {
-            {
-                OxideButton(
-                    text = stringResource(R.string.oxide_about_read_licence),
-                    onClick = { openLicense(entry.licenseRaw) },
-                    tone = OxideButtonTone.Ghost,
-                )
-            }
-        } else {
-            null
-        },
     )
+}
+
+/** 已加载的 APK 插件：只列已经真的加载进来的，一个都没有就不占一节 */
+@Composable
+private fun OxideAboutLoadedPluginSection(metrics: OxideMetrics) {
+    val plugins = remember { PluginLoader.allPlugins }
+    if (plugins.isEmpty()) return
+    OxideSettingsGroup(
+        title = stringResource(R.string.about_plugin_title),
+        metrics = metrics,
+    ) {
+        plugins.forEach { plugin ->
+            OxideSettingRow(
+                label = plugin.appName,
+                hint = plugin.packageName,
+                value = plugin.appVersion.takeIf { it.isNotBlank() },
+            )
+        }
+    }
+}
+
+/** 依赖库：逐条列出协议与项目链接 */
+@Composable
+private fun OxideAboutLibrarySection(
+    metrics: OxideMetrics,
+    openLicense: (Int) -> Unit,
+    openLink: (String) -> Unit,
+) {
+    OxideSettingsGroup(
+        title = stringResource(R.string.about_library_title),
+        metrics = metrics,
+    ) {
+        libraryData.forEach { info ->
+            OxideLibraryRow(
+                info = info,
+                openLicense = openLicense,
+                openLink = openLink,
+            )
+        }
+    }
 }
 
 /**

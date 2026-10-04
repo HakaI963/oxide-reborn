@@ -20,6 +20,7 @@ package dev.oxide.launcher.ui.screens.main.oxide
 
 import dev.oxide.launcher.BuildConfig
 import dev.oxide.launcher.BuildKeys
+import dev.oxide.launcher.R
 import dev.oxide.launcher.path.URL_COMMUNITY
 import dev.oxide.launcher.path.URL_GITHUB_DRIVER_PLUGINS
 import dev.oxide.launcher.path.URL_GITHUB_NATIVE_LIB_PLUGINS
@@ -262,6 +263,50 @@ class OxideAboutPanelTest {
         assertEquals(emptyList<OxideAboutEntry>(), oxideAboutLicenseEntries(emptyList()))
     }
 
+    // ---- 本产品自己的协议 ---------------------------------------------------
+
+    @Test
+    fun theLaunchersOwnLicenceIsListedFirstAndSeparateFromTheCredits() {
+        // GPLv3 §4：随附的程序必须能读到它自己的协议全文。此前 res/raw 里只有
+        // 被复用项目的协议，这一行根本不存在——面板写着"以 GPLv3 发布"，
+        // 却打不开那份协议。
+        val withLauncher = oxideAboutLicenceEntries(entries, R.raw.gpl_3_license)
+        assertEquals(OXIDE_ABOUT_LAUNCHER_LICENCE_KEY, withLauncher.first().key)
+        // 它不是"别人的东西"，所以不能混进致谢名单里
+        assertFalse(
+            "the launcher's own licence must not be listed as somebody else's work",
+            OXIDE_ABOUT_LAUNCHER_LICENCE_KEY in entries.map { it.key },
+        )
+        // 其余仍然完全由致谢名单派生，不是另抄一份
+        assertEquals(
+            oxideAboutLicenseEntries(entries),
+            withLauncher.drop(1),
+        )
+    }
+
+    @Test
+    fun theLicenceListCarriesTheSameProductVersionRuleAsTheRestOfThePanel() {
+        // 协议与致谢都在同一块面板里，因此产品版本只有一个来源；
+        // 这里钉住它读的是 LAUNCHER_DISPLAY_VERSION 而不是构建身份
+        val source = readPanelSource()
+        assertTrue(
+            "the panel must read the product version from LAUNCHER_DISPLAY_VERSION",
+            source.contains("BuildKeys.LAUNCHER_DISPLAY_VERSION"),
+        )
+        assertTrue(
+            "the panel must go through the one rule that keeps the two apart",
+            source.contains("oxideAboutProductVersion("),
+        )
+    }
+
+    @Test
+    fun noLicenceRowIsRenderedWithoutATextToOpen() {
+        // res/raw 里没有那份文本时，第一行整个不出现，而不是留一个点开空白的按钮
+        val withoutLauncher = oxideAboutLicenceEntries(entries, launcherLicenceRaw = 0)
+        assertEquals(oxideAboutLicenseEntries(entries), withoutLauncher)
+        assertFalse(OXIDE_ABOUT_LAUNCHER_LICENCE_KEY in withoutLauncher.map { it.key })
+    }
+
     @Test
     fun theLicenceAssetsThePanelRendersAgainstArePresent() {
         // 协议全文由 res/raw 里的文件供文：文件被删掉而代码还指着它，
@@ -272,6 +317,22 @@ class OxideAboutPanelTest {
         for (asset in listOf("fcl_license.txt", "hmcl_license.txt", "lgpl_3_license.txt")) {
             assertTrue("$asset is referenced by the about panel but missing", asset in assets)
         }
+    }
+
+    @Test
+    fun theLauncherGPLTextIsShippedSoTheLicenceRowCanBeOpened() {
+        val assets = locateRes("raw").listFiles().orEmpty().map { it.name }.toSet()
+        assertTrue(
+            "the panel offers the launcher's own GPLv3 text, so the file must exist",
+            "gpl_3_license.txt" in assets,
+        )
+        // 空文件会点开一片空白，因此钉住它不是空的
+        val text = locateRes("raw").resolve("gpl_3_license.txt").readText()
+        assertTrue("the GPL text must not be empty", text.isNotBlank())
+        assertTrue(
+            "this must really be the GPLv3 text, not a placeholder",
+            text.contains("GNU GENERAL PUBLIC LICENSE") && text.contains("Version 3"),
+        )
     }
 
     private fun readPanelSource(): String = locate(

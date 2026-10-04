@@ -480,29 +480,31 @@ internal data class OxidePreflightTexts(
 /**
  * 把一条检查翻译成面板上的话
  *
- * 用的是后端自己那些文案（`renderer_version_unsupported_warning` 等），
+ * 标题一律用 Oxide 自己的 `oxide_launch_op_*`，而不是旧实现那个 `generic_warning`：
+ * 「警告」不告诉人到底缺了什么，而「%1$s does not support this version」说的是同一件事。
+ * 说明文字仍然用后端那些文案（`renderer_version_unsupported_warning` 等），
  * 也就是说检查为什么成立、用户被要求确认什么，仍然是后端在说话，界面只是不再弹窗。
  */
 @Composable
 internal fun launchPreflightTexts(operation: LaunchGameOperation): OxidePreflightTexts? =
     when (operation) {
         is LaunchGameOperation.InvalidVersionName -> OxidePreflightTexts(
-            title = stringResource(R.string.versions_manage_invalid),
+            title = stringResource(R.string.oxide_launch_op_invalid_name),
             detail = operation.th.getInvalidSummary(),
         )
 
         is LaunchGameOperation.NoVersion -> OxidePreflightTexts(
-            title = stringResource(R.string.oxide_sec_launch_op_no_version),
+            title = stringResource(R.string.oxide_launch_op_no_version),
             detail = stringResource(R.string.game_launch_no_version),
         )
 
         is LaunchGameOperation.NoAccount -> OxidePreflightTexts(
-            title = stringResource(R.string.oxide_sec_launch_op_no_account),
+            title = stringResource(R.string.oxide_launch_op_no_account),
             detail = stringResource(R.string.game_launch_no_account),
         )
 
         is LaunchGameOperation.RendererNoStoragePermission -> OxidePreflightTexts(
-            title = stringResource(R.string.oxide_sec_launch_op_storage_permission),
+            title = stringResource(R.string.oxide_launch_op_storage_permission),
             detail = stringResource(
                 R.string.oxide_launch_storage_detail,
                 operation.renderer.getRendererName(),
@@ -510,7 +512,10 @@ internal fun launchPreflightTexts(operation: LaunchGameOperation): OxidePrefligh
         )
 
         is LaunchGameOperation.UnsupportedRenderer -> OxidePreflightTexts(
-            title = stringResource(R.string.generic_warning),
+            title = stringResource(
+                R.string.oxide_launch_op_unsupported_renderer,
+                operation.renderer.getRendererName(),
+            ),
             detail = stringResource(
                 R.string.renderer_version_unsupported_warning,
                 operation.renderer.getRendererName(),
@@ -518,7 +523,7 @@ internal fun launchPreflightTexts(operation: LaunchGameOperation): OxidePrefligh
         )
 
         is LaunchGameOperation.UnsupportedPlugins -> OxidePreflightTexts(
-            title = stringResource(R.string.generic_warning),
+            title = stringResource(R.string.oxide_launch_op_unsupported_plugins),
             detail = stringResource(
                 R.string.plugin_unsupported_warning,
                 operation.plugins.joinToString(", ") { it.appName },
@@ -527,13 +532,12 @@ internal fun launchPreflightTexts(operation: LaunchGameOperation): OxidePrefligh
 
         is LaunchGameOperation.AccountRelogin -> if (operation.account.isMicrosoftAccount()) {
             OxidePreflightTexts(
-                title = stringResource(R.string.account_relogin_title),
+                title = stringResource(R.string.oxide_launch_op_relogin, operation.account.username),
                 detail = stringResource(R.string.account_relogin_microsoft_message),
             )
         } else {
             OxidePreflightTexts(
-                title = operation.account.accountType
-                    ?: stringResource(R.string.account_relogin_title),
+                title = stringResource(R.string.oxide_launch_op_relogin, operation.account.username),
                 detail = stringResource(
                     R.string.account_relogin_password_message,
                     operation.account.username,
@@ -544,7 +548,10 @@ internal fun launchPreflightTexts(operation: LaunchGameOperation): OxidePrefligh
         }
 
         is LaunchGameOperation.AccountRefreshFailed -> OxidePreflightTexts(
-            title = stringResource(R.string.account_refresh_failed_title),
+            title = stringResource(
+                R.string.oxide_launch_op_refresh_failed,
+                operation.account.username,
+            ),
             detail = stringResource(R.string.account_refresh_failed_skip_message),
             failure = resolveAndroidString(accountErrorText(operation.error)).text,
         )
@@ -716,13 +723,14 @@ internal fun performOxidePreflightAction(
 /**
  * 启动前的说明与选择
  *
- * 不是模态弹窗：它就贴在启动页的内容区里，用户看得见自己按下的 Play、
- * 也看得见还没通过的检查是什么。全部尺寸都从 [OxideMetrics] 推导，
+ * 不是模态弹窗：它就贴在启动面板的内容区里（宿主是 [OxideLaunchPage] 那一块居中面板），
+ * 用户看得见自己按下的 Play、也看得见还没通过的检查是什么。全部尺寸都从 [OxideMetrics] 推导，
  * 按钮用 [OxideButton]，输入用既有的 [OxideSecInput]，因此和账号页那一套输入
  * 是同一个控件（同一个光标、同一套禁用态）。
  *
  * 三种结局的刷新失败与需要输入的重新登录都能装下：整块允许竖向滚动，
- * 640x360 上不会把最后一个按钮挤出屏幕。
+ * 640x360 上不会把最后一个按钮挤出屏幕——面板本身是固定高度的（见
+ * [OxideLaunchPanelGeometry]），所以这里的滚动容器拿到的 `maxHeight` 一定有限。
  *
  * [modifier] 由调用方决定怎么摆；只有"要问"的那一种分支会把它铺满并允许滚动，
  * 只有一个"知道了"的分支按内容高度摆，因此它不会被拉成一整条空板。

@@ -336,15 +336,10 @@ fun OxideMainShell(
                         exit = fadeOut(tween(Oxide.Motion.PopoverFadeMs)),
                     ) {
                         val target = destination ?: return@AnimatedVisibility
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                // 二级面板必须先铺一层近不透明的底幕。
-                                // Account / Multiplayer / Files 这些页面本身是 fillMaxSize
-                                // 且不画自己的底，没有这层的话首页会直接透上来，
-                                // 面板读起来就像"旧页面从弹窗后面漏出来"。
-                                .background(Oxide.PanelBackdrop)
-                        ) {
+                        // 底幕统一走 OxideDestinationBackdrop：它先铺一层完全不透明的
+                        // Oxide.Bg，再叠近不透明的 PanelBackdrop。单独铺 PanelBackdrop 还剩
+                        // 约 5% 透出，页面标题那么粗，5% 在真机上仍然看得见，两块标题会重影。
+                        OxideDestinationBackdrop {
                             when (target) {
                                 is OxideDestination.Account -> OxideAccountPage(
                                     metrics = metrics,

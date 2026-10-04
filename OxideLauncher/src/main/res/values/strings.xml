@@ -1446,6 +1446,10 @@
     <string name="oxide_dis_dep_type_incompatible">Incompatible</string>
     <string name="oxide_dis_dep_type_tool">Tool</string>
     <string name="oxide_dis_dep_type_include">Included</string>
+    <string name="oxide_dis_dep_game_version">Minecraft %1$s</string>
+    <string name="oxide_dis_dep_project_id">Project %1$s</string>
+    <string name="oxide_dis_dep_project_capped">Too many dependencies to describe (%1$d max)</string>
+    <string name="oxide_dis_dep_project_unknown">This dependency names no project on %1$s</string>
     <string name="about_launcher_modified_title">About Oxide Launcher</string>
     <string name="about_launcher_modified_text">Oxide Launcher is a launcher for Minecraft: Java Edition on Android. It is free software released under the GNU General Public License v3.0 and is developed independently. Full upstream attribution, third-party licences and the list of modifications are in THIRD_PARTY.md; every original copyright notice is preserved in the source files.</string>
     <string name="about_launcher_account_code_title">Account code</string>
@@ -1783,7 +1787,13 @@
     <string name="oxide_set_restore_summary">Read a backup file back into the launcher.</string>
     <string name="oxide_set_no_runtime">No Java runtime</string>
     <string name="oxide_set_no_runtime_detail">Import a .jar or .xz runtime to pick one here.</string>
+    <!-- Shown instead of the runtime picker while automatic picking is on; %1$s is the runtime in use -->
+    <string name="oxide_set_runtime_auto_chosen">Runtime</string>
+    <string name="oxide_set_runtime_auto_chosen_detail">Picked automatically for each game version. Currently %1$s.</string>
     <string name="oxide_set_no_renderer">No renderer available</string>
+    <!-- Shown when the renderer the setting remembers is not installed right now; %1$s is its id -->
+    <string name="oxide_set_renderer_missing">The saved renderer (%1$s) is not installed. Pick one below to replace it.</string>
+    <string name="oxide_set_driver_missing">The saved Vulkan driver (%1$s) is not installed. Pick one below to replace it.</string>
     <string name="oxide_set_no_game_path">No game folder</string>
     <string name="oxide_set_no_plugin">No native library plugin loaded</string>
     <!-- Name of the folder a native library plugin came from; %1$s is the plugin app name -->
@@ -1896,9 +1906,14 @@
     <string name="oxide_set_action_dl_driver_plugin_detail">Open the Vulkan driver plugin release page.</string>
     <string name="oxide_set_action_dl_native_lib_plugin">Get native library plugins</string>
     <string name="oxide_set_action_dl_native_lib_plugin_detail">Open the native library plugin release page.</string>
+    <string name="oxide_set_action_open_logs">Read the launcher and game logs</string>
+    <string name="oxide_set_action_open_logs_detail">Open the log viewer and pick a source.</string>
     <string name="oxide_set_action_open_logs_folder">Open the logs folder</string>
     <string name="oxide_set_action_open_data_folder">Open the launcher data folder</string>
     <string name="oxide_set_action_open_game_folder">Open the game folder</string>
+    <string name="oxide_st_path_current">Current</string>
+    <string name="oxide_st_path_save_failed">That game folder could not be saved.</string>
+    <string name="oxide_st_path_rename_hint">Name of this game folder</string>
     <string name="oxide_set_action_view_crash_log">View the launcher crash log</string>
     <string name="oxide_set_action_check_update">Check for launcher updates</string>
     <string name="oxide_set_action_check_update_detail">Ask the update service whether a newer build exists.</string>
@@ -2152,6 +2167,7 @@
     <string name="oxide_sec_accounts_relogin_hint">Enter the password for \"%1$s\".</string>
     <string name="oxide_sec_accounts_relogin_retry">Sign in again</string>
     <string name="oxide_sec_accounts_dismiss">Dismiss</string>
+    <string name="oxide_ac_refresh_account">Refresh credentials</string>
 
     <!-- Multiplayer -->
     <string name="oxide_sec_mp_title">Multiplayer</string>
@@ -2172,6 +2188,19 @@
     <string name="oxide_sec_mp_tab_guest">Guest</string>
     <string name="oxide_sec_mp_notice_accept">I have read this</string>
     <string name="oxide_sec_mp_notice_decline">Turn multiplayer off</string>
+    <string name="oxide_mp_instance">Instance</string>
+    <string name="oxide_mp_no_instance">No instance yet</string>
+    <string name="oxide_mp_no_instance_detail">A server list lives inside an instance, so install one first.</string>
+    <string name="oxide_mp_servers_loading">Reading the server list…</string>
+    <string name="oxide_mp_servers_empty_detail">Add a server to connect to it without typing the address again.</string>
+    <string name="oxide_mp_pick_instance">Pick an instance to manage its server list.</string>
+    <string name="oxide_mp_server_status_unpinged">Not checked</string>
+    <string name="oxide_mp_server_status_checking">Checking…</string>
+    <string name="oxide_mp_server_status_online">Online</string>
+    <string name="oxide_mp_server_status_unreachable">Unreachable</string>
+    <string name="oxide_mp_server_players">%1$d/%2$d players</string>
+    <string name="oxide_mp_server_connect">Connect</string>
+    <string name="oxide_mp_section_guide">How a session works</string>
 
     <!-- Files -->
     <string name="oxide_sec_files_title">Files</string>
@@ -2210,8 +2239,19 @@
     <string name="oxide_sec_files_read_only_dir">This directory cannot be changed.</string>
     <string name="oxide_sec_files_sort">Change the sort order</string>
     <string name="oxide_sec_files_sort_desc">Descending</string>
-    <string name="oxide_sec_files_select_hint">Tap an entry to open it. Turn on selection to delete or copy in bulk.</string>
+    <string name="oxide_sec_files_select_hint">Tap an entry to open it. Turn on selection to delete several at once.</string>
     <string name="oxide_sec_files_select_on_hint">Selection is on. Tap entries to toggle them.</string>
+
+    <!-- Files: the Oxide file surface. Sits on top of the shell, so every state
+         it can be in has to be spelled out rather than implied by a greyed row. -->
+    <string name="oxide_files_select_hint">Tap an entry to open it. Turn on selection to move several to the trash.</string>
+    <string name="oxide_files_select_on_hint">Selection is on. Tap entries to toggle them, then move them to the trash.</string>
+    <string name="oxide_files_finish_selecting">Done selecting</string>
+    <string name="oxide_files_clear_select">Clear selection</string>
+    <string name="oxide_files_show_hidden">Show hidden entries</string>
+    <string name="oxide_files_hide_hidden">Hide hidden entries</string>
+    <string name="oxide_files_hidden_on">Hidden entries are shown.</string>
+    <string name="oxide_files_only_hidden">This directory only contains hidden entries.</string>
 
     <!-- Logs -->
     <string name="oxide_sec_log_title">Logs</string>
@@ -2229,30 +2269,55 @@
     <string name="oxide_sec_log_empty_detail">A source appears here as soon as the launcher or the game has written one.</string>
     <string name="oxide_sec_log_tailed">Showing only the last %1$s of this file.</string>
 
-    <!-- Launch -->
-    <string name="oxide_sec_launch_kicker">Minecraft: Java Edition</string>
-    <string name="oxide_sec_launch_title">Starting</string>
-    <string name="oxide_sec_launch_subtitle">Preparing the instance, then handing control over to the game.</string>
+    <!--
+      Launch: the one surface shown while a launch is in flight.
+
+      v1.6.0 named these oxide_sec_launch_* and used them for a full-page layout
+      whose headline was the literal word "Starting" at hero size, with a second
+      22sp page title saying the same thing. The headline is gone; what remains is
+      one small phase label plus the instance's own name, so these strings are now
+      only the phase labels, the real fields, and the real numbers.
+
+      The four *_waiting / *_progress_percent / *_indeterminate / *_rate strings
+      below are shared task-row wording and are also read by the install flow, so
+      they keep their old oxide_sec_launch_* names.
+    -->
+    <string name="oxide_launch_state_checking">Checking the launch</string>
+    <string name="oxide_launch_state_preparing">Preparing the instance</string>
+    <string name="oxide_launch_state_running">Running the launch stages</string>
+    <string name="oxide_launch_state_handoff">Handing over to the game</string>
+    <string name="oxide_launch_no_instance">No instance selected</string>
+    <string name="oxide_launch_minecraft">Minecraft %1$s</string>
+    <string name="oxide_launch_stages">Launch stages</string>
+    <string name="oxide_launch_stage_count">%1$d of %2$d stages</string>
+    <string name="oxide_launch_cancel">Cancel</string>
+
+    <!-- Shared with the install flow's task rows; those files still read the old names -->
     <string name="oxide_sec_launch_waiting">Getting ready</string>
-    <string name="oxide_sec_launch_stage_count">%1$d of %2$d stages</string>
-    <string name="oxide_sec_launch_tasks">Launch stages</string>
+    <string name="oxide_sec_launch_indeterminate">Working</string>
     <string name="oxide_sec_launch_progress_percent">%1$d%%</string>
     <string name="oxide_sec_launch_rate">%1$s/s</string>
-    <string name="oxide_sec_launch_indeterminate">Working</string>
-    <string name="oxide_sec_launch_cancel">Cancel the launch</string>
-    <string name="oxide_sec_launch_stage_check">Checking the launch request</string>
-    <string name="oxide_sec_launch_stage_running">Running the launch stages</string>
-    <string name="oxide_sec_launch_op_no_version">No version selected</string>
-    <string name="oxide_sec_launch_op_no_account">No account available</string>
-    <string name="oxide_sec_launch_op_invalid_name">The version name is invalid</string>
-    <string name="oxide_sec_launch_op_storage_permission">Storage permission is required</string>
-    <string name="oxide_sec_launch_op_unsupported_renderer">%1$s does not support this version</string>
-    <string name="oxide_sec_launch_op_unsupported_plugins">Some loaded plugins do not support this version</string>
-    <string name="oxide_sec_launch_op_relogin">%1$s has to sign in again</string>
-    <string name="oxide_sec_launch_op_refresh_failed">Refreshing %1$s failed</string>
 
-    <!-- Oxide: the pre-flight decisions that used to be modal dialogs -->
+    <!-- Launch: the pre-flight decisions that used to be modal dialogs -->
     <string name="oxide_launch_preflight_title">Launch checks</string>
+    <string name="oxide_launch_op_no_version">No version selected</string>
+    <string name="oxide_launch_op_no_account">No account available</string>
+    <string name="oxide_launch_op_invalid_name">The version name is invalid</string>
+    <string name="oxide_launch_op_storage_permission">Storage permission is required</string>
+    <string name="oxide_launch_op_unsupported_renderer">%1$s does not support this version</string>
+    <string name="oxide_launch_op_unsupported_plugins">Some loaded plugins do not support this version</string>
+    <string name="oxide_launch_op_relogin">%1$s has to sign in again</string>
+    <string name="oxide_launch_op_refresh_failed">Refreshing %1$s failed</string>
+
+    <!-- Game waiting: the surface shown over the game until its first frame -->
+    <string name="oxide_launch_game_title">Starting the game</string>
+    <string name="oxide_launch_game_version">Game version: %1$s</string>
+    <string name="oxide_launch_game_loader">Loader: %1$s</string>
+    <string name="oxide_launch_game_state">Launch state: %1$s</string>
+    <string name="oxide_launch_game_state_waiting">The game process is running. Waiting for the game window…</string>
+    <string name="oxide_launch_game_state_first_frame">The game has drawn its first frame</string>
+    <string name="oxide_launch_game_elapsed">Elapsed: %1$s</string>
+    <string name="oxide_launch_game_cancel">Close the game</string>
     <string name="oxide_launch_storage_detail">The renderer %1$s is configured through a file, so the launcher needs file access before it can read that configuration.</string>
     <string name="oxide_launch_relogin_password_hint">Enter the password to sign in again</string>
     <string name="oxide_launch_relogin_busy">Signing in…</string>
@@ -2279,6 +2344,16 @@
     <string name="oxide_inst_chosen_version">Minecraft version</string>
     <string name="oxide_inst_edit_version">Change the Minecraft version</string>
     <string name="oxide_inst_summary">This install will contain</string>
+    <string name="oxide_inst_next">Next</string>
+    <string name="oxide_inst_retry">Retry</string>
+    <string name="oxide_inst_dismiss">Dismiss</string>
+    <string name="oxide_inst_step_state_done">Done</string>
+    <string name="oxide_inst_step_state_active">In progress</string>
+    <string name="oxide_inst_step_state_pending">Waiting</string>
+    <string name="oxide_inst_step_state_blocked">Not available yet</string>
+    <string name="oxide_inst_progress_section">Progress</string>
+    <string name="oxide_inst_task_counter">Task %1$d of %2$d</string>
+    <string name="oxide_inst_edit_version_short">Edit</string>
 
     <!-- Oxide: modpack export (replaces VersionExportScreen) -->
     <string name="oxide_exp_title">Export modpack</string>
@@ -2333,9 +2408,13 @@
     <!-- Oxide: about panel and control-layout management (replace AboutInfoScreen / ControlManageScreen) -->
     <string name="oxide_about_page_subtitle">Version, licences and third-party credits.</string>
     <string name="oxide_about_product_version_hint">The version of this product. Build numbers are not shown here.</string>
+    <string name="oxide_about_product_summary">%1$s is a launcher for Minecraft: Java Edition on Android. It is free software released under the GNU General Public License v3.0 and is developed independently. Every original copyright notice is preserved in the source files, and the full upstream attribution and the list of modifications are in THIRD_PARTY.md.</string>
+    <string name="oxide_about_action_check_update">Check for updates</string>
     <string name="oxide_about_section_launcher">This launcher</string>
     <string name="oxide_about_section_actions">Actions</string>
     <string name="oxide_about_section_licences">Licences</string>
+    <string name="oxide_about_licence_launcher_title">This launcher</string>
+    <string name="oxide_about_licence_launcher_detail">GNU General Public License v3.0. This covers the launcher itself and the code adapted into it.</string>
     <string name="oxide_about_section_plugin_projects">Plugin projects</string>
     <string name="oxide_about_project_link_detail">Source, releases and issue tracker.</string>
     <string name="oxide_about_read_licence">Licence</string>
@@ -2363,4 +2442,67 @@
     <string name="oxide_about_layouts_create_detail">Save a new empty layout under a name and author of your own.</string>
     <string name="oxide_about_layouts_share_detail">Send the selected layout file to another app.</string>
     <string name="oxide_about_layouts_edit_detail">Open the selected layout in the layout editor.</string>
+    <!-- 控制布局编辑器的停靠面板 -->
+    <string name="oxide_ce_open_dock">Open the editor menu</string>
+    <string name="oxide_ce_close_dock">Close the editor menu</string>
+    <string name="oxide_ce_count_layers">%1$s layers</string>
+    <string name="oxide_ce_count_controls">%1$s controls</string>
+    <string name="oxide_ce_count_styles">%1$s styles</string>
+    <string name="oxide_ce_no_styles">No styles yet</string>
+    <string name="oxide_ce_preview_on">Preview</string>
+    <string name="oxide_ce_section_layers">Control layers</string>
+    <string name="oxide_ce_section_controls">Controls</string>
+    <string name="oxide_ce_section_inspector">Inspector</string>
+    <string name="oxide_ce_section_position">Position</string>
+    <string name="oxide_ce_section_size">Size</string>
+    <string name="oxide_ce_section_visibility">Visibility</string>
+    <string name="oxide_ce_section_add">New control</string>
+    <string name="oxide_ce_section_styles">Styles</string>
+    <string name="oxide_ce_section_preview">Preview</string>
+    <string name="oxide_ce_section_snap">Snapping</string>
+    <string name="oxide_ce_layers_empty">No control layers yet. Create one to add controls.</string>
+    <string name="oxide_ce_controls_no_layer">Select a control layer above to see its controls.</string>
+    <string name="oxide_ce_controls_empty">This layer has no controls yet.</string>
+    <string name="oxide_ce_layer_hidden">Hidden</string>
+    <string name="oxide_ce_layer_focus">Focus this layer</string>
+    <string name="oxide_ce_layer_focus_hint">Show only this layer on the canvas</string>
+    <string name="oxide_ce_show_layer">Show this control layer</string>
+    <string name="oxide_ce_hide_layer">Hide this control layer</string>
+    <string name="oxide_ce_move_layer_up">Move this control layer up</string>
+    <string name="oxide_ce_move_layer_down">Move this control layer down</string>
+    <string name="oxide_ce_add_ready">Pick a control layer above, then add a control to it.</string>
+    <string name="oxide_ce_add_blocked_preview">Leave preview mode to add controls.</string>
+    <string name="oxide_ce_kind_button">Button</string>
+    <string name="oxide_ce_kind_text">Text box</string>
+    <string name="oxide_ce_kind_joystick">Joystick</string>
+    <string name="oxide_ce_position_pad">Drag to place</string>
+    <string name="oxide_ce_nudge_step">Nudge by half a percent</string>
+    <string name="oxide_ce_decrease">Decrease</string>
+    <string name="oxide_ce_increase">Increase</string>
+    <string name="oxide_ce_anchor_top_start">Top left</string>
+    <string name="oxide_ce_anchor_top_center">Top centre</string>
+    <string name="oxide_ce_anchor_top_end">Top right</string>
+    <string name="oxide_ce_anchor_center_start">Middle left</string>
+    <string name="oxide_ce_anchor_center">Centre</string>
+    <string name="oxide_ce_anchor_center_end">Middle right</string>
+    <string name="oxide_ce_anchor_bottom_start">Bottom left</string>
+    <string name="oxide_ce_anchor_bottom_center">Bottom centre</string>
+    <string name="oxide_ce_anchor_bottom_end">Bottom right</string>
+    <string name="oxide_ce_size_wrap_content">This control follows its content, so it has no width or height to set.</string>
+    <string name="oxide_ce_advanced_settings">All settings</string>
+    <string name="oxide_ce_advanced_settings_hint">Events, text style, appearance</string>
+    <string name="oxide_ce_preview_device">Simulated device</string>
+    <string name="oxide_ce_device_none">None</string>
+    <string name="oxide_ce_device_mouse">Mouse</string>
+    <string name="oxide_ce_device_gamepad">Gamepad</string>
+    <string name="oxide_ce_section_save">Save</string>
+    <string name="oxide_ce_exit_hint">Ask before discarding the changes</string>
+    <string name="generic_selected">Selected</string>
+    <!-- Oxide 对话框：统一前缀 oxide_dlg_，只在这份文件里定义 -->
+    <string name="oxide_dlg_close">Close</string>
+    <string name="oxide_dlg_option_unavailable">Not available for this device</string>
+    <string name="oxide_dlg_option_recommended">Recommended</string>
+    <string name="oxide_dlg_empty_options">Nothing to choose from</string>
+    <string name="oxide_dlg_working">Working…</string>
+    <string name="oxide_dlg_entry_invalid">This value can't be used yet</string>
 </resources>

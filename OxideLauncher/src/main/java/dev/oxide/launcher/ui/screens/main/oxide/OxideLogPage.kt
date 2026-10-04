@@ -18,16 +18,14 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,23 +33,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.Task
@@ -96,6 +91,13 @@ private const val MAX_LOG_VIEW_SIZE: Long = 8L * 1024 * 1024
  * 来源全部来自真实文件：当前实例最新的游戏日志、启动器崩溃日志、联机核心日志，
  * 以及整个启动器日志目录。哪一个还不存在就只显示哪一条，其余的不会出现。
  * "打包并分享所有启动器日志"走的是 [Logger.pack]，与设置页里的同名操作完全一致。
+ *
+ * 版面与文件页同一套语言：页头只有一层大标题，副标题降一级；面板走
+ * [OxideContentSurface]（不透明），因此这一页压在外壳之上时底下那一层界面
+ * 不会透出来。来源行与文件页的条目行是同一枚 [OxideContentRow]。
+ *
+ * 两栏的排布（并排还是纵向堆叠、堆叠时各自占多少高度）来自
+ * [oxideContentLayoutFor]——和文件页、关于页共用一条规则。
  */
 @Composable
 fun OxideLogPage(
@@ -105,8 +107,8 @@ fun OxideLogPage(
     onDismiss: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    // 打开系统文件管理器走既有桥接，它内部就是 EventViewModel.Event.OpenFileManager，
-    // 与设置页/抽屉里的同一处完全一致
+    // 打开文件夹走既有桥接，它内部就是 host.openFiles，也就是 Oxide 自己的文件页，
+    // 不是旧的 FileManagerActivity
     val bridge = rememberOxideLauncherBridge()
 
     val version by VersionsManager.currentVersion.collectAsStateWithLifecycle()
@@ -120,28 +122,32 @@ fun OxideLogPage(
         selectedPath?.takeIf { path -> sources.any { it.path == path } }
             ?: sources.firstOrNull()?.path
     }
+    val activeLabel = remember(sources, activePath) {
+        sources.firstOrNull { it.path == activePath }?.label.orEmpty()
+    }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val sideBySide = maxWidth >= metrics.cardMinWidth * 1.3f
+    // 不透明：这一页是压在外壳之上的一整块表面
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Oxide.Bg)
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = metrics.pagePaddingH)
+        ) {
+            val layout = oxideContentLayoutFor(
+                availableWidth = maxWidth,
+                cardMinWidth = metrics.cardMinWidth,
+            )
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = metrics.pagePaddingH),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OxideIconButton(
-                    onClick = onDismiss,
-                    glyph = "←",
-                    modifier = Modifier.oxideIconDescription(
-                        stringResource(R.string.oxide_sec_topbar_back)
-                    ),
-                )
-                Spacer(Modifier.width(6.dp))
-                OxidePageTitle(
-                    text = stringResource(R.string.oxide_sec_log_title),
-                    modifier = Modifier.weight(1f),
+            Column(modifier = Modifier.fillMaxSize()) {
+                OxideContentHeader(
+                    metrics = metrics,
+                    title = stringResource(R.string.oxide_sec_log_title),
+                    subtitle = stringResource(R.string.oxide_sec_log_subtitle),
+                    onDismiss = onDismiss,
                     trailing = {
                         OxideButton(
                             text = stringResource(R.string.oxide_sec_log_pack),
@@ -150,75 +156,73 @@ fun OxideLogPage(
                         )
                     },
                 )
-            }
-            OxideSectionLabel(
-                modifier = Modifier.padding(horizontal = metrics.pagePaddingH),
-                text = stringResource(R.string.oxide_sec_log_subtitle),
-            )
 
-            Spacer(Modifier.height(metrics.sectionGap))
+                if (layout.sideBySide) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = metrics.rowGap),
+                        horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
+                    ) {
+                        OxideLogSourceList(
+                            metrics = metrics,
+                            sources = sources,
+                            activePath = activePath,
+                            modifier = Modifier
+                                .width(layout.listWidth)
+                                .fillMaxSize(),
+                            onSelect = { path -> selectedPath = path },
+                            onShare = { source ->
+                                shareFile(context, File(source.path))
+                            },
+                            onOpenFolder = {
+                                bridge.openFileManager(PathManager.DIR_LAUNCHER_LOGS.absolutePath)
+                            },
+                        )
 
-            if (sideBySide) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = metrics.pagePaddingH),
-                    horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
-                ) {
-                    OxideLogSourceList(
-                        metrics = metrics,
-                        sources = sources,
-                        activePath = activePath,
+                        OxideLogViewer(
+                            metrics = metrics,
+                            path = activePath,
+                            title = activeLabel,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize(),
+                        )
+                    }
+                } else {
+                    Column(
                         modifier = Modifier
-                            .width(metrics.cardMinWidth)
-                            .fillMaxHeight(),
-                        onSelect = { path -> selectedPath = path },
-                        onShare = { source ->
-                            shareFile(context, File(source.path))
-                        },
-                        onOpenFolder = {
-                            bridge.openFileManager(PathManager.DIR_LAUNCHER_LOGS.absolutePath)
-                        },
-                    )
+                            .fillMaxSize()
+                            .padding(top = metrics.rowGap),
+                        verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
+                    ) {
+                        OxideLogSourceList(
+                            metrics = metrics,
+                            sources = sources,
+                            activePath = activePath,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(layout.listWeight),
+                            onSelect = { path -> selectedPath = path },
+                            onShare = { source ->
+                                shareFile(context, File(source.path))
+                            },
+                            onOpenFolder = {
+                                bridge.openFileManager(
+                                    PathManager.DIR_LAUNCHER_LOGS.absolutePath
+                                )
+                            },
+                        )
 
-                    OxideLogViewer(
-                        metrics = metrics,
-                        path = activePath,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = metrics.pagePaddingH),
-                    verticalArrangement = Arrangement.spacedBy(metrics.cardGap),
-                ) {
-                    OxideLogSourceList(
-                        metrics = metrics,
-                        sources = sources,
-                        activePath = activePath,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(0.42f),
-                        onSelect = { path -> selectedPath = path },
-                        onShare = { source -> shareFile(context, File(source.path)) },
-                        onOpenFolder = {
-                            bridge.openFileManager(
-                                PathManager.DIR_LAUNCHER_LOGS.absolutePath
-                            )
-                        },
-                    )
-
-                    OxideLogViewer(
-                        metrics = metrics,
-                        path = activePath,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                    )
+                        OxideLogViewer(
+                            metrics = metrics,
+                            path = activePath,
+                            title = activeLabel,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(layout.detailWeight),
+                        )
+                    }
                 }
             }
         }
@@ -226,6 +230,7 @@ fun OxideLogPage(
 }
 
 /** 日志来源的一行：文件本身，不含任何推测；`detail` 读不到就留空 */
+@Immutable
 private data class OxideLogSource(val path: String, val label: String, val detail: String)
 
 /**
@@ -295,13 +300,14 @@ private fun OxideLogSourceList(
 ) {
     val files = sources.filter { it.path != PathManager.DIR_LAUNCHER_LOGS.absolutePath }
 
-    OxideSurface(
+    OxideContentSurface(
         modifier = modifier,
         contentPadding = PaddingValues(
             horizontal = metrics.cardGap,
             vertical = metrics.secRowGap,
         ),
     ) {
+        // 小节标题降一级：页头的大标题仍然是这一屏唯一的标题
         OxideSectionLabel(text = stringResource(R.string.oxide_sec_log_sources))
         Spacer(Modifier.height(metrics.secRowGap))
         if (files.isEmpty()) {
@@ -317,65 +323,40 @@ private fun OxideLogSourceList(
             ) {
                 items(items = files, key = { source -> source.path }) { source ->
                     val selected = source.path == activePath
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(Oxide.RadiusControl)
-                            .background(if (selected) Oxide.BgTabActive else Oxide.BgButton)
-                            .border(
-                                BorderStroke(1.dp, if (selected) Oxide.Line2 else Oxide.Line),
-                                Oxide.RadiusControl,
+                    OxideContentRow(
+                        title = source.label,
+                        // 体积与时间读不到就留空，而不是补一个假的
+                        detail = source.detail.takeIf { it.isNotBlank() },
+                        selected = selected,
+                        role = Role.Tab,
+                        leading = {
+                            OxideContentKindBadge(
+                                glyph = "≡",
+                                description = source.label,
                             )
-                            .selectable(
-                                selected = selected,
-                                role = Role.Tab,
-                                onClick = { onSelect(source.path) },
+                        },
+                        trailing = {
+                            OxideIconButton(
+                                onClick = { onShare(source) },
+                                glyph = "↗",
+                                modifier = Modifier.oxideIconDescription(
+                                    stringResource(R.string.oxide_sec_log_share)
+                                ),
                             )
-                            .padding(
-                                horizontal = metrics.secControlPadding,
-                                vertical = metrics.secRowGap,
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = source.label,
-                                color = Oxide.Fg,
-                                fontSize = Oxide.Type.BodyStrong.fontSize,
-                                lineHeight = Oxide.Type.BodyStrong.lineHeight,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            val detail = source.detail
-                            if (detail.isNotEmpty()) {
-                                Text(
-                                    text = detail,
-                                    color = Oxide.FgMuted,
-                                    fontSize = Oxide.Type.MicroLabel.fontSize,
-                                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(metrics.secRowGap))
-                        OxideIconButton(
-                            onClick = { onShare(source) },
-                            glyph = "↗",
-                            modifier = Modifier.oxideIconDescription(
-                                stringResource(R.string.oxide_sec_log_share)
-                            ),
-                        )
-                    }
+                        },
+                        onClick = { onSelect(source.path) },
+                    )
                     Spacer(Modifier.height(metrics.secRowGap))
                 }
             }
         }
         OxideSecDivider()
         Spacer(Modifier.height(metrics.secRowGap))
+        // 目录那一行的说明就是它自己的路径：说明写"把这一份发给别的应用"，
+        // 而这一行做的是打开目录，两件事对不上
         OxideSettingRow(
-            label = stringResource(R.string.oxide_sec_log_folder),
-            hint = stringResource(R.string.oxide_sec_log_share_hint),
+            label = stringResource(R.string.oxide_set_action_open_logs_folder),
+            hint = PathManager.DIR_LAUNCHER_LOGS.absolutePath,
             onClick = onOpenFolder,
         )
     }
@@ -386,11 +367,15 @@ private fun OxideLogSourceList(
  *
  * 读取放在 IO 上并随时可取消；超过 [MAX_LOG_VIEW_SIZE] 的文件只取末尾那一段，
  * 截断位置从首个换行之后开始，因此首行不会因为半个多字节字符而变成乱码。
+ *
+ * [title] 是所选来源的名字：堆叠时左列被压到很窄，右边这一栏若没有标题，
+ * 用户会不知道自己在看哪一份日志。
  */
 @Composable
 private fun OxideLogViewer(
     metrics: OxideMetrics,
     path: String?,
+    title: String,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -420,13 +405,17 @@ private fun OxideLogViewer(
         }
     }
 
-    OxideSurface(
+    OxideContentSurface(
         modifier = modifier,
         contentPadding = PaddingValues(
             horizontal = metrics.cardGap,
             vertical = metrics.secRowGap,
         ),
     ) {
+        if (title.isNotBlank()) {
+            OxideSectionLabel(text = title)
+            Spacer(Modifier.height(metrics.secRowGap))
+        }
         when {
             path == null -> OxideEmptyState(
                 title = stringResource(R.string.oxide_sec_log_empty),
@@ -436,7 +425,7 @@ private fun OxideLogViewer(
             loaded.value == null -> OxideLoadingRow(stringResource(R.string.oxide_common_loading))
 
             else -> {
-                val content = loaded.value ?: return@OxideSurface
+                val content = loaded.value ?: return@OxideContentSurface
                 if (content.tailed) {
                     Text(
                         text = stringResource(
@@ -489,7 +478,7 @@ private fun readLogTail(file: File): OxideLogContent {
         raf.seek(size - MAX_LOG_VIEW_SIZE)
         val bytes = ByteArray(MAX_LOG_VIEW_SIZE.toInt())
         raf.readFully(bytes)
-        val text = String(bytes, Charsets.UTF_8).trimStart('\uFFFD')
+        val text = String(bytes, Charsets.UTF_8).trimStart('�')
         val firstNewline = text.indexOf('\n')
         val body = if (firstNewline >= 0 && firstNewline < text.length - 1) {
             text.substring(firstNewline + 1)

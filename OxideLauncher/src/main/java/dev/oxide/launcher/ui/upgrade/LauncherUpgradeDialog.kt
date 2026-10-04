@@ -18,46 +18,45 @@
 
 package dev.oxide.launcher.ui.upgrade
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import dev.oxide.launcher.R
 import dev.oxide.launcher.ui.components.MarkdownView
 import dev.oxide.launcher.ui.components.defaultRichTextStyle
-import dev.oxide.launcher.ui.components.rememberDialogMaxHeight
-import dev.oxide.launcher.ui.components.verticalScrollWithBar
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.onCardColor
+import dev.oxide.launcher.ui.screens.main.oxide.OxideButton
+import dev.oxide.launcher.ui.screens.main.oxide.OxideButtonTone
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogShell
+import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.upgrade.RemoteData
 import dev.oxide.launcher.upgrade.findCurrentBody
 import dev.oxide.launcher.upgrade.getCurrentCouldDrive
 import dev.oxide.launcher.utils.formatDate
 import java.util.Locale
 
+/**
+ * 启动器有新版本时的提示
+ *
+ * 这是一次冷启动就会看到的那一张对话框，因此它必须和其它对话框是同一块面板：
+ * [OxideDialogShell] 就是 `ui/components/Dialogs.kt` 里那套 Material 弹窗的替代品。
+ *
+ * 行为与旧版完全一致——点"查看"选安装包、点"忽略"记下版本号、点网盘直接打开链接。
+ * 只有呈现变了：面板底色不透明、标题走 `Oxide.Type.DrawerTitle`、三个动作都有文字，
+ * 因此不必靠左右位置分辨。
+ */
 @Composable
 fun UpgradeDialog(
     data: RemoteData,
@@ -74,119 +73,109 @@ fun UpgradeDialog(
         data.getCurrentCouldDrive(Locale.getDefault())
     }
 
-    Dialog(
+    OxideDialogShell(
+        title = stringResource(R.string.upgrade_new),
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth(0.65f)
-                .heightIn(max = rememberDialogMaxHeight())
-                .fillMaxHeight(),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
+        body = { contentMaxHeight ->
+            //版本号与更新时间单独用 Oxide 的字号画出来，而不是塞进 markdown 里当正文：
+            //它们是这条信息的第一层，字号应当与正文分得开
+            val versionStr = stringResource(R.string.upgrade_version_change, data.version)
+            val dateStr = stringResource(
+                R.string.upgrade_version_create_at,
+                formatDate(
+                    input = data.createdAt,
+                    pattern = stringResource(R.string.date_format)
+                )
+            )
+
+            //先夹住高度，再让更新日志在里面滚。面板本体已经夹过一次，这里再夹一次
+            //是刻意的：markdown 渲染出来的高度完全由远端文本决定，不能让它去撑面板。
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(all = 6.dp)
-                    .heightIn(max = (maxHeight - 12.dp).coerceAtMost(rememberDialogMaxHeight()))
-                    .wrapContentHeight(),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = cardColor(false),
-                contentColor = onCardColor(),
-                shadowElevation = 3.dp
+                    .heightIn(max = contentMaxHeight)
+                    .verticalScroll(rememberScrollState())
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Text(
+                    text = versionStr,
+                    color = Oxide.Fg,
+                    fontSize = Oxide.Type.BodyStrong.fontSize,
+                    lineHeight = Oxide.Type.BodyStrong.lineHeight,
+                )
+                Text(
+                    text = dateStr,
+                    color = Oxide.FgFaint,
+                    fontSize = Oxide.Type.MicroLabel.fontSize,
+                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                )
+                Spacer(Modifier.height(4.dp))
+                CompositionLocalProvider(
+                    LocalUriHandler provides object : UriHandler {
+                        override fun openUri(uri: String) {
+                            onLinkClick(uri)
+                        }
+                    }
                 ) {
-                    Text(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .padding(top = 16.dp),
-                        text = stringResource(R.string.upgrade_new)
+                    MarkdownView(
+                        content = body.markdown,
+                        modifier = Modifier.fillMaxWidth(),
+                        richTextStyle = defaultRichTextStyle(),
                     )
-
-                    //版本号
-                    val versionStr = stringResource(R.string.upgrade_version_change, data.version)
-                    //更新时间
-                    val dateStr = stringResource(
-                        R.string.upgrade_version_create_at,
-                        formatDate(
-                            input = data.createdAt,
-                            pattern = stringResource(R.string.date_format)
-                        )
-                    )
-                    val markdownBody = "$versionStr  \n$dateStr  \n\n${body.markdown}"
-
-                    CompositionLocalProvider(
-                        LocalUriHandler provides object : UriHandler {
-                            override fun openUri(uri: String) {
-                                onLinkClick(uri)
-                            }
-                        }
-                    ) {
-                        MarkdownView(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f, fill = false)
-                                .padding(horizontal = 20.dp)
-                                .verticalScrollWithBar(rememberScrollState()),
-                            content = markdownBody,
-                            richTextStyle = defaultRichTextStyle(),
-                        )
-                    }
-
-                    //按钮
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (cloudDrive == null) {
-                            Spacer(Modifier.weight(1f))
-                        } else {
-                            FilledTonalButton(
-                                onClick = {
-                                    if (cloudDrive.links.isEmpty()) {
-                                        //未配置多网盘链接，使用默认链接（旧版兼容，必定会有）
-                                        onLinkClick(cloudDrive.link)
-                                    } else if (cloudDrive.links.size == 1) {
-                                        //只有一个网盘链接，则直接访问链接
-                                        onLinkClick(cloudDrive.links[0].link)
-                                    } else {
-                                        onCloudDriveClick(cloudDrive)
-                                    }
-                                }
-                            ) {
-                                Text(text = stringResource(R.string.upgrade_cloud_drive))
-                            }
-                            Spacer(Modifier.weight(1f))
-                        }
-
-                        FilledTonalButton(
-                            onClick = {
-                                onIgnored()
-                                onDismissRequest()
-                            }
-                        ) {
-                            Text(text = stringResource(R.string.generic_ignore))
-                        }
-
-                        Button(
-                            onClick = onFilesClick
-                        ) {
-                            Text(text = stringResource(R.string.upgrade_more))
-                        }
-                    }
                 }
             }
-        }
+        },
+        actions = {
+            OxideDialogActions(
+                cloudDrive = cloudDrive,
+                onLinkClick = onLinkClick,
+                onCloudDriveClick = onCloudDriveClick,
+                onIgnoredClick = {
+                    onIgnored()
+                    onDismissRequest()
+                },
+                onFilesClick = onFilesClick,
+            )
+        },
+    )
+}
+
+/**
+ * 三个动作：网盘 / 忽略 / 查看
+ *
+ * 单独拆出来是因为它是这一张对话框里唯一的按钮栏，而 [OxideDialogShell] 要的是
+ * 一个 `RowScope` 里的内容；直接写在调用处会让那行 lambda 缩进到看不清。
+ */
+@Composable
+private fun OxideDialogActions(
+    cloudDrive: RemoteData.CloudDrive?,
+    onLinkClick: (String) -> Unit,
+    onCloudDriveClick: (RemoteData.CloudDrive) -> Unit,
+    onIgnoredClick: () -> Unit,
+    onFilesClick: () -> Unit,
+) {
+    OxideButton(
+        text = stringResource(R.string.upgrade_more),
+        onClick = onFilesClick,
+        tone = OxideButtonTone.Primary,
+    )
+    OxideButton(
+        text = stringResource(R.string.generic_ignore),
+        onClick = onIgnoredClick,
+        tone = OxideButtonTone.Secondary,
+    )
+    if (cloudDrive != null) {
+        OxideButton(
+            text = stringResource(R.string.upgrade_cloud_drive),
+            onClick = {
+                when {
+                    //未配置多网盘链接，使用默认链接（旧版兼容，必定会有）
+                    cloudDrive.links.isEmpty() -> onLinkClick(cloudDrive.link)
+                    //只有一个网盘链接，则直接访问链接
+                    cloudDrive.links.size == 1 -> onLinkClick(cloudDrive.links[0].link)
+                    else -> onCloudDriveClick(cloudDrive)
+                }
+            },
+            tone = OxideButtonTone.Secondary,
+        )
     }
 }

@@ -18,34 +18,22 @@
 
 package dev.oxide.launcher.ui.upgrade
 
-import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.components.MarqueeText
-import dev.oxide.launcher.ui.components.SimpleListDialog
-import dev.oxide.launcher.ui.screens.content.elements.DisabledAlpha
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogOption
+import dev.oxide.launcher.ui.screens.main.oxide.OxideListDialog
 import dev.oxide.launcher.upgrade.RemoteData
 import dev.oxide.launcher.utils.device.Architecture
 import dev.oxide.launcher.utils.file.formatFileSize
 
+/**
+ * 选择要下载的安装包
+ *
+ * 架构不匹配的包被标成不可选，而不是像旧版那样灰着还能点、点了什么也不发生。
+ * 不可选的原因写在行的第二行上，因此不依赖颜色，朗读时也听得见。
+ */
 @Composable
 fun UpgradeFilesDialog(
     data: RemoteData,
@@ -54,8 +42,7 @@ fun UpgradeFilesDialog(
 ) {
     //当前设备的架构信息
     val currentArch: RemoteData.RemoteFile.Arch = remember(data) {
-        val arch = Architecture.getDeviceArchitecture()
-        when (arch) {
+        when (Architecture.getDeviceArchitecture()) {
             Architecture.ARCH_ARM -> RemoteData.RemoteFile.Arch.ARM
             Architecture.ARCH_ARM64 -> RemoteData.RemoteFile.Arch.ARM64
             Architecture.ARCH_X86 -> RemoteData.RemoteFile.Arch.X86
@@ -68,102 +55,65 @@ fun UpgradeFilesDialog(
         data.files.find { it.arch == currentArch }
     }
 
-    SimpleListDialog(
+    OxideListDialog(
         title = stringResource(R.string.upgrade_files),
-        items = data.files,
-        onItemSelected = { file ->
-            onFileSelected(file)
+        options = upgradeFileOptions(data.files, currentArch),
+        onOptionSelected = { key ->
+            //按 uri 回取文件，而不是把文件本身塞进 key：
+            //key 也要当列表的 itemKey 用，得是稳定且唯一的
+            data.files.firstOrNull { it.uri == key }?.let(onFileSelected)
         },
-        onDismissRequest = {
-            onDismissRequest()
-        },
-        current = current,
-        itemLayout = { item, isCurrent, onClick ->
-            UpgradeFileLayout(
-                modifier = Modifier.fillMaxWidth(),
-                file = item,
-                currentArch = currentArch,
-                selected = isCurrent,
-                onClick = onClick,
-                //根据设备架构决定哪些安装包不能选择，避免下载到错误架构的安装包（允许选择全架构）
-                enabled = item.arch == RemoteData.RemoteFile.Arch.ALL || item.arch == currentArch
-            )
-        },
-        showConfirm = true,
-        confirmText = {
-            MarqueeText(text = stringResource(R.string.generic_download))
-        }
+        onDismiss = onDismissRequest,
+        currentKey = current?.uri,
+        confirmText = stringResource(R.string.generic_download),
+        emptyText = stringResource(R.string.oxide_dlg_empty_options),
     )
 }
 
+/**
+ * 把远端安装包清单映射成对话框的选项
+ *
+ * `RemoteData` 是数据类，可以直接 remember；但第二行的文案要读字符串资源，
+ * 只能在组合里取，因此这一段不放进 remember。
+ */
 @Composable
-private fun UpgradeFileLayout(
+private fun upgradeFileOptions(
+    files: List<RemoteData.RemoteFile>,
+    currentArch: RemoteData.RemoteFile.Arch,
+): List<OxideDialogOption> = files.map { file ->
+    OxideDialogOption(
+        key = file.uri,
+        label = file.fileName,
+        detail = upgradeFileDetail(file, currentArch),
+        //根据设备架构决定哪些安装包不能选择，避免下载到错误架构的安装包（允许选择全架构）
+        enabled = file.arch == RemoteData.RemoteFile.Arch.ALL || file.arch == currentArch,
+    )
+}
+
+/**
+ * 一行下面的说明：架构、大小，以及"这台设备推荐"
+ *
+ * 旧版这里是一个星形图标，图标没有文字，因此读屏软件只会念出文件名。
+ * 换成文字之后"为什么推荐这个"才真的说清楚了。
+ */
+@Composable
+private fun upgradeFileDetail(
     file: RemoteData.RemoteFile,
     currentArch: RemoteData.RemoteFile.Arch,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    Row(
-        modifier = modifier
-            .clip(shape = MaterialTheme.shapes.large)
-            .clickable(enabled = enabled, onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            enabled = enabled
-        )
-        Column(
-            modifier = Modifier.alpha(if (enabled) 1.0f else DisabledAlpha),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            //文件名
-            MarqueeText(
-                text = file.fileName,
-                style = MaterialTheme.typography.labelMedium
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(0.7f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (currentArch == file.arch) {
-                    Icon(
-                        modifier = Modifier.size(12.dp),
-                        painter = painterResource(R.drawable.ic_star_filled),
-                        contentDescription = null
-                    )
-                }
-                Row(
-                    modifier = Modifier.basicMarquee(Int.MAX_VALUE),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    //架构信息
-                    Text(
-                        text = file.arch.getDisplayString(),
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                    //大小。远端清单是静态文件，构建之前拿不到真实字节数，
-                    //所以 size 缺省就是 0——这时候宁可不说，也不要显示"0.00 KB"
-                    val sizeString = remember(file) {
-                        file.size.takeIf { it > 0L }?.let { formatFileSize(it) }
-                    }
-                    if (sizeString != null) {
-                        Text(
-                            text = stringResource(R.string.upgrade_version_size, sizeString),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-            }
-        }
+): String {
+    val parts = mutableListOf(file.arch.getDisplayString())
+
+    if (currentArch == file.arch) {
+        parts += stringResource(R.string.oxide_dlg_option_recommended)
     }
+
+    //远端清单是静态文件，构建之前拿不到真实字节数，
+    //所以 size 缺省就是 0——这时候宁可不说，也不要显示"0.00 KB"
+    file.size.takeIf { it > 0L }?.let { size ->
+        parts += stringResource(R.string.upgrade_version_size, formatFileSize(size))
+    }
+
+    return parts.joinToString("  ·  ")
 }
 
 @Composable

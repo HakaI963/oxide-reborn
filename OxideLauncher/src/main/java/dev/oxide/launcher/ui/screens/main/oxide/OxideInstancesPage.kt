@@ -26,6 +26,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -43,10 +44,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,6 +68,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -117,6 +121,9 @@ private const val GRID_ROWS = 2
 /** 参考稿 `.miniStat` 的 `gap`，也是统计块内部的间距 */
 private val STAT_GAP = 6.dp
 
+/** 卡片底部徽章之间的间距，与参考稿的 `gap:4px` 对应 */
+private val BADGE_GAP = 4.dp
+
 /** 参考稿 `.instanceCard` 的内边距 */
 private val CARD_PADDING_H = 12.dp
 private val CARD_PADDING_V = 11.dp
@@ -132,6 +139,18 @@ private val CARD_PADDING_V = 11.dp
 private const val CARD_TOP_ROW_DP = 37f
 private const val CARD_STATS_DP = 36f
 private const val CARD_BOTTOM_ROW_DP = 28f
+
+/**
+ * 错误条的内边距，与参考稿 `.errRow` 对应
+ *
+ * 这一行是页面上唯一的"操作失败"提示，因此内边距与卡片一致，
+ * 视觉上它和旁边的卡片属于同一套网格，而不是漂在外面的一条字。
+ */
+private val ERROR_ROW_PADDING_H = 10.dp
+private val ERROR_ROW_PADDING_V = 7.dp
+
+/** 错误条正文与那颗按钮之间的间距 */
+private val ERROR_ROW_GAP = 8.dp
 
 /** 齿轮浮层的宽度，与参考稿 `.popover` 的比例一致但只放一列 */
 private val ACTION_MENU_WIDTH = 190.dp
@@ -257,6 +276,12 @@ fun OxideInstancesPage(
         }
     }
 
+    // 页头两个动作各自的实测宽度。标题会不会被截断由它们决定，因此必须量而不是猜。
+// 两者分开记：折走之后不再绘制"刷新"，但它的宽度仍然留着，
+// 于是判据不会因为"现在画了什么"而变来变去。
+    var refreshButtonWidth by remember { mutableStateOf(0f) }
+    var installButtonWidth by remember { mutableStateOf(0f) }
+
     val gridState = rememberLazyGridState()
     // 滚动时收起浮层：它的锚点是卡片，滚走之后浮层会停在原地不动
     val firstVisible by remember { derivedStateOf { gridState.firstVisibleItemIndex } }
@@ -281,28 +306,75 @@ fun OxideInstancesPage(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // 列数按实测内容宽度算，窗口被切分或折叠屏展开时会自己变
-        val columns = metrics.gridColumns(maxWidth - metrics.pagePaddingH * 2)
+        val contentWidth = maxWidth - metrics.pagePaddingH * 2
+        val columns = metrics.gridColumns(contentWidth)
+
+        // 标题至少要保住这么宽，否则宁可把"刷新"折到副标题那一行：
+        // 页面名字被截断是最不该发生的一种截断
+        val minTitleWidth = metrics.navItemHeight * 5f
 
         OxidePageColumn(metrics = metrics) {
+            // 窄屏上"刷新"被折进副标题：标题行只留主操作，两个动作不挤在同一行。
+            // 判据只看实测宽度与 metrics，因此不会因为"此刻画了什么"而来回抖
+            val refreshInline = instancesHeaderKeepsRefreshInline(
+                contentWidthDp = contentWidth.value,
+                installWidthDp = installButtonWidth,
+                refreshWidthDp = refreshButtonWidth,
+                gapDp = metrics.secRowGap.value,
+                minTitleWidthDp = minTitleWidth.value,
+            )
+
             OxidePageTitle(
                 text = stringResource(R.string.oxide_ins_page_title),
                 trailing = {
-                    OxideButton(
-                        text = stringResource(R.string.oxide_ins_refresh),
-                        onClick = { VersionsManager.refresh("OxideInstancesPage.refresh") },
-                        enabled = !isRefreshing,
-                        tone = OxideButtonTone.Ghost,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    OxideButton(
-                        text = stringResource(R.string.oxide_ins_install_version),
-                        onClick = installVersion,
-                        tone = OxideButtonTone.Primary,
-                    )
+                    if (refreshInline) {
+                        Box(
+                            modifier = Modifier.onSizeChanged { size ->
+                                refreshButtonWidth = with(LocalDensity.current) {
+                                    size.width.toDp().value
+                                }
+                            },
+                        ) {
+                            OxideButton(
+                                text = stringResource(R.string.oxide_ins_refresh),
+                                onClick = {
+                                    VersionsManager.refresh("OxideInstancesPage.refresh")
+                                },
+                                enabled = !isRefreshing,
+                                tone = OxideButtonTone.Ghost,
+                            )
+                        }
+                        Spacer(Modifier.width(metrics.secRowGap))
+                    }
+                    Box(
+                        modifier = Modifier.onSizeChanged { size ->
+                            installButtonWidth = with(LocalDensity.current) {
+                                size.width.toDp().value
+                            }
+                        },
+                    ) {
+                        OxideButton(
+                            text = stringResource(R.string.oxide_ins_install_version),
+                            onClick = installVersion,
+                            tone = OxideButtonTone.Primary,
+                        )
+                    }
                 },
             )
             OxideSectionLabel(
                 text = stringResource(R.string.oxide_ins_page_subtitle_count, versions.size),
+                trailing = {
+                    if (!refreshInline) {
+                        OxideButton(
+                            text = stringResource(R.string.oxide_ins_refresh),
+                            onClick = {
+                                VersionsManager.refresh("OxideInstancesPage.refresh")
+                            },
+                            enabled = !isRefreshing,
+                            tone = OxideButtonTone.Ghost,
+                        )
+                    }
+                },
             )
 
             Spacer(Modifier.height(metrics.sectionGap))
@@ -316,26 +388,61 @@ fun OxideInstancesPage(
             }
 
             when {
-                isRefreshing -> OxideLoadingRow(text = stringResource(R.string.oxide_common_loading))
-
-                versions.isEmpty() -> OxideEmptyState(
-                    title = stringResource(R.string.oxide_ins_empty_title),
-                    detail = stringResource(R.string.oxide_ins_install_version_detail),
-                    action = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OxideButton(
-                                text = stringResource(R.string.oxide_ins_install_version),
-                                onClick = installVersion,
-                                tone = OxideButtonTone.Primary,
-                            )
-                            OxideButton(
-                                text = stringResource(R.string.oxide_ins_browse_modpacks),
-                                onClick = { onNavigate(OxidePage.Discover) },
-                                tone = OxideButtonTone.Secondary,
+                // 空状态不是一整屏：第一屏还没有实例时它就是全部内容，
+                // 因此按内容高度摆在一块面板里，而不是让标题和说明各自拉成两行撑满高度。
+                // 面板宽度也有上限：说明句在宽屏上不会拉成一整行难读的长句
+                versions.isEmpty() -> Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    if (isRefreshing) {
+                        // 没有任何实例可显示时，刷新中才占一行；否则这一行会把空状态顶走
+                        OxideLoadingRow(text = stringResource(R.string.oxide_common_loading))
+                    }
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        OxideSurface(
+                            modifier = Modifier.widthIn(max = metrics.cardMinWidth * 1.5f),
+                            contentPadding = PaddingValues(all = metrics.cardGap),
+                        ) {
+                            OxideEmptyState(
+                                title = stringResource(R.string.oxide_ins_empty_title),
+                                detail = stringResource(R.string.oxide_ins_install_version_detail),
+                                action = {
+                                    // 两个动作排成一行：宽度不够时由这一行自己滚动，
+                                    // 而不是把第二个按钮挤出面板
+                                    Row(
+                                        modifier = Modifier.horizontalScroll(
+                                            rememberScrollState()
+                                        ),
+                                        horizontalArrangement = Arrangement.spacedBy(
+                                            metrics.secRowGap
+                                        ),
+                                    ) {
+                                        OxideButton(
+                                            text = stringResource(
+                                                R.string.oxide_ins_install_version
+                                            ),
+                                            onClick = installVersion,
+                                            tone = OxideButtonTone.Primary,
+                                        )
+                                        OxideButton(
+                                            text = stringResource(
+                                                R.string.oxide_ins_browse_modpacks
+                                            ),
+                                            onClick = { onNavigate(OxidePage.Discover) },
+                                            tone = OxideButtonTone.Secondary,
+                                        )
+                                    }
+                                },
                             )
                         }
-                    },
-                )
+                    }
+                }
 
                 else -> {
                     BoxWithConstraints(
@@ -344,13 +451,20 @@ fun OxideInstancesPage(
                             .weight(1f)
                     ) {
                         // 参考稿是两行网格：行高先按实测剩余高度平分，
-                        // 太矮时退到卡片真实内容算出来的下限，宁可滚动也不裁切
+                        // 太矮时退到卡片真实内容算出来的下限，宁可滚动也不裁切。
+                        // 行数由真实存在的卡片决定：只有一张时不必占满两行的高度，
+                        // 否则卡片下面会留下一整条空白
+                        val visibleRows = instanceGridRows(
+                            itemCount = versions.size,
+                            columns = columns,
+                            maxRows = GRID_ROWS,
+                        )
                         val minRow = CARD_TOP_ROW_DP + CARD_STATS_DP + CARD_BOTTOM_ROW_DP +
                             CARD_PADDING_V.value * 2f + metrics.cardGap.value
                         val rowHeight = instanceRowHeight(
                             availableHeightDp = maxHeight.value,
                             cardGapDp = metrics.cardGap.value,
-                            rows = GRID_ROWS,
+                            rows = visibleRows,
                             minRowHeightDp = minRow,
                         ).dp
 
@@ -444,7 +558,10 @@ private fun OxideInstanceErrorRow(
             .clip(Oxide.RadiusControl)
             .background(Oxide.BgElevated)
             .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusControl)
-            .padding(horizontal = 10.dp, vertical = 7.dp),
+            .padding(
+                horizontal = ERROR_ROW_PADDING_H,
+                vertical = ERROR_ROW_PADDING_V,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // resolveAndroidString 而不是 androidText：后者的返回值是 AndroidStringText，
@@ -469,9 +586,11 @@ private fun OxideInstanceErrorRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(ERROR_ROW_GAP))
         OxideButton(
-            text = stringResource(R.string.generic_cancel),
+            // 这一颗只是把这条提示收掉，并没有任何东西被取消；
+            // 写成"Cancel"会让用户以为刚才那个操作被撤回来了
+            text = stringResource(R.string.oxide_ins_dismiss),
             onClick = onDismiss,
             tone = OxideButtonTone.Ghost,
         )
@@ -714,9 +833,13 @@ private fun OxideInstanceCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // 徽章行自己滚动，播放按钮宽度固定：徽章再多也不会把播放挤掉，
+                // 窄卡片上先看到播放（唯一的主操作），其余靠滑动
                 Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(BADGE_GAP),
                 ) {
                     badges.forEach { (text, tone) ->
                         OxideBadge(text = text, tone = tone)

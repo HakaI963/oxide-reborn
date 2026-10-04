@@ -18,24 +18,11 @@
 
 package dev.oxide.launcher.viewmodel
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.oxide.launcher.BuildConfig
@@ -44,9 +31,8 @@ import dev.oxide.launcher.path.GLOBAL_CLIENT
 import dev.oxide.launcher.path.GLOBAL_JSON
 import dev.oxide.launcher.path.URL_PROJECT_INFO
 import dev.oxide.launcher.setting.AllSettings
-import dev.oxide.launcher.ui.components.MarqueeText
-import dev.oxide.launcher.ui.components.SimpleListDialog
-import dev.oxide.launcher.ui.screens.content.elements.DisabledAlpha
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogOption
+import dev.oxide.launcher.ui.screens.main.oxide.OxideListDialog
 import dev.oxide.launcher.ui.upgrade.UpgradeDialog
 import dev.oxide.launcher.ui.upgrade.UpgradeFilesDialog
 import dev.oxide.launcher.upgrade.GithubContentApi
@@ -291,72 +277,24 @@ fun LauncherUpgradeOperation(
             )
         }
         is LauncherUpgradeOperation.OpenCloudDrive -> {
-            val current by remember(operation) {
-                mutableStateOf<RemoteData.CloudDrive.Link?>(null)
-            }
-            SimpleListDialog(
+            OxideListDialog(
                 title = stringResource(R.string.upgrade_cloud_drive),
-                items = operation.cloudDrive.links,
-                onItemSelected = { link ->
-                    onLinkClick(link.link)
-                },
-                onDismissRequest = {
-                    onChanged(LauncherUpgradeOperation.None)
-                },
-                current = current,
-                itemLayout = { item, isCurrent, onClick ->
-                    CloudDriveLayout(
-                        link = item,
-                        selected = isCurrent,
-                        onClick = onClick
+                options = operation.cloudDrive.links.map { link ->
+                    OxideDialogOption(
+                        //用链接本身当 key：它是稳定的，回调也按它取回那一项
+                        key = link.link,
+                        label = link.name,
+                        detail = link.link,
                     )
                 },
-                showConfirm = true,
-                confirmText = {
-                    MarqueeText(text = stringResource(R.string.generic_confirm))
-                }
-            )
-        }
-    }
-}
-
-
-@Composable
-private fun CloudDriveLayout(
-    link: RemoteData.CloudDrive.Link,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    Row(
-        modifier = modifier
-            .clip(shape = MaterialTheme.shapes.large)
-            .clickable(enabled = enabled, onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            enabled = enabled
-        )
-        Column(
-            modifier = Modifier.alpha(if (enabled) 1.0f else DisabledAlpha),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            //网盘名称
-            MarqueeText(
-                modifier = Modifier.fillMaxWidth(),
-                text = link.name,
-                style = MaterialTheme.typography.labelMedium
-            )
-            //网盘链接
-            MarqueeText(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(0.7f),
-                text = link.link,
-                style = MaterialTheme.typography.labelSmall
+                onOptionSelected = { key ->
+                    onLinkClick(key)
+                },
+                onDismiss = {
+                    onChanged(LauncherUpgradeOperation.None)
+                },
+                confirmText = stringResource(R.string.generic_confirm),
+                emptyText = stringResource(R.string.oxide_dlg_empty_options),
             )
         }
     }

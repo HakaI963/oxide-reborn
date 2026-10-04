@@ -39,8 +39,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -69,6 +71,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -934,81 +937,186 @@ fun OxideInstallVersionPage(
         onDismiss()
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = metrics.pagePaddingH),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OxideIconButton(
-                onClick = onDismiss,
-                glyph = "←",
-                modifier = Modifier.oxideIconDescription(
-                    stringResource(R.string.oxide_sec_topbar_back)
-                ),
+    val operation = installViewModel.operation
+    val flow = OxideInstallFlowState(
+        gameVersion = gameVersion,
+        step = step,
+        // bind 之前 supports 是 null，因此"加载器列表还没按这个版本拉过"
+        // 与"拉过但结果是空"不会混成同一件事
+        supportsLoaded = addonsViewModel.supports != null,
+        installing = operation is OxideInstallOperation.Installing,
+        succeeded = operation is OxideInstallOperation.Succeeded,
+    )
+    val stepStates = oxideInstallStepStates(flow)
+    val nextStep = oxideInstallNextStep(flow)
+
+    // 面板按内容定大小、居中：宽度最多三列（和页面网格同一个尺度），
+    // 高度最多"窗口减去四周空当"。清单与详情都在这块高度里滚动，
+    // 因此既不会出现铺满内容区的那一大片空白，也不会在 640x360 上把底部动作挤出去。
+    OxideDestinationBackdrop(modifier = modifier, onDismiss = onDismiss) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val bounds = oxideInstallPanelBounds(
+                windowWidthDp = maxWidth.value,
+                windowHeightDp = maxHeight.value,
+                cardMinWidthDp = metrics.cardMinWidth.value,
+                cardGapDp = metrics.cardGap.value,
             )
-            Spacer(Modifier.width(6.dp))
-            OxidePageTitle(
-                text = stringResource(R.string.oxide_inst_title),
-                modifier = Modifier.weight(1f),
-            )
-        }
-        OxideSectionLabel(
-            modifier = Modifier.padding(horizontal = metrics.pagePaddingH),
-            text = stringResource(R.string.oxide_inst_subtitle),
-        )
+            val listMaxHeight = oxideInstallStepListMaxHeight(
+                panelMaxHeightDp = bounds.maxHeightDp,
+                topBarDp = metrics.topBarHeight.value,
+                navItemDp = metrics.navItemHeight.value,
+                cardGapDp = metrics.cardGap.value,
+            ).dp
 
-        Spacer(Modifier.height(metrics.sectionGap))
+            OxideSurface(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .widthIn(max = bounds.maxWidthDp.dp)
+                    .heightIn(max = bounds.maxHeightDp.dp)
+                    // 底板是"点外面关闭"，所以面板自己得先把这片点击吃掉
+                    .oxideDestinationPanelInput(),
+                contentPadding = PaddingValues(all = metrics.cardGap),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OxideIconButton(
+                        onClick = onDismiss,
+                        glyph = "←",
+                        modifier = Modifier.oxideIconDescription(
+                            stringResource(R.string.oxide_sec_topbar_back)
+                        ),
+                    )
+                    Spacer(Modifier.width(metrics.secRowGap))
+                    OxidePageTitle(
+                        text = stringResource(R.string.oxide_inst_title),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
 
-        OxideStepLayout(
-            metrics = metrics,
-            titles = OxideInstallStep.entries.map { stringResource(it.titleRes) },
-            currentIndex = OxideInstallStep.entries.indexOf(step),
-            reachable = { index -> oxideInstallStepReachable(OxideInstallStep.entries[index], gameVersion) },
-            onSelect = { index -> step = OxideInstallStep.entries[index] },
-        ) {
-            when (step) {
-                OxideInstallStep.Version -> OxideInstallVersionStep(
+                Spacer(Modifier.height(metrics.secRowGap))
+
+                OxideInstallStepper(
                     metrics = metrics,
-                    viewModel = versionsViewModel,
-                    chosen = gameVersion,
-                    onChoose = { version ->
-                        gameVersion = version
-                        nameEditedByUser = false
-                        step = OxideInstallStep.Loader
+                    titles = OxideInstallStep.entries.map { stringResource(it.titleRes) },
+                    states = stepStates,
+                    currentIndex = OxideInstallStep.entries.indexOf(step),
+                    onSelect = { index ->
+                        val target = OxideInstallStep.entries[index]
+                        if (oxideInstallStepSelectable(flow, target)) step = target
                     },
-                    onOpenLink = hostActions.openLink,
                 )
 
-                OxideInstallStep.Loader -> OxideInstallLoaderStep(
-                    metrics = metrics,
-                    viewModel = addonsViewModel,
-                    plan = plan,
-                    activeSlotIndex = activeSlotIndex,
-                    onOpenSlot = { activeSlotIndex = it },
-                )
+                Spacer(Modifier.height(metrics.cardGap))
 
-                OxideInstallStep.Install -> OxideInstallConfirmStep(
-                    metrics = metrics,
-                    context = context,
-                    gameVersion = gameVersion,
-                    supports = addonsViewModel.supports ?: return@OxideStepLayout,
-                    viewModel = addonsViewModel,
-                    installViewModel = installViewModel,
-                    nameValue = nameValue,
-                    nameErrorCheck = installViewModel.versionNameCheck,
-                    onNameChange = {
-                        nameValue = it
-                        nameEditedByUser = true
-                    },
-                    onBackToLoaders = { step = OxideInstallStep.Loader },
-                    onBackToVersions = { step = OxideInstallStep.Version },
-                    onKeepScreen = eventViewModel::sendKeepScreen,
-                    onInstalled = finishInstall,
-                )
+                // fill = false：内容多高面板就长多高，不多一分
+                Box(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                    when (step) {
+                        OxideInstallStep.Version -> OxideInstallVersionStep(
+                            metrics = metrics,
+                            viewModel = versionsViewModel,
+                            chosen = gameVersion,
+                            onChoose = { version ->
+                                gameVersion = version
+                                nameEditedByUser = false
+                                step = OxideInstallStep.Loader
+                            },
+                            onOpenLink = hostActions.openLink,
+                            listMaxHeight = listMaxHeight,
+                        )
+
+                        OxideInstallStep.Loader -> OxideInstallLoaderStep(
+                            metrics = metrics,
+                            viewModel = addonsViewModel,
+                            plan = plan,
+                            activeSlotIndex = activeSlotIndex,
+                            onOpenSlot = { activeSlotIndex = it },
+                            listMaxHeight = listMaxHeight,
+                        )
+
+                        OxideInstallStep.Install -> OxideInstallConfirmStep(
+                            metrics = metrics,
+                            context = context,
+                            gameVersion = gameVersion,
+                            supports = addonsViewModel.supports,
+                            viewModel = addonsViewModel,
+                            installViewModel = installViewModel,
+                            nameValue = nameValue,
+                            nameErrorCheck = installViewModel.versionNameCheck,
+                            listMaxHeight = listMaxHeight,
+                            onNameChange = {
+                                nameValue = it
+                                nameEditedByUser = true
+                            },
+                            onGoVersions = { step = OxideInstallStep.Version },
+                            onGoLoaders = { step = OxideInstallStep.Loader },
+                            onKeepScreen = eventViewModel::sendKeepScreen,
+                            onInstalled = finishInstall,
+                        )
+                    }
+                }
+
+                // 安装进行中：面板里只剩进度块自己的取消，这一行整个收起来，
+                // 否则"上一步"会变成一条装到一半还能改选择的假出口
+                if (operation !is OxideInstallOperation.Installing) {
+                    Spacer(Modifier.height(metrics.cardGap))
+
+                    OxideInstallFooter(
+                        metrics = metrics,
+                        step = step,
+                        onDismiss = onDismiss,
+                        onGoVersions = { step = OxideInstallStep.Version },
+                        onGoLoaders = { step = OxideInstallStep.Loader },
+                        nextStep = nextStep,
+                        onGoNext = { nextStep?.let { step = it } },
+                    )
+                }
             }
         }
+    }
+}
+
+/**
+ * 面板底部那一行动作
+ *
+ * 每一步都恰好有一组能走的前路：第一、二步是"上一步 / 下一步"，第三步没有下一步
+ * （再往前就是安装本身，而不是第四步）。
+ * 走不了的那一步保持画出来但禁用——"还没选版本所以到不了下一步"这件事必须看得见，
+ * 而不是让按钮凭空消失。
+ */
+@Composable
+private fun OxideInstallFooter(
+    metrics: OxideMetrics,
+    step: OxideInstallStep,
+    onDismiss: () -> Unit,
+    onGoVersions: () -> Unit,
+    onGoLoaders: () -> Unit,
+    nextStep: OxideInstallStep?,
+    onGoNext: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OxideButton(
+            text = stringResource(R.string.generic_back),
+            onClick = when (step) {
+                OxideInstallStep.Version -> onDismiss
+                OxideInstallStep.Loader -> onGoVersions
+                OxideInstallStep.Install -> onGoLoaders
+            },
+            tone = OxideButtonTone.Ghost,
+        )
+        Spacer(Modifier.weight(1f))
+        // 走不到下一步时它仍然画在那里，只是禁用：这一步为什么到头了要看得见
+        OxideButton(
+            text = stringResource(R.string.oxide_inst_next),
+            onClick = onGoNext,
+            tone = OxideButtonTone.Primary,
+            enabled = nextStep != null,
+        )
     }
 }
 
@@ -1019,6 +1127,10 @@ fun OxideInstallVersionPage(
 /**
  * 「安装」与「修改版本」共用这一个版本选择步骤：两页要读的是同一份版本清单，
  * 用的是同一套类型开关与搜索，因此列表本身也应该只有一份。
+ *
+ * [listMaxHeight] 是清单能占的上限，装不下时自己在里面滚动。
+ * 「修改版本」那一页把高度留给父容器的 `weight`，因此不传——`Dp.Unspecified`
+ * 就是"不设上限"，两页共用这一个函数时行为与从前完全一致。
  */
 @Composable
 internal fun OxideInstallVersionStep(
@@ -1027,10 +1139,11 @@ internal fun OxideInstallVersionStep(
     chosen: String?,
     onChoose: (String) -> Unit,
     onOpenLink: (String) -> Unit,
+    listMaxHeight: Dp = Dp.Unspecified,
 ) {
     val filter = viewModel.versionFilter
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1111,7 +1224,7 @@ internal fun OxideInstallVersionStep(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .heightIn(max = listMaxHeight),
                     ) {
                         items(items = state.versions, key = { it.version.id }) { version ->
                             OxideInstallVersionRow(
@@ -1235,6 +1348,7 @@ private fun OxideInstallLoaderStep(
     plan: List<OxideAddonSlot>,
     activeSlotIndex: Int,
     onOpenSlot: (Int) -> Unit,
+    listMaxHeight: Dp,
 ) {
     if (plan.isEmpty()) {
         OxideEmptyState(
@@ -1299,10 +1413,12 @@ private fun OxideInstallLoaderStep(
     // 直接算而不是 remember：选择本身就是被订阅的状态，缓存下来反而会读到旧值
     val selectedCount = plan.count { viewModel.selectedOf(it) != null }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        // 面板最多三列宽，因此两栏布局只在真的放得下时才用，
+        // 放不下就折成"横向标签 + 下方详情"
         val sideBySide = maxWidth >= metrics.cardMinWidth * 1.15f
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             apiWarning?.let { warning ->
                 OxideSecErrorRow(
                     metrics = metrics,
@@ -1321,7 +1437,9 @@ private fun OxideInstallLoaderStep(
 
             if (sideBySide) {
                 Row(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = listMaxHeight),
                     horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
                 ) {
                     OxideInstallSlotList(
@@ -1333,15 +1451,14 @@ private fun OxideInstallLoaderStep(
                         onSelect = onOpenSlot,
                         modifier = Modifier
                             .width(metrics.cardMinWidth)
-                            .fillMaxHeight(),
+                            .heightIn(max = listMaxHeight),
                     )
                     OxideInstallSlotDetail(
                         metrics = metrics,
                         viewModel = viewModel,
                         slot = slot,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
+                        listMaxHeight = listMaxHeight,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             } else {
@@ -1357,9 +1474,8 @@ private fun OxideInstallLoaderStep(
                     metrics = metrics,
                     viewModel = viewModel,
                     slot = slot,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                    listMaxHeight = listMaxHeight,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -1558,6 +1674,7 @@ private fun OxideInstallSlotDetail(
     metrics: OxideMetrics,
     viewModel: OxideInstallAddonsViewModel,
     slot: OxideAddonSlot,
+    listMaxHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -1640,7 +1757,7 @@ private fun OxideInstallSlotDetail(
             else -> LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .heightIn(max = listMaxHeight),
             ) {
                 items(items = options, key = { it.key }) { option ->
                     if (option.selectable) {
@@ -1850,9 +1967,10 @@ private fun OxideInstallConfirmStep(
     installViewModel: OxideInstallViewModel,
     nameValue: String,
     nameErrorCheck: Int,
+    listMaxHeight: Dp,
     onNameChange: (String) -> Unit,
-    onBackToLoaders: () -> Unit,
-    onBackToVersions: () -> Unit,
+    onGoVersions: () -> Unit,
+    onGoLoaders: () -> Unit,
     onKeepScreen: (Boolean) -> Unit,
     onInstalled: () -> Unit,
 ) {
@@ -1884,15 +2002,16 @@ private fun OxideInstallConfirmStep(
         else -> null
     }
 
+    // 探测结果还没回来之前一律当作不可用：宁可按钮晚一会儿亮，
+    // 也不要让用户先按下安装、再被告知这个名字已经被占了
+    val usable = !isError && existsProbe != null
+
     val operation = installViewModel.operation
     val installer = installViewModel.installer
     val taskFlow = installer?.tasksFlow
     val tasks: List<TitledTask> =
         if (taskFlow != null) taskFlow.collectAsStateWithLifecycle().value else emptyList()
-    val logFlow = installer?.logOutput
-    val logOutput: TaskLogOutput? =
-        if (logFlow != null) logFlow.collectAsStateWithLifecycle().value else null
-    val canInstall = !isError && operation is OxideInstallOperation.None
+    val canInstall = usable && operation is OxideInstallOperation.None
 
     val startInstall: (GameDownloadInfo) -> Unit = { info ->
         installViewModel.install(
@@ -1911,149 +2030,170 @@ private fun OxideInstallConfirmStep(
         if (pending is OxideInstallOperation.WarningForNotification) startInstall(pending.info)
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (operation is OxideInstallOperation.Installing && installer != null) {
-            OxideTaskFlowPanel(
-                metrics = metrics,
-                title = stringResource(R.string.download_game_install_title),
-                tasks = tasks,
-                logOutput = logOutput,
-                onCancel = {
-                    installViewModel.cancel()
-                    onKeepScreen(false)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            )
-            return@Column
+    // 把当前选择组装成安装请求，并按与旧安装页相同的顺序过两道提醒
+    // （通知权限、流量）——重试走的是同一条路，因此不会绕过任何一道提醒
+    val requestInstall: () -> Unit = request@{
+        // 不是待安装状态就拒绝这次安装
+        if (installViewModel.operation !is OxideInstallOperation.None) return@request
+        val info = oxideGameDownloadInfo(
+            gameVersion = version,
+            customVersionName = nameValue,
+            supports = support,
+            current = viewModel.currentAddon,
+        )
+        if (!NotificationManager.checkNotificationEnabled(context)) {
+            installViewModel.warnForNotification(info)
+        } else if (isUsingMobileData(context)) {
+            installViewModel.warnForMobileData(info)
+        } else {
+            startInstall(info)
         }
+    }
 
-        // 中间这块自己滚动：确认条与错误条都可能比一行高，
-        // 固定在底部的只有安装按钮，因此在很矮的横屏上也不会被挤出屏幕
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
+    // 安装期间这一整块换成进度面板：确认表单、摘要与动作行都收起来，
+    // 面板里只剩"现在在干什么、干到多少、怎么停"
+    if (operation is OxideInstallOperation.Installing && installer != null) {
+        OxideInstallProgressPanel(
+            metrics = metrics,
+            tasks = tasks,
+            listMaxHeight = listMaxHeight,
+            onCancel = {
+                installViewModel.cancel()
+                onKeepScreen(false)
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = listMaxHeight)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        OxideSurface(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(all = metrics.cardGap),
         ) {
-            OxideSurface(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(all = metrics.cardGap),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(metrics.secRowGap)) {
-                    OxideSettingRow(
-                        label = stringResource(R.string.oxide_inst_chosen_version),
-                        value = version,
-                        onClick = onBackToVersions,
-                        trailing = {
-                            OxideIconButton(
-                                onClick = onBackToVersions,
-                                glyph = "✎",
-                                modifier = Modifier.oxideIconDescription(
-                                    stringResource(R.string.oxide_inst_edit_version)
-                                ),
-                            )
-                        },
-                    )
-                    OxideSecInput(
-                        metrics = metrics,
-                        label = stringResource(R.string.download_game_version_name),
-                        value = nameValue,
-                        onValueChange = onNameChange,
-                        placeholder = stringResource(R.string.download_game_version_name),
-                        isError = isError,
-                    )
-                    errorMessage?.let {
+            Column(verticalArrangement = Arrangement.spacedBy(metrics.secRowGap)) {
+                OxideSettingRow(
+                    label = stringResource(R.string.oxide_inst_chosen_version),
+                    value = version,
+                    onClick = onGoVersions,
+                    trailing = {
                         Text(
-                            text = it,
-                            color = Oxide.FgStrong,
+                            text = stringResource(R.string.oxide_inst_edit_version_short),
+                            color = Oxide.FgFaint,
                             fontSize = Oxide.Type.MicroLabel.fontSize,
                             lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1,
                         )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(metrics.cardGap))
-
-            OxideSurface(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(all = metrics.cardGap),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(metrics.secRowGap)) {
-                    OxideSectionLabel(text = stringResource(R.string.oxide_inst_summary))
-                    val plan = remember(version) { oxideAddonPlan(version) }
-                    plan.forEach { slot ->
-                        val picked = viewModel.selectedOf(slot) ?: return@forEach
-                        OxideSettingRow(
-                            label = slot.loader.displayName,
-                            value = oxideAddonTitle(slot, picked),
-                            onClick = onBackToLoaders,
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(metrics.cardGap))
-
-            // 确认与失败都在原地说出来，不用会盖住整块内容的弹窗
-            when (operation) {
-                is OxideInstallOperation.WarningForNotification -> OxideSecConfirmBar(
-                    metrics = metrics,
-                    text = stringResource(R.string.notification_data_jvm_service_message),
-                    confirmText = stringResource(R.string.notification_request),
-                    dismissText = stringResource(R.string.generic_anyway),
-                    onConfirm = {
-                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                            NotificationManager.openNotificationSettings(context)
-                            startInstall(operation.info)
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
                     },
-                    onDismiss = { startInstall(operation.info) },
                 )
-
-                is OxideInstallOperation.WarningForMobileData -> OxideSecConfirmBar(
+                OxideSecInput(
                     metrics = metrics,
-                    text = stringResource(R.string.download_install_warning_mobile_data),
-                    confirmText = stringResource(R.string.generic_anyway),
-                    dismissText = stringResource(R.string.generic_cancel),
-                    onConfirm = { startInstall(operation.info) },
-                    onDismiss = { installViewModel.reset() },
+                    label = stringResource(R.string.download_game_version_name),
+                    value = nameValue,
+                    onValueChange = onNameChange,
+                    placeholder = stringResource(R.string.download_game_version_name),
+                    isError = isError,
                 )
-
-                is OxideInstallOperation.Failed -> OxideSecErrorRow(
-                    metrics = metrics,
-                    title = stringResource(R.string.download_install_error_title),
-                    detail = installErrorDetail(operation.th),
-                    dismissText = stringResource(R.string.generic_confirm),
-                    onDismiss = { installViewModel.reset() },
-                )
-
-                is OxideInstallOperation.AlreadyInstalled -> OxideSecErrorRow(
-                    metrics = metrics,
-                    title = stringResource(R.string.download_install_error_title),
-                    detail = stringResource(R.string.versions_manage_install_exists),
-                    dismissText = stringResource(R.string.generic_confirm),
-                    onDismiss = { installViewModel.reset() },
-                )
-
-                is OxideInstallOperation.Succeeded -> OxideSecConfirmBar(
-                    metrics = metrics,
-                    text = stringResource(R.string.download_install_success_message),
-                    confirmText = stringResource(R.string.generic_done),
-                    dismissText = stringResource(R.string.generic_close),
-                    onConfirm = onInstalled,
-                    onDismiss = onInstalled,
-                )
-
-                else -> Unit
+                errorMessage?.let {
+                    Text(
+                        text = it,
+                        color = Oxide.FgStrong,
+                        fontSize = Oxide.Type.MicroLabel.fontSize,
+                        lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
+
+        Spacer(Modifier.height(metrics.cardGap))
+
+        OxideSurface(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(all = metrics.cardGap),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(metrics.secRowGap)) {
+                OxideSectionLabel(text = stringResource(R.string.oxide_inst_summary))
+                val plan = remember(version) { oxideAddonPlan(version) }
+                plan.forEach { slot ->
+                    val picked = viewModel.selectedOf(slot) ?: return@forEach
+                    OxideSettingRow(
+                        label = slot.loader.displayName,
+                        value = oxideAddonTitle(slot, picked),
+                        onClick = onGoLoaders,
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(metrics.cardGap))
+
+        // 确认与失败都在原地说出来，不用会盖住整块内容的弹窗
+        when (operation) {
+            is OxideInstallOperation.WarningForNotification -> OxideSecConfirmBar(
+                metrics = metrics,
+                text = stringResource(R.string.notification_data_jvm_service_message),
+                confirmText = stringResource(R.string.notification_request),
+                dismissText = stringResource(R.string.generic_anyway),
+                onConfirm = {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        NotificationManager.openNotificationSettings(context)
+                        startInstall(operation.info)
+                    } else {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                },
+                onDismiss = { startInstall(operation.info) },
+            )
+
+            is OxideInstallOperation.WarningForMobileData -> OxideSecConfirmBar(
+                metrics = metrics,
+                text = stringResource(R.string.download_install_warning_mobile_data),
+                confirmText = stringResource(R.string.generic_anyway),
+                dismissText = stringResource(R.string.generic_cancel),
+                onConfirm = { startInstall(operation.info) },
+                onDismiss = { installViewModel.reset() },
+            )
+
+            is OxideInstallOperation.Failed -> OxideSecErrorRow(
+                metrics = metrics,
+                title = stringResource(R.string.download_install_error_title),
+                detail = installErrorDetail(operation.th),
+                dismissText = stringResource(R.string.oxide_inst_retry),
+                // 重试走的是同一条装配 + 提醒的路，因此不是"直接再跑一遍"
+                onDismiss = {
+                    installViewModel.reset()
+                    requestInstall()
+                },
+            )
+
+            is OxideInstallOperation.AlreadyInstalled -> OxideSecErrorRow(
+                metrics = metrics,
+                title = stringResource(R.string.download_install_error_title),
+                detail = stringResource(R.string.versions_manage_install_exists),
+                dismissText = stringResource(R.string.generic_confirm),
+                onDismiss = { installViewModel.reset() },
+            )
+
+            is OxideInstallOperation.Succeeded -> OxideSecConfirmBar(
+                metrics = metrics,
+                text = stringResource(R.string.download_install_success_message),
+                confirmText = stringResource(R.string.generic_done),
+                dismissText = stringResource(R.string.generic_close),
+                onConfirm = onInstalled,
+                onDismiss = onInstalled,
+            )
+
+            else -> Unit
+        }
+
+        Spacer(Modifier.height(metrics.cardGap))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -2063,23 +2203,7 @@ private fun OxideInstallConfirmStep(
                 text = stringResource(R.string.download_install),
                 tone = OxideButtonTone.Primary,
                 enabled = canInstall,
-                onClick = {
-                    // 不是待安装状态就拒绝这次安装
-                    if (installViewModel.operation !is OxideInstallOperation.None) return@OxideButton
-                    val info = oxideGameDownloadInfo(
-                        gameVersion = version,
-                        customVersionName = nameValue,
-                        supports = support,
-                        current = viewModel.currentAddon,
-                    )
-                    if (!NotificationManager.checkNotificationEnabled(context)) {
-                        installViewModel.warnForNotification(info)
-                    } else if (isUsingMobileData(context)) {
-                        installViewModel.warnForMobileData(info)
-                    } else {
-                        startInstall(info)
-                    }
-                },
+                onClick = requestInstall,
             )
         }
     }

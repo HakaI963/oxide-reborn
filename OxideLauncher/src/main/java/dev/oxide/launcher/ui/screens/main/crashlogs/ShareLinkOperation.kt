@@ -18,23 +18,21 @@
 
 package dev.oxide.launcher.ui.screens.main.crashlogs
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import dev.oxide.launcher.R
 import dev.oxide.launcher.crashlogs.LinkNotFoundException
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
+import dev.oxide.launcher.ui.screens.main.oxide.OxideConfirmDialog
+import dev.oxide.launcher.ui.screens.main.oxide.OxideTaskDialog
 import dev.oxide.launcher.utils.string.getMessageOrToString
 
 /**
  * 上传游戏崩溃日志操作流程
+ *
+ * 三个状态各自对应弹窗家族里的一张：确认（上传前提示）、进度（上传中）、确认（失败）。
+ * 上传中这一张以前是 Material 的 `AlertDialog` 加一个永远转下去的波浪进度条；
+ * 现在换成 [OxideTaskDialog]，进度不可知时就画一条空槽加一行"处理中"，
+ * 不再让一个无尽动画一直转着。取消按钮与取消上传的行为都还在。
  */
 sealed interface ShareLinkOperation {
     data object None : ShareLinkOperation
@@ -59,48 +57,34 @@ fun ShareLinkOperation(
     when (operation) {
         is ShareLinkOperation.None -> {}
         is ShareLinkOperation.Tip -> {
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.crash_link_share_button),
-                text = stringResource(R.string.crash_link_share_tip),
+                message = stringResource(R.string.crash_link_share_tip),
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
+                //分享日志会把日志传到公开平台上，不能随手点掉
                 dismissByDialog = false,
                 onConfirm = onUpload,
-                onDismiss = {
-                    onChange(ShareLinkOperation.None)
-                }
+                onDismiss = { onChange(ShareLinkOperation.None) },
             )
         }
         is ShareLinkOperation.Uploading -> {
-            AlertDialog(
-                onDismissRequest = {},
-                title = {
-                    Text(
-                        text = stringResource(R.string.crash_link_share_button),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                text = {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = stringResource(R.string.crash_link_share_uploading, operation.apiRoot)
-                        )
-                        LinearWavyProgressIndicator(
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                confirmButton = {
-                    FilledTonalButton(
-                        onClick = onUploadChancel
-                    ) {
-                        Text(text = stringResource(R.string.generic_cancel))
-                    }
-                }
+            OxideTaskDialog(
+                title = stringResource(R.string.crash_link_share_button),
+                message = stringResource(
+                    R.string.crash_link_share_uploading,
+                    operation.apiRoot,
+                ),
+                //上传本身没有可知的进度：给的是"进度不可知"而不是假的 0%
+                progress = null,
+                onCancel = onUploadChancel,
+                cancelText = stringResource(R.string.generic_cancel),
             )
         }
         is ShareLinkOperation.Error -> {
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.crash_link_share_failed),
-                text = when (val error = operation.error) {
+                message = when (val error = operation.error) {
                     is LinkNotFoundException -> {
                         stringResource(R.string.crash_link_share_failed_link_not_found)
                     }
@@ -108,10 +92,11 @@ fun ShareLinkOperation(
                         error.getMessageOrToString()
                     }
                 },
+                //只有一个"知道了"：上传已经结束了，没有可回退的动作
+                cancelText = "",
                 dismissByDialog = false,
-                onDismiss = {
-                    onChange(ShareLinkOperation.None)
-                }
+                onConfirm = { onChange(ShareLinkOperation.None) },
+                onDismiss = { onChange(ShareLinkOperation.None) },
             )
         }
     }

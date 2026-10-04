@@ -212,7 +212,54 @@ fun instanceMenuActions(usable: Boolean, pinned: Boolean): List<InstanceAction> 
     add(InstanceAction.Delete)
 }
 
+// ---- 页头 ------------------------------------------------------------------
+
+/**
+ * 页头的"刷新"按钮能不能留在标题那一行
+ *
+ * 标题行里有三样东西要占宽度：标题本身、"刷新"、"装一个版本"。三者之和超过内容区宽度时，
+ * `maxLines = 1` 会把标题截断——被截掉的是页面名字，这是整块页面上最不该丢的一处文字。
+ *
+ * 因此宽度不够时把"刷新"折到副标题那一行（那里本来只有一个数字，放得下），
+ * 标题行于是只剩标题与主操作，两个动作不会互相挤掉。
+ *
+ * 两个按钮的宽度由文字实测加按钮自身的横向内边距算出来（见 `OxideButton` 的
+ * `padding(horizontal = 11.dp)`），因此这里不需要写死任何一段字有多宽；
+ * [minTitleWidthDp] 由 metrics 给出，界面放大后判据跟着放大，任何缩放档上的行为一致。
+ *
+ * **判据只依赖输入，不依赖界面上此刻画了什么**：所以它不会来回抖——
+ * "折走之后动作变窄、于是又能放下、于是又折回来"那种自维持的循环在这里不成立。
+ */
+fun instancesHeaderKeepsRefreshInline(
+    contentWidthDp: Float,
+    installWidthDp: Float,
+    refreshWidthDp: Float,
+    gapDp: Float,
+    minTitleWidthDp: Float,
+): Boolean {
+    if (contentWidthDp <= 0f) return true
+    val needed = refreshWidthDp.coerceAtLeast(0f) +
+        installWidthDp.coerceAtLeast(0f) +
+        gapDp.coerceAtLeast(0f) +
+        minTitleWidthDp.coerceAtLeast(0f)
+    return contentWidthDp >= needed
+}
+
 // ---- 网格 ------------------------------------------------------------------
+
+/**
+ * 网格实际要摆几行
+ *
+ * 参考稿是两行网格，因此上限永远是两行；但卡片只有一两张时仍然按两行平分高度，
+ * 卡片就会被撑到两行那么高、下面留出一条空白。所以行数取"真正排得下的行数"与
+ * [maxRows] 里较小的那个：一张卡片占一行，两张（单列）占两行，六张（两列）占三行，
+ * 但仍然最多两行。
+ */
+fun instanceGridRows(itemCount: Int, columns: Int, maxRows: Int): Int {
+    if (itemCount <= 0 || maxRows <= 0) return 1
+    val needed = (itemCount + columns.coerceAtLeast(1) - 1) / columns.coerceAtLeast(1)
+    return needed.coerceIn(1, maxRows)
+}
 
 /**
  * 网格的行高
