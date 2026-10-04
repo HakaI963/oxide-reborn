@@ -1,0 +1,173 @@
+name: Paparazzi
+
+# Screenshot tests for the Oxide GUI. Two jobs:
+#   record  - renders every golden and publishes them as an artifact to commit back
+#   verify  - renders against the committed goldens and fails on any drift
+#
+# They are separate jobs on purpose. Recording and verifying in one job would always pass,
+# because recordPaparazzi* writes the goldens and verifyPaparazzi* then compares against what
+# was just written — the check would be a no-op. verify here runs against whatever is in git.
+#
+# Not wired into ci.yml on purpose as well: the GUI is still moving and a golden churn should
+# be reviewed as a diff, not buried in the lint/unit-test job. `pull_request` is enough to catch
+# regressions before merge; bump this into ci.yml once the goldens have settled.
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Variant to render
+        required: false
+        default: debug
+        type: choice
+        options:
+          - debug
+          - release
+  pull_request:
+    paths:
+      - 'OxideLauncher/src/main/java/dev/oxide/launcher/ui/**'
+      - 'OxideLauncher/src/main/java/dev/oxide/launcher/ui/theme/**'
+      - 'OxideLauncher/src/test/java/dev/oxide/launcher/ui/screens/main/oxide/paparazzi/**'
+      - 'OxideLauncher/src/test/snapshots/**'
+      - 'OxideLauncher/build.gradle.kts'
+      - 'gradle/libs.versions.toml'
+      - 'gradle.properties'
+      - '.github/workflows/paparazzi.yml'
+
+concurrency:
+  group: paparazzi-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_NDK_VERSION: "25.2.9519653"
+
+jobs:
+  record:
+    name: Record goldens
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Same JDK as ci.yml. Paparazzi only requires JDK 11+ (it checks Runtime.version at
+      # test-rule setup) but the module itself is compiled with jvmTarget 17, and running the
+      # tests on the toolchain that builds them keeps the two halves from disagreeing.
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Locate the Android SDK
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(ls -d "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::cmdline-tools (sdkmanager) not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          {
+            echo "ANDROID_HOME=$SDK_ROOT"
+            echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+          } >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+
+      - name: Install NDK ${{ env.ANDROID_NDK_VERSION }}
+        run: '"$SDKMANAGER" "ndk;${{ env.ANDROID_NDK_VERSION }}"'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          add-job-summary: on-failure
+
+      # Paparazzi renders through layoutlib, which needs no emulator, no device and no
+      # network. The only download is the layoutlib-runtime/layoutlib-resources pair the plugin
+      # resolves itself.
+      - name: Record
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon recordPaparazzi${{ inputs.variant || 'debug' }}
+
+      # The whole point of this job. PaparazziPlugin.snapshotDir() derives the golden
+      # directory from the unit test Kotlin source root, so for src/test/java that is
+      # OxideLauncher/src/test/snapshots and the PNGs sit in its `images` subdirectory.
+      # Download the artifact and copy those PNGs back into the working tree to re-record.
+      - name: Upload recorded goldens
+        uses: actions/upload-artifact@v7
+        with:
+          name: paparazzi-snapshots
+          path: OxideLauncher/src/test/snapshots/images
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Paparazzi report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: paparazzi-report-record
+          path: OxideLauncher/build/reports/paparazzi
+          if-no-files-found: ignore
+          retention-days: 7
+
+  verify:
+    name: Verify goldens
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # The goldens are the whole input here, and LFS paths are cheap to skip otherwise.
+          lfs: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Locate the Android SDK
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(ls -d "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::cmdline-tools (sdkmanager) not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          {
+            echo "ANDROID_HOME=$SDK_ROOT"
+            echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+          } >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+
+      - name: Install NDK ${{ env.ANDROID_NDK_VERSION }}
+        run: '"$SDKMANAGER" "ndk;${{ env.ANDROID_NDK_VERSION }}"'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          add-job-summary: on-failure
+
+      - name: Verify
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon verifyPaparazzi${{ inputs.variant || 'debug' }}
+
+      # On failure Paparazzi writes the rendered image, the golden and a delta into this
+      # variant's failures directory. Without this the log only says "1 of 43 tests failed".
+      - name: Upload Paparazzi report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: paparazzi-report-verify
+          path: |
+            OxideLauncher/build/reports/paparazzi
+            OxideLauncher/build/paparazzi/failures
+          if-no-files-found: ignore
+          retention-days: 14
