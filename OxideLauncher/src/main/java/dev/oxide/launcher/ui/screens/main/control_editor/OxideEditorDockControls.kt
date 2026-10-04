@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.control_editor
 
+import androidx.compose.foundation.layout.weight
 import dev.oxide.launcher.ui.theme.Oxide
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -130,8 +131,10 @@ internal fun EditorPositionPad(
                         var current = Offset.Zero
                         var moved = false
                         fun apply(x: Float, y: Float) {
-                            current = editorPositionFromPadPoint(x, y, size.width.toFloat(), size.height.toFloat())
-                            currentMove(current)
+                            // pad 给的是存下来的整数位置，拖拽状态用的是像素 Offset
+                            val stored = editorPositionFromPadPoint(x, y, size.width.toFloat(), size.height.toFloat())
+                            current = Offset(stored.x.toFloat(), stored.y.toFloat())
+                            currentMove(editorPositionFromOffset(current))
                         }
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -748,3 +751,6 @@ internal fun EditorDockFrame(
         }
     }
 }
+/** 拖拽用的像素 Offset 回到存下来的整数位置 */
+internal fun editorPositionFromOffset(offset: androidx.compose.ui.geometry.Offset): EditorStoredPosition =
+    EditorStoredPosition(x = offset.x.toInt(), y = offset.y.toInt())

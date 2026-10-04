@@ -305,8 +305,10 @@ fun gameFpsChartSize(windowWidthDp: Int, windowHeightDp: Int): GameFpsChartSize 
         return GameFpsChartSize(GameOverlayAbsoluteMin, GameOverlayAbsoluteMin)
     }
     // 球上还挂着菜单图标与留白，四周至少留出两块最小留白
-    val availableWidth = (width - GameOverlayEdgeMarginMin * 2).coerceAtLeast(GameOverlayAbsoluteMin)
-    val availableHeight = (height - GameOverlayEdgeMarginMin * 2).coerceAtLeast(GameOverlayAbsoluteMin)
+    // EdgeMarginMin 是 Float，这里的 width/height 是 Dp，所以要先转成 Dp 再做减法
+    val edge = GameOverlayEdgeMarginMin.dp
+    val availableWidth = (width - edge * 2).coerceAtLeast(GameOverlayAbsoluteMin)
+    val availableHeight = (height - edge * 2).coerceAtLeast(GameOverlayAbsoluteMin)
     return GameFpsChartSize(
         width = minOf(GameFpsChartWidth.dp, availableWidth),
         height = minOf(GameFpsChartHeight.dp, availableHeight),

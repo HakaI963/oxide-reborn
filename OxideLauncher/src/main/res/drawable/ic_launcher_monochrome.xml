@@ -4,27 +4,32 @@
   ~
   ~ This is the silhouette of res/mipmap-<density>/ic_launcher_foreground.webp:
   ~ the same two concentric rounded diamonds the foreground draws, in the 108 dp
-  ~ adaptive viewport.  It is not hand-drawn - it is a least-squares fit of the
-  ~ four 0.5-coverage outlines of that raster, taken at every density in the
-  ~ ladder (9432 boundary points, rms 0.141 dp, max 0.483 dp):
+  ~ adaptive viewport.  It is generated, not hand-drawn - a least-squares fit of
+  ~ the four 0.5-coverage outlines of the 1024 px source plate (7158 boundary
+  ~ points, rms 0.28 px, max 0.90 px):
   ~
-  ~   outline            half side   stroke   corner radius (top/right/left/bottom)
-  ~   outer ring, outer   27.0925 dp  2.1797   11.677 / 13.280 / 12.644 / 13.582
-  ~   outer ring, inner   24.9128 dp           10.228 / 10.965 / 10.690 / 11.223
-  ~   inner ring, outer   15.9815 dp  1.6934    5.634 /  6.019 /  5.442 /  6.037
-  ~   inner ring, inner   14.2881 dp            4.030 /  4.310 /  3.689 /  4.281
+  ~   outline             half side   stroke   corner radius top/right/left/bottom
+  ~   outer ring, outer    27.1013 dp  2.1899   11.870 / 13.107 / 12.847 / 13.435
+  ~   outer ring, inner    24.9115 dp           10.378 / 10.816 / 11.015 / 10.997
+  ~   inner ring, outer    15.9877 dp  1.7016    5.821 /  5.854 /  5.817 /  5.842
+  ~   inner ring, inner    14.2861 dp            4.208 /  4.145 /  3.916 /  4.101
   ~
-  ~ Rotation 44.928 deg (i.e. 45), centre (53.984, 54.275) dp.  The bounding box
-  ~ comes out 66.03 dp, which is the 66 dp safe-zone diameter of the 108 dp
-  ~ canvas.
+  ~ Rotation 44.927 deg, centre 54.116, 54.403 dp.  Scaled with the same
+  ~ uniform factor as the foreground rasters (66 dp / 575.955 px =
+  ~ 0.114592 dp per px), so the bounding box lands on the 66 dp safe-zone
+  ~ diameter; the +0.08 dp translation was measured by maximising the IoU
+  ~ against the shipped raster.
   ~
   ~ The four corner arcs of an outline are NOT congruent in the artwork - the
-  ~ outer outline spans 11.68..13.58 dp, +-7.5% - so each corner carries its own
-  ~ radius.  A single-radius rounded square tracks the real silhouette several
-  ~ times worse; measured IoU against the foreground alpha:
+  ~ outer outline spans 11.87..13.44 dp, +-6% - so each corner carries its own
+  ~ radius.  Measured silhouette IoU (0.5 level set) against the foreground
+  ~ alpha, per-corner radii vs a single mean radius:
   ~
-  ~   per-corner radius   soft 0.9xx / hard(0.5) 0.9xx     <- shipped
-  ~   single radius mean  soft 0.9xx / hard(0.5) 0.9xx
+  ~   mdpi 108px    0.9859   (mean radius 0.9538)
+  ~   hdpi 162px    0.9787   (0.9622)
+  ~   xhdpi 216px   0.9712   (0.9507)
+  ~   xxhdpi 324px  0.9784   (0.9563)
+  ~   xxxhdpi 432px 0.9654   (0.9446)
   ~
   ~ Four subpaths with fillType evenOdd: outer boundary, its hole, then the
   ~ small ring's outer and inner boundary.
@@ -39,19 +44,19 @@
     android:viewportHeight="108">
 
     <path
-        android:pathData="M45.6896,24.2271A11.6769,11.6769 0 0 1 62.2032,24.2062L82.8968,44.8476A13.2799,13.2799 0 0 1 82.9205,63.6282L63.6245,82.9731A13.5818,13.5818 0 0 1 44.4169,82.9974L24.6220,63.2525A12.6443,12.6443 0 0 1 24.5994,45.3707Z"
+        android:pathData="M45.6846,24.4804A11.8698,11.8698 0 0 1 62.4709,24.4590L83.1626,45.0981A13.1068,13.1068 0 0 1 83.1862,63.6339L63.6542,83.2158A13.4374,13.4374 0 0 1 44.6509,83.2400L24.8963,63.5356A12.8628,12.8628 0 0 1 24.8731,45.3449Z"
         android:fillColor="#FFFFFFFF"
         android:fillType="evenOdd" />
     <path
-        android:pathData="M46.7168,26.2839A10.2279,10.2279 0 0 1 61.1813,26.2656L81.4533,46.4865A10.9647,10.9647 0 0 1 81.4729,61.9929L61.9548,81.5605A11.2231,11.2231 0 0 1 46.0830,81.5805L26.3210,61.8685A10.6901,10.6901 0 0 1 26.3019,46.7504Z"
+        android:pathData="M46.7430,26.5233A10.3765,10.3765 0 0 1 61.4177,26.5046L81.6844,46.7198A10.8160,10.8160 0 0 1 81.7039,62.0160L61.9393,81.8310A11.0145,11.0145 0 0 1 46.3624,81.8509L26.5902,62.1290A10.8766,10.8766 0 0 1 26.5706,46.7472Z"
         android:fillColor="#FFFFFFFF"
         android:fillType="evenOdd" />
     <path
-        android:pathData="M49.9768,35.6624A5.6344,5.6344 0 0 1 57.9450,35.6523L72.3242,49.9953A6.0189,6.0189 0 0 1 72.3350,58.5073L58.2760,72.6018A6.0365,6.0365 0 0 1 49.7391,72.6126L35.2365,58.1465A5.4424,5.4424 0 0 1 35.2267,50.4498Z"
+        android:pathData="M49.9766,35.9150A5.8206,5.8206 0 0 1 58.2081,35.9045L72.5805,50.2403A5.8537,5.8537 0 0 1 72.5910,58.5187L58.2533,72.8930A5.8179,5.8179 0 0 1 50.0255,72.9034L35.4535,58.3685A5.5743,5.5743 0 0 1 35.4434,50.4852Z"
         android:fillColor="#FFFFFFFF"
         android:fillType="evenOdd" />
     <path
-        android:pathData="M51.1127,36.9215A4.0302,4.0302 0 0 1 56.8123,36.9143L71.1394,51.2052A4.3099,4.3099 0 0 1 71.1471,57.3003L57.0333,71.4498A4.2811,4.2811 0 0 1 50.9790,71.4575L36.3899,56.9053A3.6890,3.6890 0 0 1 36.3833,51.6882Z"
+        android:pathData="M51.1186,37.1781A4.2077,4.2077 0 0 1 57.0692,37.1705L71.3881,51.4530A4.1408,4.1408 0 0 1 71.3956,57.3090L57.0391,71.7021A4.1029,4.1029 0 0 1 51.2367,71.7095L36.6847,57.1945A3.9163,3.9163 0 0 1 36.6776,51.6560Z"
         android:fillColor="#FFFFFFFF"
         android:fillType="evenOdd" />
 </vector>

@@ -350,7 +350,7 @@ fun OpenFolderLayer(
     }
 }
 
-/** 底栏：关闭 + 导入。导入仍然挑 `*/*`，一个文件一个文件地拷 */
+/** 底栏：关闭 + 导入。导入仍然匹配任意 MIME 类型，逐个文件拷贝 */
 @Composable
 private fun FolderFooter(
     bounds: GameOverlayBounds,

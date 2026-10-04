@@ -1008,7 +1008,7 @@ private fun OxideMpToggleRow(
                 OxideToggle(
                     checked = checked,
                     // 禁用行必须整个按下去都不写设置：只关掉整行的 toggleable
-                    会让开关自己仍然能点，那样值会悄悄变掉而整行毫无反应
+                    // 会让开关自己仍然能点，那样值会悄悄变掉而整行毫无反应
                     onCheckedChange = { next ->
                         if (enabled) onCheckedChange(next)
                     },

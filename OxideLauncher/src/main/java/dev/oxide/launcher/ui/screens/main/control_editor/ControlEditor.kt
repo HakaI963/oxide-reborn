@@ -186,10 +186,11 @@ fun BoxWithConstraintsScope.ControlEditor(
         // 没有选中层时给一份空的：这里不能顺手选一层出来，"哪一层被选中"
         // 是用户的状态，不该由渲染决定
         val normalButtons by (selectedLayer?.normalButtons ?: emptyFlow())
-            .collectAsStateWithLifecycle()
-        val textBoxes by (selectedLayer?.textBoxes ?: emptyFlow()).collectAsStateWithLifecycle()
+            .collectAsStateWithLifecycle(initial = null)
+        val textBoxes by (selectedLayer?.textBoxes ?: emptyFlow())
+            .collectAsStateWithLifecycle(initial = null)
         val joystickButtons by (selectedLayer?.joystickButtons ?: emptyFlow())
-            .collectAsStateWithLifecycle()
+            .collectAsStateWithLifecycle(initial = null)
 
         val widgetsInLayer: List<ObservableWidget> =
             remember(normalButtons, textBoxes, joystickButtons) {

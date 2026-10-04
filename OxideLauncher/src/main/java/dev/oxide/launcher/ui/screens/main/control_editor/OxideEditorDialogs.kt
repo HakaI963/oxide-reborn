@@ -138,8 +138,8 @@ internal fun EditorBall(
             modifier = Modifier
                 .offset {
                     IntOffset(
-                        x = anchored.x.roundToInt().coerceIn(0, maxX.roundToInt()),
-                        y = anchored.y.roundToInt().coerceIn(0, maxY.roundToInt()),
+                        x = anchored.x.toInt().coerceIn(0, maxX.toInt()),
+                        y = anchored.y.toInt().coerceIn(0, maxY.toInt()),
                     )
                 }
                 .size(ballSize)

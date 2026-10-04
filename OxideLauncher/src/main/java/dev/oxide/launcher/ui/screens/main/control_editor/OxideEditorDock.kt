@@ -159,6 +159,9 @@ internal fun EditorDock(
                     onPreviewScenarioChanged = onPreviewScenarioChanged,
                     previewHideLayerWhen = previewHideLayerWhen,
                     onPreviewHideLayerChanged = onPreviewHideLayerChanged,
+                    onSave = onSave,
+                    saveAndExit = saveAndExit,
+                    onExit = onExit,
                 )
             },
             // 底栏永远是可见的，因此引导不挂在这里——它挂在列表末尾那个
