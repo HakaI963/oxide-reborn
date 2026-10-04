@@ -179,6 +179,8 @@ fun OxideInstancesPage(
     val context = LocalContext.current
     val eventViewModel = rememberOxideEventViewModel()
     val hostActions = LocalOxideHostActions.current
+    // onSizeChanged 不是组合作用域，LocalDensity 只能在组合期取出来
+    val density = LocalDensity.current
 
     val versions by VersionsManager.versions.collectAsStateWithLifecycle()
     val currentVersion by VersionsManager.currentVersion.collectAsStateWithLifecycle()
