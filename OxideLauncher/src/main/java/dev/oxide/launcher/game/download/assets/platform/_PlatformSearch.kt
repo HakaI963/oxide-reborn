@@ -320,9 +320,16 @@ suspend fun getProjectByVersion(
  * 获取指定平台上的单个版本
  * @param versionId 版本在平台上的Id
  */
+/**
+ * 按版本 id 取某个确定的资源版本
+ *
+ * CurseForge 的版本是按 (项目, 文件) 定位的，光有文件 id 查不出来，
+ * 所以那边必须同时给 [projectId]。
+ */
 suspend fun getVersionById(
     versionId: String,
     platform: Platform,
+    projectId: String? = null,
     printLog: Boolean = true
 ): PlatformVersion = withContext(Dispatchers.IO) {
     when (platform) {
@@ -332,7 +339,16 @@ suspend fun getVersionById(
         ) { searcher ->
             searcher.getVersion(versionId)
         }
-        Platform.CURSEFORGE -> error("CurseForge dependencies do not carry a version id.")
+        Platform.CURSEFORGE -> {
+            val pid = projectId
+                ?: error("CurseForge resolves a file id against its project, so projectId is required.")
+            mirroredPlatformSearcher(
+                searchers = mirroredCurseForgeSource(),
+                printLog = printLog
+            ) { searcher ->
+                searcher.getVersion(projectID = pid, fileID = versionId)
+            }
+        }
     }
 }
 

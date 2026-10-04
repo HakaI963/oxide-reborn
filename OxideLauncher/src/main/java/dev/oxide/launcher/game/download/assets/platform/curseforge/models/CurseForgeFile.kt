@@ -212,6 +212,14 @@ class CurseForgeFile(
     class Dependency(
         @SerialName("modId")
         val modId: Int,
+        /**
+         * 作者在这一条依赖里指定的具体文件
+         *
+         * 默认值不能省：启动器会把 CurseForge 的响应缓存在磁盘上，
+         * 早先缓存的 JSON 里没有这个字段，非空字段缺键会直接反序列化失败。
+         */
+        @SerialName("fileId")
+        val fileId: Int = 0,
         @SerialName("relationType")
         val relationType: PlatformDependencyType
     )
@@ -299,6 +307,8 @@ class CurseForgeFile(
             PlatformVersion.PlatformDependency(
                 platform = platform(),
                 projectId = dependency.modId.toString(),
+                // 作者指定了文件就用那个文件；老缓存里没有就退回"匹配目标游戏版本的最新版"
+                versionId = dependency.fileId.takeIf { it > 0 }?.toString(),
                 type = dependency.relationType
             )
         }

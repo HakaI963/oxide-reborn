@@ -318,6 +318,7 @@ private suspend fun DependencyContext.resolve(
             getVersionById(
                 versionId = request.versionId,
                 platform = request.platform,
+                projectId = request.projectId,
                 printLog = false
             )
         }
