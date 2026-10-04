@@ -212,6 +212,8 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
 
         is EditorOperation.EditLayer -> {
             val layer = operation.layer
+            // onCopy 不是 composable，默认层名在组合期取好再传进去
+            val defaultLayerName = stringResource(R.string.control_editor_edit_layer_default)
             EditControlLayerDialog(
                 layer = layer,
                 onDismissRequest = {
@@ -223,7 +225,6 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
                 onMergeDownward = {
                     viewModel.observableLayout.mergeDownward(layer)
                 },
-                val defaultLayerName = stringResource(R.string.control_editor_edit_layer_default)
                 onCopy = {
                     // 复制出来的层拿一份打包后的内容，再挂到布局上。
                     // 名字沿用"新建层"的默认名，与旧版一致；这个回调不是 composable，
