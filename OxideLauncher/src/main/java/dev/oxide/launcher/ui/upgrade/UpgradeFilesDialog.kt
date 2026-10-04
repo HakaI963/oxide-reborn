@@ -149,14 +149,17 @@ private fun UpgradeFileLayout(
                         text = file.arch.getDisplayString(),
                         style = MaterialTheme.typography.labelSmall
                     )
-                    //大小
+                    //大小。远端清单是静态文件，构建之前拿不到真实字节数，
+                    //所以 size 缺省就是 0——这时候宁可不说，也不要显示"0.00 KB"
                     val sizeString = remember(file) {
-                        formatFileSize(file.size)
+                        file.size.takeIf { it > 0L }?.let { formatFileSize(it) }
                     }
-                    Text(
-                        text = stringResource(R.string.upgrade_version_size, sizeString),
-                        style = MaterialTheme.typography.labelSmall
-                    )
+                    if (sizeString != null) {
+                        Text(
+                            text = stringResource(R.string.upgrade_version_size, sizeString),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
         }
