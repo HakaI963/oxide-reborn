@@ -81,15 +81,22 @@ internal data class OxideInstallFlowState(
  * 三步在某一刻各自的呈现状态
  *
  * 「当前这一步」永远优先报 Active：用户退回来改加载器时，那一步就该再次变成进行中，
- * 而不是留着上一轮的 Done。Blocked 优先于其余三种——"还没有版本所以根本走不到"
+ * 而不是留着上一轮的 Done。第一步同样如此——选好版本之后 `step` 立刻前进到第二步，
+ * 于是「有版本且 `step` 又是 Version」只可能是用户自己退回来了，那一步就该是 Active，
+ * 而不是提前打上勾。（此前第一步把 `hasVersion` 排在 `step == Version` 前面，
+ * 于是退回来改版本时第一步留着上一轮的 ✓，与第二步的规则也自相矛盾。）
+ *
+ * Blocked 优先于其余三种——"还没有版本所以根本走不到"
  * 这件事必须看得见，而不是干脆把这一步藏起来。
+ *
+ * 于是规则可以一句话说完：第 N 步是 Done，当且仅当 `step` 已经走到第 N+1 步。
  */
 internal fun oxideInstallStepStates(state: OxideInstallFlowState): List<OxideInstallStepState> {
     val loaderPassed = state.step == OxideInstallStep.Install
     return listOf(
         when {
-            state.hasVersion -> OxideInstallStepState.Done
             state.step == OxideInstallStep.Version -> OxideInstallStepState.Active
+            state.hasVersion -> OxideInstallStepState.Done
             else -> OxideInstallStepState.Pending
         },
         when {

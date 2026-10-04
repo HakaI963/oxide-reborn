@@ -265,8 +265,10 @@ class OxideDiscoverDependencyCardTest {
     // ---- 去重 ---------------------------------------------------------------
 
     /**
-     * 同一个项目在一条关系里出现两次时只查一次：
-     * 一次带精确版本 id、一次只给项目 id，两条都要画，但项目只有一份
+     * 同一个项目出现两次时只查一次
+     *
+     * 去重的键是"平台 + 项目 id"：完全相同的目标只留一个，
+     * 换了平台或换了项目 id 的那条是另一个项目，必须照查。
      */
     @Test
     fun theSameProjectIsQueriedOnceEvenWhenItAppearsInSeveralRelations() {
@@ -277,15 +279,54 @@ class OxideDiscoverDependencyCardTest {
             DiscoverDependencyTarget(Platform.CURSEFORGE, "306612"),
         )
         val deduped = discoverProjectTargets(targets)
-        assertEquals(2, deduped.size)
+        // 这四个目标是**三个**项目：前两条完全相同（只查一次），
+        // 第三个在另一个平台（编号空间各自独立），第四个是另一个项目（必须查）。
+        // 去掉前两条重复之后剩 3 个，原来写的 2 把第四个目标一起吞掉了。
+        assertEquals(3, deduped.size)
         // 平台不同就不是同一个项目：两个平台的编号空间各自独立
         assertEquals(
-            setOf("MODRINTH/AANobbMI", "CURSEFORGE/AANobbMI"),
-            discoverProjectKeys(deduped)
+            setOf("MODRINTH/AANobbMI", "CURSEFORGE/AANobbMI", "CURSEFORGE/306612"),
+            discoverProjectKeys(deduped),
         )
         // 保留首次出现的顺序
         assertEquals(Platform.MODRINTH, deduped[0].platform)
         assertEquals(Platform.CURSEFORGE, deduped[1].platform)
+        assertEquals("306612", deduped[2].projectId)
+    }
+
+    /**
+     * 回归：同一个项目经由**不同版本 id** 的两条关系到达时，也只查一次
+     *
+     * 两条关系都要画（各自的版本要装各自的），但项目元数据是按
+     * `平台 + 项目 id` 读的一次——版本 id 进键就等于对同一个项目发两次请求。
+     * 因此去重发生在"关系"之上、只按项目身份进行。
+     */
+    @Test
+    fun oneProjectReachedThroughTwoDifferentFileRelationsIsQueriedOnce() {
+        val relations = listOf(
+            PlatformVersion.PlatformDependency(
+                Platform.MODRINTH,
+                "AANobbMI",
+                "8d6bzmvJ",
+                PlatformDependencyType.REQUIRED,
+            ),
+            PlatformVersion.PlatformDependency(
+                Platform.MODRINTH,
+                "AANobbMI",
+                "abc123xy",
+                PlatformDependencyType.OPTIONAL,
+            ),
+        )
+        val dependencies = discoverDependenciesOf(fakeVersion(dependencies = relations))
+        // 两条关系确实是两条：`cacheKey` 是 平台/项目 id/版本 id，版本 id 不同即两条，
+        // 因此各自可选、各自可装
+        assertEquals(2, dependencies.size)
+        // 但项目只有一份
+        val targets = discoverProjectTargets(
+            dependencies.map { DiscoverDependencyTarget(it.platform, it.projectId!!) }
+        )
+        assertEquals(1, targets.size)
+        assertEquals(setOf("MODRINTH/AANobbMI"), discoverProjectKeys(targets))
     }
 
     // ---- 上限 ---------------------------------------------------------------

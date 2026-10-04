@@ -125,7 +125,13 @@ class OxideInstancesLayoutTest {
     fun cardsAreCountedAgainstTheRealColumnCount() {
         assertEquals("单列两张占两行", 2, instanceGridRows(2, columns = 1, maxRows = 2))
         assertEquals("两列两张只占一行", 1, instanceGridRows(2, columns = 2, maxRows = 2))
-        assertEquals("两列五张占三行", 3, instanceGridRows(5, columns = 2, maxRows = 2))
+        // 五张两列要排 3 行（2 + 2 + 1），但参考稿是**两行**网格，
+        // 因此上限先落地：3 行被夹回 2 行，第五张进入滚动区而不是把网格改成另一种布局。
+        // 原来写 3，那等于让 maxRows 只在"刚好不超过"时才起作用——
+        // 与 theGridNeverExceedsTheReferenceRowCount（12 张 3 列同样只给 2 行）矛盾。
+        assertEquals("两列五张需要三行，被两行上限夹住", 2, instanceGridRows(5, columns = 2, maxRows = 2))
+        // 上限放开时排得下的行数就是真实行数
+        assertEquals(3, instanceGridRows(5, columns = 2, maxRows = 3))
     }
 
     @Test

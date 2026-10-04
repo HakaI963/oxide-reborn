@@ -64,6 +64,8 @@ class OxideInstallFlowLogicTest {
 
     @Test
     fun loadersAndInstallOpenUpOnceAVersionIsChosen() {
+        // 「有版本但还停在第一步」是用户自己退回来改版本的那一段：
+        // 后两步已经走得到（不再是 Blocked），而第一步仍然是当前这一步，因此是 Active。
         assertEquals(
             listOf(
                 OxideInstallStepState.Active,
@@ -72,6 +74,47 @@ class OxideInstallFlowLogicTest {
             ),
             oxideInstallStepStates(flow(gameVersion = "1.21.1")),
         )
+        // 选了版本就会立刻前进到第二步，这时第一步才真的走完
+        assertEquals(
+            listOf(
+                OxideInstallStepState.Done,
+                OxideInstallStepState.Active,
+                OxideInstallStepState.Pending,
+            ),
+            oxideInstallStepStates(
+                flow(gameVersion = "1.21.1", step = OxideInstallStep.Loader)
+            ),
+        )
+    }
+
+    /**
+     * 回归：第 N 步只有在 `step` 已经走过它之后才是 Done
+     *
+     * 三步共用一条规则（"当前这一步永远 Active，往回走一步就重新变成进行中"），
+     * 所以任何一步都不会在用户正站在它上面时留着上一轮的 ✓。
+     */
+    @Test
+    fun aStepIsDoneOnlyAfterTheStepAfterItWasReached() {
+        val reached = listOf(
+            OxideInstallStep.Version,
+            OxideInstallStep.Loader,
+            OxideInstallStep.Install,
+        )
+        reached.forEachIndexed { index, step ->
+            val states = oxideInstallStepStates(flow(gameVersion = "1.21.1", step = step))
+            for (earlier in reached.indices.filter { it < index }) {
+                assertEquals(
+                    "站在第 ${index + 1} 步时，第 ${earlier + 1} 步必须是 Done",
+                    OxideInstallStepState.Done,
+                    states[earlier],
+                )
+            }
+            assertEquals(
+                "当前这一步必须是 Active",
+                OxideInstallStepState.Active,
+                states[index],
+            )
+        }
     }
 
     @Test
@@ -278,10 +321,16 @@ class OxideInstallFlowLogicTest {
     @Test
     fun percentRoundsAndClamps() {
         assertEquals(0, oxideInstallPercent(0f))
+        // 0.426 × 100 = 42.6，四舍五入进位到 43
         assertEquals(43, oxideInstallPercent(0.426f))
         assertEquals(100, oxideInstallPercent(1f))
         assertEquals(100, oxideInstallPercent(1.8f))
-        assertEquals(0, oxideInstallPercent(-0.5f))
+        // 负数是后端约定的"进度不可知"，因此没有百分比可言——与 -1f 同一条分支。
+        // （这里原本写 0，与同文件里 oxideInstallPercent(-1f) 必须为 null 那条矛盾：
+        //   画一个 0% 等于告诉用户"一个字节都还没下"，那是在编。）
+        assertNull(oxideInstallPercent(-0.5f))
+        // 真正的下界 0.0 仍然是 0%
+        assertEquals(0, oxideInstallPercent(0.0001f))
     }
 
     @Test
@@ -309,15 +358,22 @@ class OxideInstallFlowLogicTest {
     @Test
     fun theBackendVolumeTextIsForwardedVerbatim() {
         // 后端用 formatFileSize 写好的 "132/1400 files · 84.21 MB / 210.44 MB"
-        // 原样转发：界面不重算字节数，两处数字因此不会对不上
-        assertEquals(
-            "In progress · 132/1400 files · 84.21 MB / 210.44 MB",
-            oxideInstallDetailLine(
-                stateLabel = "In progress",
-                message = "132/1400 files · 84.21 MB / 210.44 MB",
-                speedText = "4.20 MB/s",
-            ),
+        // 原样转发：界面不重算字节数，两处数字因此不会对不上。
+        // 三段按固定顺序排开，每段之间是 " · "——这里给了速率，速率也在里面
+        // （"Waiting · 1.20 MB/s" 那条用例说的正是同一件事）。
+        // 原来期望的字符串少了最后一段，与它自己那一条用例自相矛盾。
+        val message = "132/1400 files · 84.21 MB / 210.44 MB"
+        val line = oxideInstallDetailLine(
+            stateLabel = "In progress",
+            message = message,
+            speedText = "4.20 MB/s",
         )
+        assertEquals(
+            "In progress · 132/1400 files · 84.21 MB / 210.44 MB · 4.20 MB/s",
+            line,
+        )
+        // 后端那一段逐字出现：没有被重新拼写，也没有被拆开重排
+        assertTrue("message must survive verbatim, was: $line", line.contains(message))
     }
 
     @Test

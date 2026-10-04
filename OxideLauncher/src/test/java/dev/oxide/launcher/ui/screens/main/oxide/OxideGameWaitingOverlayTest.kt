@@ -66,7 +66,12 @@ class OxideGameWaitingOverlayTest {
     @Test
     fun theElapsedSecondsComeStraightFromTheTwoStamps() {
         assertEquals(0, oxideGameWaitingElapsedSeconds(1_000L, 1_000L))
-        assertEquals(1, oxideGameWaitingElapsedSeconds(1_000L, 1_999L))
+        // 999ms 还不满一秒：耗时按整秒**截断**，不进位。
+        // （这里原本写 1，与下一行的 1999ms → 1 相互矛盾：同一条单调规则不可能
+        //   同时把 999ms 记成 1 秒、把 1999ms 记成 1 秒；四舍五入会让 1999 → 2，
+        //   而"还差 1ms 就到两秒"显示成 2 秒是超前。）
+        assertEquals(0, oxideGameWaitingElapsedSeconds(1_000L, 1_999L))
+        assertEquals(1, oxideGameWaitingElapsedSeconds(1_000L, 2_000L))
         assertEquals(1, oxideGameWaitingElapsedSeconds(1_000L, 2_999L))
         assertEquals(90, oxideGameWaitingElapsedSeconds(1_000L, 91_000L))
         assertEquals(90, facts(nowMillis = 91_000L).elapsedSeconds)

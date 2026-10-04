@@ -59,9 +59,10 @@ internal enum class OxideLaunchSurface {
 /**
  * 这一次启动此刻该显示哪一块表面
  *
- * 判据只有一条链：[oxideLaunchVisible] 先决定「要不要盖上来」，
- * [oxidePreflightAsks] 再决定「盖上来之后里面写什么」。
- * 两者都是纯函数，所以「没有任何一种输入会同时得到 Preflight 和 Progress」
+ * 判据是一条链：[oxideLaunchVisible] 先决定「要不要盖上来」，
+ * 然后**流程在不在跑**决定「里面写的是什么」，最后 [oxidePreflightAsks]
+ * 只在没有流程可报的时候才有机会把内容换成那几条要人拿主意的检查。
+ * 三者都是纯函数，所以「没有任何一种输入会同时得到 Preflight 和 Progress」
  * 这件事在测试里是显然的。
  */
 internal fun oxideLaunchSurface(

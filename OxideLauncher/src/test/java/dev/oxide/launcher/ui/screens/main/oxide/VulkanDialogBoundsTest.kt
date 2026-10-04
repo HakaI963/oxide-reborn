@@ -168,10 +168,23 @@ class VulkanDialogBoundsTest {
         )
     }
 
-    /** 检测不出来时只有一行说明：结果区收到那一行的高度，不撑出一个巨大的空盒子 */
+    /**
+     * 检测不出来时只有一行说明：结果区收到那一行的高度，不撑出一个巨大的空盒子
+     *
+     * 这里的用例原本用 40dp 的内容去断言"收到 40"，但 40dp 比下限
+     * [VULKAN_DIALOG_MIN_LIST_HEIGHT_DP]（64dp）还小——下限是同一份契约的另一半，
+     * 由 theResultAreaNeverCollapsesBelowTheFloor 钉死（内容 1dp 也拿到 64dp）。
+     * 因此"按内容高度收缩"只能用在**高于下限**的内容上：
+     * 120dp 的内容放进 200dp 的结果区，拿到的是 120 而不是 200。
+     */
     @Test
     fun contentThatFitsShrinksTheResultArea() {
-        assertEquals(40, vulkanResultListHeight(contentHeightDp = 40, maxHeightDp = 200))
+        assertEquals(120, vulkanResultListHeight(contentHeightDp = 120, maxHeightDp = 200))
+        // 比下限还矮的内容收到下限，而不是收到内容高度
+        assertEquals(
+            VULKAN_DIALOG_MIN_LIST_HEIGHT_DP,
+            vulkanResultListHeight(contentHeightDp = 40, maxHeightDp = 200),
+        )
     }
 
     /** 放不下时顶到上限，滚动只发生在这一块里 */
