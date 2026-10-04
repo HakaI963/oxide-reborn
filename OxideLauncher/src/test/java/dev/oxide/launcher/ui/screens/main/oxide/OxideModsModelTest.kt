@@ -44,6 +44,7 @@ class OxideModsModelTest {
     private val labels = OxideModMetaLabels(
         fileName = "File name",
         fileSize = "File size",
+        localName = "Name in the file",
         version = "Mod version",
         author = "Authors",
         loader = "Loader",
@@ -91,6 +92,19 @@ class OxideModsModelTest {
     )
 
     // ---- 元数据行 -----------------------------------------------------------
+
+    @Test
+    fun theLocalNameOnlyShowsWhenItDiffersFromThePlatformTitle() {
+        // 标题优先用平台上的项目名；jar 自己声明的名字不同时，两个都值得看
+        assertFalse(
+            OxideModMetaField.LocalName in oxideModsMeta(row(), labels).map { it.field }
+        )
+        val renamed = row().copy(projectTitle = "Sodium", localName = "Sodium Extra")
+        assertEquals(
+            "Sodium Extra",
+            oxideModsMeta(renamed, labels).first { it.field == OxideModMetaField.LocalName }.value,
+        )
+    }
 
     @Test
     fun everyFieldThatHasAValueIsShown() {
@@ -407,11 +421,11 @@ class OxideModsModelTest {
     @Test
     fun bulkOutcomeCountsWhatActuallyMoved() {
         // 没改成的那些必须被点名，而不是整批报成功
-        val outcome = oxideModBulkOutcome(attempted = listOf(row(), row(), row()), changed = 2)
+        val outcome = oxideModBulkOutcome(attempted = 3, changed = 2)
         assertEquals(2, outcome.changed)
         assertEquals(1, outcome.skipped)
         assertTrue(outcome.touchedAnything)
-        assertFalse(oxideModBulkOutcome(emptyList(), 0).touchedAnything)
+        assertFalse(oxideModBulkOutcome(attempted = 0, changed = 0).touchedAnything)
     }
 
     @Test

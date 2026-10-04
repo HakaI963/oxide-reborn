@@ -102,7 +102,7 @@ internal fun GameMemoryReadout(
     val text = remember(usedMb, totalMb) { formatGameOverlayMemory(usedMb, totalMb) }
     val fraction = remember(usedMb, totalMb) { gameOverlayMemoryFraction(usedMb, totalMb) }
 
-    Row(
+    Box(
         modifier = modifier
             .widthIn(min = minWidth)
             .height(14.dp)
@@ -110,24 +110,29 @@ internal fun GameMemoryReadout(
             .background(Oxide.BgChip)
             .border(BorderStroke(1.dp, Oxide.Line), Oxide.RadiusSmall)
             .semantics { contentDescription = text },
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 已用部分：实心的一块，宽度就是比例
+        // 已用部分：实心的一块，宽度就是比例。画在文字**底下**，
+        // 因此文字的对比度不随填色深浅变化
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(fraction)
                 .background(Oxide.FgGhost)
         )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = text,
-            color = Oxide.FgMuted,
-            fontSize = Oxide.Type.Mono.fontSize,
-            lineHeight = Oxide.Type.Mono.lineHeight,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(end = 6.dp),
-        )
+        Row(
+            modifier = Modifier.align(Alignment.CenterStart),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = text,
+                color = Oxide.FgMuted,
+                fontSize = Oxide.Type.Mono.fontSize,
+                lineHeight = Oxide.Type.Mono.lineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(end = 6.dp),
+            )
+        }
     }
 }

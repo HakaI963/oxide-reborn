@@ -1022,7 +1022,7 @@ fun OxideModifyVersionPage(
             )
             Spacer(Modifier.width(6.dp))
             OxidePageTitle(
-                text = stringResource(R.string.oxide_mod_title),
+                text = stringResource(R.string.oxide_modify_title),
                 modifier = Modifier.weight(1f),
                 trailing = {
                     OxideBadge(text = version.getVersionName())

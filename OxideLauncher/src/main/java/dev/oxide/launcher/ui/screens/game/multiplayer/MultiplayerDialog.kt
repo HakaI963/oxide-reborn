@@ -19,19 +19,17 @@
 package dev.oxide.launcher.ui.screens.game.multiplayer
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -66,8 +64,6 @@ import dev.oxide.launcher.ui.screens.game.elements.GameOverlayRowButton
 import dev.oxide.launcher.ui.screens.game.elements.GameOverlayScrollArea
 import dev.oxide.launcher.ui.screens.game.elements.GameOverlayWorkingText
 import dev.oxide.launcher.ui.screens.game.elements.gameOverlayBoundsFor
-import dev.oxide.launcher.ui.screens.game.elements.gameOverlayListHeight
-import dev.oxide.launcher.ui.screens.game.elements.gameOverlayListOverflows
 import dev.oxide.launcher.ui.screens.game.elements.multiplayerLogToggle
 import dev.oxide.launcher.ui.screens.game.elements.rememberGameOverlayBounds
 import dev.oxide.launcher.ui.theme.Oxide
@@ -104,7 +100,8 @@ sealed interface TerracottaLogOperation {
  * - 每一片内容都在**被夹住的**滚动区里。联机日志动辄上千行，玩家列表也可能是
  *   二十个人，原来那些 `verticalScroll` 挂在一个 `weight(1f, fill = false)`
  *   上，高度上限只来自"面板高度 − 标题"，而面板高度又是按显示区算的——
- *   这就是那个 P0 崩溃的路子。现在先夹再滚，见 [gameOverlayListHeight]。
+ *   这就是那个 P0 崩溃的路子。现在每一块内容都先被 `contentMaxHeight` 夹住，
+ *   再在**自己这一块**里滚。
  * - `LoadingIndicator` 与 `LinearProgressIndicator` 换成了不发光的进度条：
  *   Material 的 `LoadingIndicator` 是一段永不停歇的动画，叠在一块正在跑的游戏上
  *   既吵又耗电，而且**不提供任何新信息**——这一层只知道"在等"，不知道等多久。
@@ -152,13 +149,14 @@ fun MultiplayerDialog(
                 )
                 GameOverlayHairline()
 
-                val contentModifier = Modifier
-                    .weight(1f, fill = false)
-                    .padding(
-                        start = bounds.padding,
-                        end = bounds.padding,
-                        top = bounds.rowGap,
-                    )
+                // 面板高度按内容摆、只被 panelMaxHeight 夹住，因此这里不用 weight：
+// 每一片内容自己按 contentMaxHeight 夹住，超出的在**自己这一块**里滚。
+// 面板那点总高 = contentMaxHeight + 标题栏 + 底栏，正好不超过上限。
+                val contentModifier = Modifier.padding(
+                    start = bounds.padding,
+                    end = bounds.padding,
+                    top = bounds.rowGap,
+                )
 
                 when (logOperation) {
                     is TerracottaLogOperation.None, TerracottaLogOperation.CollectingLog -> {
@@ -376,9 +374,12 @@ private fun WaitingUI(
             )
         }
 
-        //禁止交互时，提示用户正在加载中
+        //禁止交互时，提示用户正在加载中。
+        //原来是一枚盖在两张卡片正中的 Material LoadingIndicator：既看不见
+        //「正在做什么」，又一直停不下来。现在是槽加一句说明，卡片本身也变灰了。
         if (!isInteractive) {
             GameOverlayProgressBar(progress = null)
+            GameOverlayNote(text = GameOverlayWorkingText())
         }
     }
 
@@ -482,13 +483,18 @@ private fun OkRoomUI(
     backDesc: String,
     profilesLabel: String = stringResource(R.string.terracotta_player_list)
 ) {
-    // 半屏留给邀请码与两个动作，半屏留给玩家列表；
-    // 窗口窄的时候两块各占一半而不是挤成一条，最窄的那一侧仍然读得出
-    Column(
-        modifier = modifier.fillMaxWidth(),
+    // 整块内容是一列：邀请码、两个动作、玩家名单。
+    // 它是**一个 LazyColumn，而不是 Column + verticalScroll**——纵向滚动的容器把高度
+    // 上限交给子节点，里面再放一个 LazyColumn 就会拿到无穷大的 maxHeight 而崩。
+    // 高度先被 [GameOverlayBounds.contentMaxHeight] 夹住，再由这一个列表自己滚：
+    // 因此面板的高度与房间人数、与日志长度都无关。
+    LazyColumn(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(max = bounds.contentMaxHeight),
         verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
     ) {
-        GameOverlayScrollArea(maxHeight = bounds.contentMaxHeight) {
+        item(key = "code") {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = okText,
@@ -509,9 +515,7 @@ private fun OkRoomUI(
                 )
             }
         }
-
-        //按钮
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        item(key = "copy") {
             //复制按钮
             GameOverlayRowButton(
                 icon = painterResource(R.drawable.ic_copy_all_filled),
@@ -520,6 +524,8 @@ private fun OkRoomUI(
                 onClick = onCopy,
                 minHeight = bounds.buttonHeight
             )
+        }
+        item(key = "back") {
             //退出按钮
             GameOverlayRowButton(
                 icon = painterResource(R.drawable.ic_arrow_back),
@@ -529,36 +535,27 @@ private fun OkRoomUI(
                 minHeight = bounds.buttonHeight
             )
         }
-
-        //玩家列表
-        ProfileListPanel(
-            bounds = bounds,
-            title = profilesLabel,
-            profiles = profiles
-        )
+        item(key = "profilesHeader") {
+            ProfileListHeader(title = profilesLabel, count = profiles.size)
+        }
+        if (profiles.isEmpty()) {
+            item(key = "profilesEmpty") {
+                GameOverlayNote(text = stringResource(R.string.oxide_ingame_mp_no_players))
+            }
+        } else {
+            items(items = profiles, key = { it.toString() }) { profile ->
+                TerracottaProfileLayout(
+                    modifier = Modifier.fillMaxWidth(),
+                    profile = profile
+                )
+            }
+        }
     }
 }
 
-/**
- * 通用房间玩家列表
- *
- * 列表高度由 [gameOverlayListHeight] 算出：人少时按行数铺开，人多时被内容区
- * 上限夹住并在**这一块自己**里滚。因此这块面板的高度不随房间人数变化。
- */
+/** 玩家名单的标题行：名单名 + 真实人数 */
 @Composable
-private fun ProfileListPanel(
-    bounds: GameOverlayBounds,
-    title: String,
-    profiles: List<TerracottaProfile>,
-) {
-    val rowHeight = remember(bounds) { bounds.buttonHeight + 4.dp }
-    val overflows = remember(profiles.size, bounds) {
-        gameOverlayListOverflows(profiles.size, bounds.contentMaxHeight, rowHeight)
-    }
-    val listHeight = remember(profiles.size, bounds) {
-        gameOverlayListHeight(profiles.size, bounds.contentMaxHeight, rowHeight)
-    }
-
+private fun ProfileListHeader(title: String, count: Int) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -572,7 +569,7 @@ private fun ProfileListPanel(
             )
             // 人数是真实读数，写出来而不是靠"列表有多长"去猜
             Text(
-                text = profiles.size.toString(),
+                text = count.toString(),
                 color = Oxide.FgFaint,
                 fontSize = Oxide.Type.MicroLabel.fontSize,
                 lineHeight = Oxide.Type.MicroLabel.lineHeight,
@@ -580,45 +577,11 @@ private fun ProfileListPanel(
             )
         }
         GameOverlayHairline()
-
-        if (profiles.isEmpty()) {
-            GameOverlayNote(text = stringResource(R.string.oxide_ingame_mp_no_players))
-        } else if (overflows) {
-            // 装不下：高度先被夹住，再在这一块自己里滚
-            val scrollState = rememberLazyListState()
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = listHeight),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                state = scrollState,
-            ) {
-                items(items = profiles, key = { it.toString() }) { profile ->
-                    TerracottaProfileLayout(
-                        modifier = Modifier.fillMaxWidth(),
-                        bounds = bounds,
-                        profile = profile
-                    )
-                }
-            }
-        } else {
-            // 装得下：一两个人时不必挂一个懒列表，直接全部铺开
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                profiles.forEach { profile ->
-                    TerracottaProfileLayout(
-                        modifier = Modifier.fillMaxWidth(),
-                        bounds = bounds,
-                        profile = profile
-                    )
-                }
-            }
-        }
     }
 }
 
 @Composable
 private fun TerracottaProfileLayout(
-    bounds: GameOverlayBounds,
     profile: TerracottaProfile,
     modifier: Modifier = Modifier
 ) {

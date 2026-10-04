@@ -97,13 +97,11 @@ fun GamepadModePromptDialog(
 
                 GameOverlayScrollArea(
                     maxHeight = bounds.contentMaxHeight,
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .padding(
-                            start = bounds.padding,
-                            end = bounds.padding,
-                            top = bounds.rowGap,
-                        ),
+                    modifier = Modifier.padding(
+                        start = bounds.padding,
+                        end = bounds.padding,
+                        top = bounds.rowGap,
+                    ),
                 ) {
                     Text(
                         text = stringResource(R.string.gamepad_mode_prompt_description),

@@ -303,14 +303,15 @@ internal class OxideModsViewModel(
 
     /** 把选中的若干行切到目标状态；只动状态与目标相反的那些 */
     fun setEnabledForSelection(enabled: Boolean) {
-        toggle(selectedRows(state.rows).map { it.key }, enabled)
+        toggle(oxideModsRowsToToggle(selectedRows(state.rows), enabled).map { it.key }, enabled)
     }
 
     private fun toggle(keys: List<String>, enabled: Boolean) {
         if (keys.isEmpty()) return
         viewModelScope.launch {
             state = state.copy(busy = true)
-            // 目标状态与当前状态相反的那些才真的需要搬文件
+            // 再按磁盘上此刻的真实状态筛一次：行快照是上一次扫描的结果，
+            // 期间文件可能已经被外部改过
             val attempted = withContext(Dispatchers.IO) {
                 val wanted = keys.toSet()
                 remoteMods
@@ -320,6 +321,7 @@ internal class OxideModsViewModel(
             val changed = withContext(Dispatchers.IO) {
                 attempted.count { it.localMod.setEnabled(enabled) }
             }
+            val outcome = oxideModBulkOutcome(attempted = attempted.size, changed = changed)
             scan(showLoading = false)
             state = state.copy(
                 busy = false,
@@ -328,8 +330,8 @@ internal class OxideModsViewModel(
                     OxideModsOutcome.NothingToDo
                 } else {
                     OxideModsOutcome.Toggled(
-                        changed = changed,
-                        skipped = (attempted.size - changed).coerceAtLeast(0),
+                        changed = outcome.changed,
+                        skipped = outcome.skipped,
                     )
                 },
             )
@@ -367,10 +369,17 @@ internal class OxideModsViewModel(
         if (targets.isEmpty()) return
         state = state.copy(pendingDelete = emptyList(), busy = true)
         viewModelScope.launch {
+            // 目标由行里的**实时路径**给出，并且只在 mods 目录之内才动手；
+            // 删除本身走 `LocalMod.delete()`，它删的是 [LocalMod.file] 此刻指向的
+            // 那个文件。两条对齐不上（文件在确认层打开期间被外部改过）的那些
+            // 会被算成失败，而不是悄悄报成功。
             val deleted = withContext(Dispatchers.IO) {
-                val wanted = targets.mapTo(mutableSetOf()) { it.key }
-                remoteMods.filter { it.localMod.file.modBaseName() in wanted }
-                    .count { it.localMod.delete() }
+                val wanted = oxideModsDeletePaths(
+                    targets.filter { isInsideModsDir(it.path) }
+                ).toSet()
+                remoteMods.count { mod ->
+                    mod.localMod.file.absolutePath in wanted && mod.localMod.delete()
+                }
             }
             scan(showLoading = false)
             state = state.copy(
@@ -385,6 +394,13 @@ internal class OxideModsViewModel(
             selected = selected.filter { it in alive }
         }
     }
+
+    /** 一次删除只允许落在 mods 目录内部 */
+    private fun isInsideModsDir(path: String): Boolean = runCatching {
+        val dir = modsDir.canonicalFile
+        val target = File(path).canonicalFile
+        target.parentFile == dir
+    }.getOrDefault(false)
 
     // ---- 更新 ---------------------------------------------------------------
 
@@ -510,16 +526,19 @@ internal class OxideModsViewModel(
                 printLog = false,
             )
             val installed = resolveInstalledProjects()
-            platformVersion.platformDependencies()
-                .mapNotNull { dep ->
-                    val id = dep.projectId ?: return@mapNotNull null
-                    OxideModDependency(
-                        projectId = id,
-                        title = depTitle(id, platform),
-                        type = dep.type.name.lowercase(),
-                        installed = id in installed,
-                    )
-                }
+            // 先把 (项目 id, 依赖类型) 收齐，再逐条去查标题：
+            // 查标题是一次网络往返，放在 mapNotNull 的 lambda 里会让那个
+            // lambda 变成一个挂起闭包，而它本身不是内联的
+            val declared = platformVersion.platformDependencies()
+                .mapNotNull { dep -> dep.projectId?.let { id -> id to dep.type } }
+            declared.map { (id, type) ->
+                OxideModDependency(
+                    projectId = id,
+                    title = depTitle(id, platform),
+                    type = type.name.lowercase(),
+                    installed = id in installed,
+                )
+            }
         }.onFailure { e ->
             if (e is CancellationException) throw e
             Logger.warning(TAG, "Failed to read dependencies of ${row.key}.", e)
@@ -540,17 +559,25 @@ internal class OxideModsViewModel(
      * 不该在每次打开时都重新扫一遍盘、打一轮网络。
      */
     private suspend fun resolveInstalledProjects(): Set<String> {
-        installedProjects.takeIf { it.isNotEmpty() }?.let { return it }
-        return runCatching {
+        installedProjects.takeIf { it.isNotEmpty() }?.let { cached ->
+            return cached
+        }
+        val resolved = runCatching {
             val fingerprints = scanModFingerprints(modsDir)
-            Platform.entries.flatMap { platform ->
-                matchInstalledMods(fingerprints = fingerprints, platform = platform)
-                    .byProject.keys
-            }.toSet()
+            val ids = mutableSetOf<String>()
+            for (candidate in Platform.entries) {
+                ids += matchInstalledMods(
+                    fingerprints = fingerprints,
+                    platform = candidate,
+                ).byProject.keys
+            }
+            ids
         }.onFailure { e ->
             if (e is CancellationException) throw e
             Logger.warning(TAG, "Failed to match installed mods.", e)
-        }.getOrDefault(emptySet()).also { installedProjects = it }
+        }.getOrDefault(emptySet())
+        installedProjects = resolved
+        return resolved
     }
 
     // ---- 选择与筛选 ---------------------------------------------------------
@@ -610,6 +637,7 @@ internal class OxideModsViewModel(
             path = file.absolutePath,
             fileName = file.name,
             displayName = project?.title?.takeIf { it.isNotBlank() } ?: local.name,
+            localName = local.name,
             modId = local.id,
             modVersion = local.version,
             authors = local.authors,

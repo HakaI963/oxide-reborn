@@ -24,7 +24,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -100,11 +99,12 @@ fun OxideModsSurface(
     /** 非空时这一块包在子窗口外壳里，并带一个真的关闭按钮 */
     onClose: (() -> Unit)? = null,
 ) {
-    val viewModel: OxideModsViewModel = viewModel(
+    // 先在组合期取到活动那一份 EventViewModel：viewModel 的初始化块不是 @Composable，
+// 不能在里面调 stringResource / remember 之类的东西
+val eventViewModel = rememberOxideEventViewModel()
+val viewModel: OxideModsViewModel = viewModel(
         key = "OxideMods-${version.getVersionName()}"
-    ) { OxideModsViewModel(version = version, eventViewModel = rememberOxideEventViewModel()) }
-
-    val content: @Composable () -> Unit = { OxideModsContent(metrics = metrics, viewModel = viewModel) }
+    ) { OxideModsViewModel(version = version, eventViewModel = eventViewModel) }
 
     if (onClose != null) {
         OxideSubWindow(
@@ -115,10 +115,14 @@ fun OxideModsSurface(
             scrollable = false,
             modifier = modifier,
         ) {
-            content()
+            OxideModsContent(metrics = metrics, viewModel = viewModel)
         }
     } else {
-        Box(modifier = modifier.fillMaxSize()) { content() }
+        // 实例设置那一页自己已经有顶栏与返回，再套一层子窗口就是两层关闭；
+        // 这一路因此只给内容，外壳由调用方提供
+        Box(modifier = modifier.fillMaxSize()) {
+            OxideModsContent(metrics = metrics, viewModel = viewModel)
+        }
     }
 }
 
@@ -746,7 +750,13 @@ private fun OxideModDetailsDialog(
                 row.projectSlug?.takeIf { it.isNotBlank() }?.let { slug ->
                     OxideSectionLabel(text = stringResource(R.string.oxide_mod_section_project))
                     Text(
-                        text = "$row.platform · $slug",
+                        text = buildList {
+                            row.platform?.let { add(it) }
+                            add(slug)
+                            row.remoteDatePublished?.takeIf { it.isNotBlank() }?.let {
+                                add(stringResource(R.string.oxide_mod_published, it))
+                            }
+                        }.joinToString(" · "),
                         color = Oxide.FgFaint,
                         fontSize = Oxide.Type.MicroLabel.fontSize,
                         lineHeight = Oxide.Type.MicroLabel.lineHeight,
@@ -841,6 +851,7 @@ private fun OxideSecNoticeRow(
 private fun OxideModMetaField.labelOf(labels: OxideModMetaLabels): String = when (this) {
     OxideModMetaField.FileName -> labels.fileName
     OxideModMetaField.FileSize -> labels.fileSize
+    OxideModMetaField.LocalName -> labels.localName
     OxideModMetaField.Version -> labels.version
     OxideModMetaField.Author -> labels.author
     OxideModMetaField.Loader -> labels.loader
@@ -852,6 +863,7 @@ private fun OxideModMetaField.labelOf(labels: OxideModMetaLabels): String = when
 private fun oxideModsMetaLabels() = OxideModMetaLabels(
     fileName = stringResource(R.string.oxide_mod_field_file_name),
     fileSize = stringResource(R.string.oxide_mod_field_file_size),
+    localName = stringResource(R.string.oxide_mod_field_local_name),
     version = stringResource(R.string.oxide_mod_field_version),
     author = stringResource(R.string.oxide_mod_field_author),
     loader = stringResource(R.string.oxide_mod_field_loader),

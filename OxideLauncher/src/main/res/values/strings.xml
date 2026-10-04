@@ -2129,6 +2129,7 @@
     <!-- Oxide: mods metadata field names -->
     <string name="oxide_mod_field_file_name">File name</string>
     <string name="oxide_mod_field_file_size">File size</string>
+    <string name="oxide_mod_field_local_name">Name in the file</string>
     <string name="oxide_mod_field_version">Mod version</string>
     <string name="oxide_mod_field_author">Authors</string>
     <string name="oxide_mod_field_loader">Loader</string>
@@ -2143,6 +2144,7 @@
 
     <!-- Oxide: mods details -->
     <string name="oxide_mod_section_project">Project</string>
+    <string name="oxide_mod_published">published %1$s</string>
     <string name="oxide_mod_section_dependencies">Dependencies</string>
     <string name="oxide_mod_dependencies_failed">Dependencies could not be read from the platform.</string>
     <string name="oxide_mod_dependencies_none">This mod declares no dependencies on the platform.</string>
@@ -2427,7 +2429,7 @@
     <string name="oxide_exp_invalid_instance">This instance is no longer available</string>
 
     <!-- Oxide: modifying an installed instance (replaces ModifyVersionScreen) -->
-    <string name="oxide_mod_title">Modify instance</string>
+    <string name="oxide_modify_title">Modify instance</string>
     <string name="oxide_mod_subtitle">%1$s · VERSION · LOADER · INSTANCE</string>
     <string name="oxide_mod_step_version">Version</string>
     <string name="oxide_mod_step_loader">Loader</string>

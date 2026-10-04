@@ -57,6 +57,8 @@ data class OxideModRow(
     val path: String,
     val fileName: String,
     val displayName: String,
+    /** jar 自己元数据里的名字；与 [displayName] 不同时值得单独给一行 */
+    val localName: String? = null,
     val modId: String = "",
     val modVersion: String? = null,
     val authors: List<String> = emptyList(),
@@ -108,6 +110,7 @@ data class OxideModRow(
 enum class OxideModMetaField {
     FileName,
     FileSize,
+    LocalName,
     Version,
     Author,
     Loader,
@@ -129,6 +132,7 @@ data class OxideModMeta(
 data class OxideModMetaLabels(
     val fileName: String,
     val fileSize: String,
+    val localName: String,
     val version: String,
     val author: String,
     val loader: String,
@@ -155,6 +159,12 @@ fun oxideModsMeta(row: OxideModRow, labels: OxideModMetaLabels): List<OxideModMe
     if (row.sizeBytes > 0L) {
         add(OxideModMeta(OxideModMetaField.FileSize, formatModBytes(row.sizeBytes)))
     }
+
+    // 平台上的项目标题与 jar 自己声明的名字不一致时，两个都值得看：
+    // 标题是"平台上它叫什么"，[OxideModRow.localName] 是"这个 jar 说自己是什么"
+    row.localName
+        ?.takeIf { it.isNotBlank() && it != row.displayName }
+        ?.let { add(OxideModMeta(OxideModMetaField.LocalName, it)) }
 
     row.modVersion?.takeIf { it.isNotBlank() }?.let {
         add(OxideModMeta(OxideModMetaField.Version, it))
@@ -409,5 +419,8 @@ data class OxideModBulkOutcome(
  * 两者不等就说明有文件没被搬动（多半是权限或文件被占用），
  * 界面上必须如实说出来，而不是一律报"完成"。
  */
-fun oxideModBulkOutcome(attempted: List<OxideModRow>, changed: Int): OxideModBulkOutcome =
-    OxideModBulkOutcome(changed = changed.coerceAtLeast(0), skipped = (attempted.size - changed).coerceAtLeast(0))
+fun oxideModBulkOutcome(attempted: Int, changed: Int): OxideModBulkOutcome =
+    OxideModBulkOutcome(
+        changed = changed.coerceAtLeast(0),
+        skipped = (attempted - changed).coerceAtLeast(0),
+    )

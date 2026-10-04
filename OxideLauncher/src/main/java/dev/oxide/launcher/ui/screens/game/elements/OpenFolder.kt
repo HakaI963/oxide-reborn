@@ -41,7 +41,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -236,25 +235,62 @@ fun OpenFolderLayer(
 
                     GameOverlayHairline()
 
-                    //文件浏览区域：高度先被夹住，长目录在**这一块自己**里滚
-                    GameOverlayScrollArea(
-                        maxHeight = bounds.contentMaxHeight,
-                        modifier = Modifier.padding(
-                            start = bounds.padding,
-                            end = bounds.padding,
-                            top = bounds.rowGap,
-                        ),
-                    ) {
-                        if (files.isEmpty()) {
-                            GameOverlayNote(text = stringResource(R.string.oxide_ingame_folder_empty))
-                        } else {
+                    //文件浏览区域。
+                    //这里刻意**不**再套一层 verticalScroll：纵向滚动的容器会把高度
+                    //上限交给子节点，LazyColumn 拿到无穷大的 maxHeight 就直接崩。
+                    //正确的做法就是这一种——高度先由 [gameOverlayListHeight] 夹住，
+                    //LazyColumn 自己滚。因此一个有几十万个条目的目录也不会把面板撑高。
+                    if (files.isEmpty()) {
+                        GameOverlayNote(
+                            text = stringResource(R.string.oxide_ingame_folder_empty),
+                            modifier = Modifier.padding(
+                                start = bounds.padding,
+                                end = bounds.padding,
+                                top = bounds.rowGap,
+                            ),
+                        )
+                    } else {
+                        val rowHeight = remember(bounds) { bounds.buttonHeight + 6.dp }
+                        val listHeight = remember(files.size, bounds) {
+                            gameOverlayListHeight(files.size, bounds.contentMaxHeight, rowHeight)
+                        }
+                        val overflows = remember(files.size, bounds) {
+                            gameOverlayListOverflows(files.size, bounds.contentMaxHeight, rowHeight)
+                        }
+                        if (overflows) {
                             val scrollState = rememberLazyListState()
                             LazyColumn(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = listHeight)
+                                    .padding(
+                                        start = bounds.padding,
+                                        end = bounds.padding,
+                                        top = bounds.rowGap,
+                                    ),
                                 verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
                                 state = scrollState,
                             ) {
                                 items(files, key = { it.absolutePath }) { file ->
+                                    FileItem(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        bounds = bounds,
+                                        file = file,
+                                        onDelete = { deleteFile = file },
+                                    )
+                                }
+                            }
+                        } else {
+                            // 装得下：目录里就那么几个文件，不必挂一个懒列表
+                            Column(
+                                modifier = Modifier.padding(
+                                    start = bounds.padding,
+                                    end = bounds.padding,
+                                    top = bounds.rowGap,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(bounds.rowGap),
+                            ) {
+                                files.forEach { file ->
                                     FileItem(
                                         modifier = Modifier.fillMaxWidth(),
                                         bounds = bounds,

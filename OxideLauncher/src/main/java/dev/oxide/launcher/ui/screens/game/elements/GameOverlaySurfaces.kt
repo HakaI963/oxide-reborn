@@ -105,7 +105,7 @@ import kotlin.math.roundToInt
 // ---------------------------------------------------------------------------
 
 /** 顺着 [ContextWrapper] 链找到承载游戏的那个 Activity */
-private tailrec fun Context.findHostActivity(): Activity? = when (this) {
+private fun Context.findHostActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findHostActivity()
     else -> null
