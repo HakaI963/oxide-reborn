@@ -331,7 +331,7 @@ class CurseForgeData(
 
     override fun platformDescription(): String = summary
 
-    override fun platformAuthor(): String = authors[0].name
+    override fun platformAuthor(): String? = authors.firstOrNull()?.name
 
     override fun platformAuthors(): List<String> = authors.map { it.name }
 

@@ -342,13 +342,19 @@ suspend fun getVersionById(
         Platform.CURSEFORGE -> {
             val pid = projectId
                 ?: error("CurseForge resolves a file id against its project, so projectId is required.")
-            mirroredPlatformSearcher(
+            val version = mirroredPlatformSearcher(
                 searchers = mirroredCurseForgeSource(),
                 printLog = printLog
             ) { searcher ->
                 // CurseForgeSearcher 返回的是外层包装，真正实现 PlatformVersion 的是 data
                 searcher.getVersion(projectID = pid, fileID = versionId).data
             }
+            // CurseForgeVersion 的 thisPrimaryFile 是 lateinit，而 platformGameVersion() /
+            // platformLoaders() / platformDependencies() 都直接解引用它。取回来之后不初始化的话，
+            // 任何读这些字段的调用方都会撞 UninitializedPropertyAccessException。
+            // 由这里统一初始化，而不是指望每个调用方记得调 initFile。
+            version.initFile(pid)
+            version
         }
     }
 }

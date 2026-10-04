@@ -48,7 +48,9 @@ class CurseForgeProject(
 
     override fun platformSummary(): String = data.summary
 
-    override fun platformAuthor(): String = data.authors[0].name
+    // 接口约定返回可空：作者列表为空的项目在 CurseForge 上是存在的，
+    // 取 [0] 会直接抛 IndexOutOfBounds，而不是像约定那样返回 null
+    override fun platformAuthor(): String? = data.authors.firstOrNull()?.name
 
     override fun platformAuthors(): List<String> = data.platformAuthors()
 

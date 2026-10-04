@@ -47,10 +47,45 @@ private val FABRIC_REGEX = """fabric-loader-[\w.-]+-$VERSION_PATTERN""".toRegex(
 // "quilt-loader-0.23.1-1.20.4"         -> 1.20.4
 // "quilt-loader-0.27.1-beta.1-1.21.3"  -> 1.21.3
 private val QUILT_REGEX = """quilt-loader-[\w.-]+-$VERSION_PATTERN""".toRegex()
+// "1.20.1-neoforge-47.1.3"             -> 1.20.1
+// "1.21.1-neoforge-21.1.172"           -> 1.21.1
+private val NEOFORGE_REGEX = """$VERSION_PATTERN-neoforge""".toRegex()
+// "1.20.1-cleanroom-0.4.2"             -> 1.20.1
+private val CLEANROOM_REGEX = """$VERSION_PATTERN-cleanroom""".toRegex()
+// "1.20.1-legacyfabric-0.4.7"          -> 1.20.1
+private val LEGACYFABRIC_REGEX = """$VERSION_PATTERN-legacyfabric""".toRegex()
+// "1.12.2-LiteLoader"                  -> 1.12.2
+private val LITELOADER_REGEX = """$VERSION_PATTERN-LiteLoader""".toRegex()
+// "1.12.2-modloader"                   -> 1.12.2
+private val MODLOADER_REGEX = """$VERSION_PATTERN-modloader""".toRegex()
 
+/**
+ * 从实例 id 里回退解析 Minecraft 版本
+ *
+ * 这一组必须覆盖 [detectModLoaders] 能识别的那一套加载器：那份函数是从
+ * libraries 里读的，认得 NeoForge / Cleanroom / LegacyFabric / LiteLoader；
+ * 而这里是从 id 字符串里认的。两者一旦不一致，实例 JSON 里没有
+ * `net.minecraft:client` 时就会把 "1.20.1-neoforge-47.1.3" 整个当成 Minecraft 版本，
+ * 于是任何兼容性比较都是拿加载器串去比——那正是"Fabric 实例装进了 NeoForge 模组"能被放行的原因。
+ */
 private val LOADER_DETECTORS = listOf<(String) -> String?>(
     { id ->
         OPTIFINE_ID_REGEX.find(id)?.groupValues?.get(1)
+    },
+    { id ->
+        NEOFORGE_REGEX.find(id)?.groupValues?.get(1)
+    },
+    { id ->
+        CLEANROOM_REGEX.find(id)?.groupValues?.get(1)
+    },
+    { id ->
+        LEGACYFABRIC_REGEX.find(id)?.groupValues?.get(1)
+    },
+    { id ->
+        LITELOADER_REGEX.find(id)?.groupValues?.get(1)
+    },
+    { id ->
+        MODLOADER_REGEX.find(id)?.groupValues?.get(1)
     },
     { id ->
         FORGE_REGEX.find(id)?.groupValues?.get(1)
