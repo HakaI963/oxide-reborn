@@ -264,8 +264,15 @@ internal fun oxideAboutProductVersion(
 ): String = displayVersion
 
 /** 控制布局那一块在面板里占多大宽度：[availableWidth] 够宽才并排 */
+/**
+ * 列表与信息面板能否并排
+ *
+ * 阈值取 2.4 倍而不是更小的倍数：并排时列表那一列是固定宽度的，信息面板拿剩下的。
+ * 1.8 倍在 640dp 的小横屏上会判成"可以并排"，那时两列列表就占掉 570dp，
+ * 信息面板只剩几十 dp，等于把它挤没了。2.4 倍下同样的宽度会纵向堆叠。
+ */
 internal fun oxideControlLayoutsSideBySide(availableWidth: Dp, cardMinWidth: Dp): Boolean =
-    availableWidth >= cardMinWidth * 1.8f
+    availableWidth >= cardMinWidth * 2.4f
 
 // ---------------------------------------------------------------------------
 // 关于面板

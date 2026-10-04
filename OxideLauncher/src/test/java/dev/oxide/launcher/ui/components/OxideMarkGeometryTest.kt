@@ -68,8 +68,8 @@ class OxideMarkGeometryTest {
         for (i in 0 until angles.size - 1) {
             assertEquals(45.0, angles[i + 1] - angles[i], 0.001)
         }
-        // 首尾相接：最后一个顶点回到第一个要绕整整一圈
-        assertEquals(315.0, angles[0] + 360.0 - angles[angles.size - 1], 0.001)
+        // 首尾相接：从最后一个顶点绕回第一个，也正好是一步
+        assertEquals(45.0, angles[0] + 360.0 - angles[angles.size - 1], 0.001)
     }
 
     @Test
@@ -82,8 +82,13 @@ class OxideMarkGeometryTest {
     fun holeIsSmallerThanHalfTheOuterRing() {
         assertTrue(OxideMarkInnerRadiusRatio < 0.5f)
         assertTrue(OxideMarkInnerRadiusRatio > 0.3f)
-        // 环本身必须真的有厚度，不能退化成一条线
-        assertTrue(OxideMarkOuterRadiusRatio - OxideMarkInnerRadiusRatio > 0.2f)
+        // 环本身必须真的有厚度，不能退化成一条线。
+        // 厚度是两个**半径**之差，不是两个比例常量之差：内半径是外半径的
+        // OxideMarkInnerRadiusRatio 倍，所以壁厚 = 外半径 x (1 - 该比例)
+        val outerRadius = 1f * OxideMarkOuterRadiusRatio
+        val wall = outerRadius * (1f - OxideMarkInnerRadiusRatio)
+        assertEquals(0.275f, wall, 0.0001f)
+        assertTrue("the ring must have real thickness, was $wall", wall > 0.2f)
     }
 
     @Test
@@ -99,10 +104,12 @@ class OxideMarkGeometryTest {
         val top = pts.sortedBy { it.y }
         assertEquals(top[0].y, top[1].y, 0.001f)
         assertTrue("top edge must be the highest points", top[0].y < 0f)
-        // 同理四边都要是平的：x 最小/最大处各有两个顶点 y 相同
+        // 左右两边是**竖直**的边：最左/最右各有两个顶点，它们共享的是 x 而不是 y
         val byX = pts.sortedBy { it.x }
-        assertEquals(byX[0].y, byX[1].y, 0.001f)
-        assertEquals(byX[byX.size - 1].y, byX[byX.size - 2].y, 0.001f)
+        assertEquals(byX[0].x, byX[1].x, 0.001f)
+        assertEquals(byX[byX.size - 1].x, byX[byX.size - 2].x, 0.001f)
+        // 而且这两个顶点确实不同，否则说明退化成了一个点
+        assertTrue(abs(byX[0].y - byX[1].y) > 1f)
     }
 
     @Test
@@ -123,7 +130,8 @@ class OxideMarkGeometryTest {
         val pts = octagonVertices(0f, 0f, 50f)
         // 上下镜像
         pts.forEachIndexed { i, p ->
-            val m = pts[(pts.size - i) % pts.size]
+            // y -> -y 把角度 theta 变成 -theta，顶点下标上就是 i -> 7-i
+            val m = pts[(pts.size - 1 - i + pts.size) % pts.size]
             assertEquals(p.x, m.x, 0.001f)
             assertEquals(abs(p.y), abs(m.y), 0.001f)
         }

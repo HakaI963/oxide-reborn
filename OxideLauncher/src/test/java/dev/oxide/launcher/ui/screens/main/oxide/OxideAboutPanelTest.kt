@@ -267,7 +267,7 @@ class OxideAboutPanelTest {
         // 协议全文由 res/raw 里的文件供文：文件被删掉而代码还指着它，
         // 编译能过、运行才崩。aapt 的名字到 id 的映射在单测里拿不到，
         // 所以这里钉的是"面板依赖的那几份协议文件确实在 res/raw 里"。
-        val assets = locate("res/raw").listFiles().orEmpty().map { it.name }.toSet()
+        val assets = locateRes("raw").listFiles().orEmpty().map { it.name }.toSet()
         assertFalse("res/raw should not be empty", assets.isEmpty())
         for (asset in listOf("fcl_license.txt", "hmcl_license.txt", "lgpl_3_license.txt")) {
             assertTrue("$asset is referenced by the about panel but missing", asset in assets)
@@ -277,6 +277,20 @@ class OxideAboutPanelTest {
     private fun readPanelSource(): String = locate(
         "ui/screens/main/oxide/OxideAboutPanels.kt"
     ).readText()
+
+    /** 资源目录不在 java 包路径下，因此单独一个定位器 */
+    private fun locateRes(relativePath: String): java.io.File {
+        var dir: java.io.File? = java.io.File("").absoluteFile
+        repeat(8) {
+            val candidate = dir?.resolve("src/main/res/$relativePath")
+            if (candidate != null && candidate.isDirectory) return candidate
+            dir = dir?.parentFile
+        }
+        error(
+            "could not locate src/main/res/$relativePath from " +
+                java.io.File("").absolutePath
+        )
+    }
 
     private fun locate(relativePath: String): java.io.File {
         var dir: java.io.File? = java.io.File("").absoluteFile
