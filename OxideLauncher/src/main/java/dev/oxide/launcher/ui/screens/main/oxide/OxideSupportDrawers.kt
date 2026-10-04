@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
@@ -65,6 +66,7 @@ import dev.oxide.launcher.game.account.isMicrosoftAccount
 import dev.oxide.launcher.game.control.ControlManager
 import dev.oxide.launcher.game.multirt.Runtime
 import dev.oxide.launcher.game.multirt.RuntimesManager
+import dev.oxide.launcher.game.path.GamePath
 import dev.oxide.launcher.game.path.GamePathManager
 import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.renderer.Renderers
@@ -90,7 +92,6 @@ import dev.oxide.launcher.ui.components.toColorOrNull
 import dev.oxide.launcher.ui.components.toHex
 import dev.oxide.launcher.ui.control.HotbarRule
 import dev.oxide.launcher.ui.control.gamepad.JoystickMode
-import dev.oxide.launcher.ui.screens.content.navigateToLogView
 import dev.oxide.launcher.ui.theme.ColorThemeType
 import dev.oxide.launcher.utils.customResolutionRange
 import dev.oxide.launcher.utils.device.checkVulkanSupport
@@ -272,16 +273,25 @@ internal fun OxideToggleRow(
     )
 }
 
-/** 选择器行：右侧是启动器统一下拉控件，左侧是标签与说明 */
+/**
+ * 选择器行：右侧是启动器统一下拉控件，左侧是标签与说明
+ *
+ * [selected] 允许为 null：那是"存着的那个值当前拿不到"——比如设置里记着某个渲染器插件，
+ * 而那个插件此刻没装上。这种情况下下拉控件显示 [placeholder]（也就是存着的那个标识），
+ * 而不是把列表第一项假装成当前值。谎报当前值比承认拿不到更糟：用户会以为自己在用
+ * 那个渲染器。列表仍然是全部可选项，选一个就把设置改过来。
+ */
 @Composable
 internal fun <E> OxideEnumRow(
     label: String,
     hint: String? = null,
     metrics: OxideMetrics,
     entries: List<E>,
-    selected: E,
+    selected: E?,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    /** [selected] 为 null 时显示的那一行文字，通常就是存着的那个标识 */
+    placeholder: String = "",
     nameOf: @Composable (E) -> String,
     onSelect: (E) -> Unit,
 ) {
@@ -295,9 +305,11 @@ internal fun <E> OxideEnumRow(
             OxideDropdown(
                 label = "",
                 options = names,
-                selectedIndex = entries.indexOf(selected).coerceAtLeast(0),
+                // -1 表示"当前值不在列表里"，面板退回 placeholder 而不是默认第一项
+                selectedIndex = selected?.let { entries.indexOf(it) } ?: -1,
                 onSelect = { index -> entries.getOrNull(index)?.let(onSelect) },
                 enabled = enabled,
+                placeholder = placeholder,
                 modifier = Modifier.width(metrics.selectorWidth),
             )
         },
@@ -611,7 +623,12 @@ private fun oxideAccountTypeName(account: Account): String = when {
 // Java / 运行时
 // ---------------------------------------------------------------------------
 
-/** Java 抽屉：启动器使用的 Java 环境、内存与自动选择策略 */
+/**
+ * Java 抽屉：启动器使用的 Java 环境、内存与自动选择策略
+ *
+ * 「选哪个运行时」与「要不要自动选」互斥：开了自动选，那一行选择器就**不出现**，
+ * 而不是变灰留在原地——变灰的行在横屏里既占位置又读不懂为什么点不动。
+ */
 @Composable
 fun OxideJavaDrawer(
     metrics: OxideMetrics,
@@ -619,7 +636,6 @@ fun OxideJavaDrawer(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val bridge = rememberOxideLauncherBridge()
 
     // 运行时列表来自磁盘，必须放到协程里读，不能在组合阶段做文件操作
     var runtimes by remember { mutableStateOf(emptyList<Runtime>()) }
@@ -650,12 +666,15 @@ fun OxideJavaDrawer(
             title = stringResource(R.string.oxide_set_section_runtime),
             metrics = metrics,
             trailing = {
-                OxideIconAction(
-                    glyph = "↻",
-                    description = stringResource(R.string.generic_refresh),
-                    size = metrics.stepperButton,
-                    enabled = !scanning,
-                ) { refreshToken++ }
+                // 正在扫盘时"重新扫描"没有意义，因此那一枚整个不出现，
+                // 而不是留一枚按了也不会重扫的灰按钮
+                if (!scanning) {
+                    OxideIconAction(
+                        glyph = "↻",
+                        description = stringResource(R.string.generic_refresh),
+                        size = metrics.stepperButton,
+                    ) { refreshToken++ }
+                }
             },
         ) {
             if (scanning) {
@@ -665,14 +684,30 @@ fun OxideJavaDrawer(
                     title = stringResource(R.string.oxide_set_no_runtime),
                     detail = stringResource(R.string.oxide_set_no_runtime_detail),
                 )
+            } else if (!oxideJavaRuntimePickerVisible(
+                    scanning = scanning,
+                    hasRuntime = compatible.isNotEmpty(),
+                    autoPick = autoPick,
+                )
+            ) {
+                // 自动选开着：这一行只报告"现在是哪一个"，因此是只读行而不是选择器
+                OxideSettingRow(
+                    label = stringResource(R.string.oxide_set_runtime_auto_chosen),
+                    hint = stringResource(
+                        R.string.oxide_set_runtime_auto_chosen_detail,
+                        compatible.first().name,
+                    ),
+                )
             } else {
                 OxideEnumRow(
                     label = stringResource(R.string.settings_game_java_runtime_title),
                     hint = stringResource(R.string.settings_game_java_runtime_summary),
                     metrics = metrics,
                     entries = compatible,
-                    selected = compatible.firstOrNull { it.name == selectedRuntime } ?: compatible.first(),
-                    enabled = !autoPick,
+                    // 设置里记着的那个运行时此刻不在列表里，就把那个标识原样显示出来，
+                    // 而不是把列表第一项假装成当前值
+                    selected = compatible.firstOrNull { it.name == selectedRuntime },
+                    placeholder = selectedRuntime,
                     nameOf = { it.name },
                     onSelect = { AllSettings.javaRuntime.save(it.name) },
                 )
@@ -773,27 +808,48 @@ fun OxideRendererDrawer(
                     if (renderers.isEmpty()) {
                         OxideEmptyState(title = stringResource(R.string.oxide_set_no_renderer))
                     } else {
+                        val storedRenderer = AllSettings.renderer.state
+                        val rendererResolved = oxideStoredSelectionResolves(
+                            storedId = storedRenderer,
+                            candidates = renderers.map { it.getUniqueIdentifier() },
+                        )
                         OxideEnumRow(
                             label = stringResource(R.string.settings_renderer_global_renderer_title),
-                            hint = stringResource(R.string.settings_renderer_global_renderer_summary),
+                            hint = if (rendererResolved) {
+                                stringResource(R.string.settings_renderer_global_renderer_summary)
+                            } else {
+                                // 设置里记着的渲染器插件此刻没装上：说出那个标识，
+                                // 好过把列表第一项显示成"当前正在用的"
+                                stringResource(R.string.oxide_set_renderer_missing, storedRenderer)
+                            },
                             metrics = metrics,
                             entries = renderers,
                             selected = renderers.firstOrNull {
-                                it.getUniqueIdentifier() == AllSettings.renderer.state
-                            } ?: renderers.first(),
+                                it.getUniqueIdentifier() == storedRenderer
+                            },
+                            placeholder = storedRenderer,
                             nameOf = { it.getRendererName() },
                             onSelect = { AllSettings.renderer.save(it.getUniqueIdentifier()) },
                         )
                     }
 
                     if (drivers.isNotEmpty()) {
+                        val storedDriver = AllSettings.vulkanDriver.state
+                        val driverResolved = oxideStoredSelectionResolves(
+                            storedId = storedDriver,
+                            candidates = drivers.map { it.id },
+                        )
                         OxideEnumRow(
                             label = stringResource(R.string.settings_renderer_global_vulkan_driver_title),
-                            hint = stringResource(R.string.oxide_set_section_driver),
+                            hint = if (driverResolved) {
+                                stringResource(R.string.oxide_set_section_driver)
+                            } else {
+                                stringResource(R.string.oxide_set_driver_missing, storedDriver)
+                            },
                             metrics = metrics,
                             entries = drivers,
-                            selected = drivers.firstOrNull { it.id == AllSettings.vulkanDriver.state }
-                                ?: drivers.first(),
+                            selected = drivers.firstOrNull { it.id == storedDriver },
+                            placeholder = storedDriver,
                             nameOf = { it.name },
                             onSelect = { AllSettings.vulkanDriver.save(it.id) },
                         )
@@ -915,20 +971,23 @@ fun OxideRendererDrawer(
                         onCheckedChange = { AllSettings.sustainedPerformance.save(it) },
                     )
 
-                    OxideToggleRow(
-                        label = stringResource(R.string.settings_renderer_vulkan_driver_system_title),
-                        hint = stringResource(R.string.settings_renderer_vulkan_driver_system_summary),
-                        checked = AllSettings.zinkPreferSystemDriver.state,
-                        enabled = vulkanSupported,
-                        onCheckedChange = { AllSettings.zinkPreferSystemDriver.save(it) },
-                    )
+                    // Zink 走的是 Vulkan：设备根本没有 Vulkan 支持时这两项都不存在，
+                    // 留着它们只会得到两枚点得动、存下来了、却永远不会被读到的开关
+                    if (oxideZinkSettingVisible(vulkanSupported)) {
+                        OxideToggleRow(
+                            label = stringResource(R.string.settings_renderer_vulkan_driver_system_title),
+                            hint = stringResource(R.string.settings_renderer_vulkan_driver_system_summary),
+                            checked = AllSettings.zinkPreferSystemDriver.state,
+                            onCheckedChange = { AllSettings.zinkPreferSystemDriver.save(it) },
+                        )
 
-                    OxideToggleRow(
-                        label = stringResource(R.string.settings_renderer_vsync_in_zink_title),
-                        hint = stringResource(R.string.settings_renderer_vsync_in_zink_summary),
-                        checked = AllSettings.vsyncInZink.state,
-                        onCheckedChange = { AllSettings.vsyncInZink.save(it) },
-                    )
+                        OxideToggleRow(
+                            label = stringResource(R.string.settings_renderer_vsync_in_zink_title),
+                            hint = stringResource(R.string.settings_renderer_vsync_in_zink_summary),
+                            checked = AllSettings.vsyncInZink.state,
+                            onCheckedChange = { AllSettings.vsyncInZink.save(it) },
+                        )
+                    }
 
                     OxideToggleRow(
                         label = stringResource(R.string.settings_renderer_shader_dump_title),
@@ -949,6 +1008,49 @@ private fun oxideGraphicsApiName(api: GraphicsApi): String = when (api) {
     else -> api.displayName
 }
 
+// ---------------------------------------------------------------------------
+// 行是否出现的判据（纯函数）
+//
+// 这两条都写成函数而不是把条件散在组合里，因为它们各自的失败模式是一样的：
+// 判据错了就会出现"点得动、但没有任何效果"的控件，或者反过来把还能用的
+// 控件藏起来。纯函数因此可以逐个宽度、逐个状态被钉死。
+// ---------------------------------------------------------------------------
+
+/**
+ * 「选哪个 Java 运行时」那一行是否出现
+ *
+ * 三种情况各自不出现：还在扫盘、没有可用运行时、以及开着自动选。
+ * 第三种是最容易被写成"变灰"的那种——自动选开着的时候那个选择器确实改不了，
+ * 但它不是"暂时不能用"，而是"这个选择此刻不归你管"，因此整行让位给一行只读文案。
+ */
+internal fun oxideJavaRuntimePickerVisible(
+    scanning: Boolean,
+    hasRuntime: Boolean,
+    autoPick: Boolean,
+): Boolean = !scanning && hasRuntime && !autoPick
+
+/**
+ * 那些只对 Zink 有意义的设置（系统 Vulkan 驱动、Zink 内的垂直同步）是否出现
+ *
+ * Zink 走的是 Vulkan。设备根本没有 Vulkan 支持时这两项不存在，
+ * 留着它们只会是两枚点得动、存下来了、却永远不会被读到的开关。
+ *
+ * 纯函数，因此可以逐个设备状态钉死。
+ */
+internal fun oxideZinkSettingVisible(vulkanSupported: Boolean): Boolean =
+    vulkanSupported
+
+/**
+ * 设置里记着的那个值当前能不能在列表里找到
+ *
+ * 找不到时选择器必须显示那个标识本身，而不是列表第一项：
+ * 谎报当前值比承认"拿不到"更糟。
+ */
+internal fun oxideStoredSelectionResolves(
+    storedId: String,
+    candidates: List<String>,
+): Boolean = candidates.any { it == storedId }
+
 /** 吸附范围用启动器自己的字符串，而不是枚举名 FullScreen / Local */
 @Composable
 internal fun oxideSnapModeName(mode: SnapMode): String = when (mode) {
@@ -960,7 +1062,12 @@ internal fun oxideSnapModeName(mode: SnapMode): String = when (mode) {
 // 存储
 // ---------------------------------------------------------------------------
 
-/** 存储抽屉：游戏目录、日志保留与打包分享、目录入口与占用统计 */
+/**
+ * 存储抽屉：游戏目录（含改名与删除）、日志保留与打包分享、目录入口与占用统计
+ *
+ * 四个"打开某个目录"的动作全部走 [rememberOxideLauncherBridge] 的 `openFileManager`，
+ * 它落到宿主的 `openFiles`，因此打开的是 Oxide 自己的文件页而不是旧的 Material 文件浏览器。
+ */
 @Composable
 fun OxideStorageDrawer(
     metrics: OxideMetrics,
@@ -972,6 +1079,12 @@ fun OxideStorageDrawer(
 
     val paths by GamePathManager.gamePathData.collectAsStateWithLifecycle()
     val currentGamePath by GamePathManager.currentPath.collectAsStateWithLifecycle()
+
+    // 改名与删除都直接落到 GamePathManager 上：它就是旧界面那三个按钮调用的同一条链路，
+    // 所以这里不需要新的持久化，也不需要担心两份列表各说各话
+    var renameTarget by remember { mutableStateOf<GamePath?>(null) }
+    var deleteTarget by remember { mutableStateOf<GamePath?>(null) }
+    var renameDraft by remember(renameTarget) { mutableStateOf(renameTarget?.title.orEmpty()) }
 
     var sizes by remember { mutableStateOf(OxideStorageSizes()) }
     var measuring by remember { mutableStateOf(true) }
@@ -1001,16 +1114,98 @@ fun OxideStorageDrawer(
             if (paths.isEmpty()) {
                 OxideEmptyState(title = stringResource(R.string.oxide_set_no_game_path))
             } else {
-                OxideEnumRow(
-                    label = stringResource(R.string.oxide_set_game_folder),
-                    hint = currentGamePath,
-                    metrics = metrics,
-                    entries = paths,
-                    selected = paths.firstOrNull { it.id == AllSettings.currentGamePathId.state }
-                        ?: paths.first(),
-                    nameOf = { it.title.ifBlank { it.id } },
-                    onSelect = { runCatching { GamePathManager.saveCurrentPath(it.id) } },
-                )
+                renameTarget?.let { target ->
+                    OxideSecInput(
+                        metrics = metrics,
+                        value = renameDraft,
+                        onValueChange = { renameDraft = it },
+                        placeholder = stringResource(R.string.oxide_st_path_rename_hint),
+                        label = stringResource(R.string.generic_rename),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(metrics.rowGap)) {
+                        OxideButton(
+                            text = stringResource(R.string.generic_cancel),
+                            onClick = { renameTarget = null },
+                            modifier = Modifier.weight(1f),
+                        )
+                        OxideButton(
+                            text = stringResource(R.string.generic_confirm),
+                            onClick = {
+                                val title = renameDraft.trim()
+                                renameTarget = null
+                                if (title.isNotEmpty()) {
+                                    // GamePathManager 在这一项已经被删掉时会抛，
+                                    // 抛了就在原地说一句，而不是让抽屉静悄悄地没反应
+                                    runCatching { GamePathManager.modifyTitle(target, title) }
+                                        .onFailure { bridge.showToast(R.string.oxide_st_path_save_failed) }
+                                }
+                            },
+                            enabled = renameDraft.isNotBlank(),
+                            tone = OxideButtonTone.Primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                deleteTarget?.let { target ->
+                    OxideSecConfirmBar(
+                        metrics = metrics,
+                        text = stringResource(R.string.versions_manage_game_path_delete_message),
+                        confirmText = stringResource(R.string.generic_delete),
+                        dismissText = stringResource(R.string.generic_cancel),
+                        onConfirm = {
+                            deleteTarget = null
+                            runCatching { GamePathManager.removePath(target) }
+                                .onFailure { bridge.showToast(R.string.oxide_st_path_save_failed) }
+                        },
+                        onDismiss = { deleteTarget = null },
+                    )
+                }
+
+                // 游戏目录一个一项，而不是一个下拉：改名与删除都挂在具体某一项上，
+                // 下拉里放不下这两件事。当前用哪一档由"Current"这行字说明，不只靠底色
+                paths.forEachIndexed { index, path ->
+                    if (index > 0) OxideSecDivider()
+                    val selected = path.id == AllSettings.currentGamePathId.state
+                    OxideSettingRow(
+                        label = oxideStoragePathLabel(path),
+                        hint = path.path,
+                        value = if (selected) stringResource(R.string.oxide_st_path_current) else null,
+                        onClick = {
+                            // 与旧界面的列表逐条一致：默认那一个走 saveDefaultPath，
+                            // 其余要先确认存储权限，saveCurrentPath 自己会抛
+                            runCatching {
+                                if (path.id == GamePathManager.DEFAULT_ID) {
+                                    GamePathManager.saveDefaultPath()
+                                } else {
+                                    GamePathManager.saveCurrentPath(path.id)
+                                }
+                            }.onFailure { bridge.showToast(R.string.oxide_st_path_save_failed) }
+                        },
+                        trailing = if (oxideStoragePathEditable(path.id)) {
+                            {
+                                OxideIconAction(
+                                    glyph = "✎",
+                                    description = stringResource(R.string.generic_rename),
+                                    size = metrics.stepperButton,
+                                ) {
+                                    renameDraft = path.title
+                                    renameTarget = path
+                                }
+                                Spacer(Modifier.width(metrics.rowGap))
+                                OxideIconAction(
+                                    glyph = "✕",
+                                    description = stringResource(R.string.generic_delete),
+                                    size = metrics.stepperButton,
+                                ) {
+                                    deleteTarget = path
+                                }
+                            }
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
         }
 
@@ -1031,6 +1226,17 @@ fun OxideStorageDrawer(
                 label = stringResource(R.string.settings_launcher_log_share_title),
                 hint = stringResource(R.string.settings_launcher_log_share_summary),
                 onClick = { shareLauncherLogs(context) },
+            )
+            // 日志阅读器是 Oxide 自己的那一块表面，不是旧的 LogView 路由：
+            // bridge.openLogView 走的是 host.openLog，也就是 OxideDestination.Log
+            OxideActionRow(
+                label = stringResource(R.string.oxide_set_action_open_logs),
+                hint = stringResource(R.string.oxide_set_action_open_logs_detail),
+                onClick = {
+                    // 日志页压在外壳之上，因此先把抽屉收掉，返回键才落在它上面
+                    onDismiss()
+                    bridge.openLogView("")
+                },
             )
             OxideActionRow(
                 label = stringResource(R.string.oxide_set_action_open_logs_folder),
@@ -1066,20 +1272,52 @@ fun OxideStorageDrawer(
                 hint = PathManager.DIR_FILES_EXTERNAL.absolutePath,
                 onClick = { bridge.openFileManager(PathManager.DIR_FILES_EXTERNAL.absolutePath) },
             )
-            OxideActionRow(
-                label = stringResource(R.string.oxide_set_action_open_game_folder),
-                hint = currentGamePath,
-                onClick = { bridge.openFileManager(currentGamePath) },
-            )
+            // 游戏目录可能一个都还没有：那一行此时不出现，而不是留一句点下去
+            // 会打开空路径的行——文件页拿到空根目录只会报"打不开"，那是误导
+            if (oxideStorageFolderActionVisible(currentGamePath)) {
+                OxideActionRow(
+                    label = stringResource(R.string.oxide_set_action_open_game_folder),
+                    hint = currentGamePath,
+                    onClick = { bridge.openFileManager(currentGamePath) },
+                )
+            }
         }
     }
 }
+
+/**
+ * 「打开游戏目录」这一行是否出现
+ *
+ * 存储动作必须真的能打开一个存在的目录：游戏目录还没配出来时那一档是空路径，
+ * 点下去只会让文件页报"打不开"。因此这一行的可见性是路径本身的纯函数。
+ */
+internal fun oxideStorageFolderActionVisible(gamePath: String): Boolean = gamePath.isNotBlank()
 
 private data class OxideStorageSizes(
     val data: Long = 0L,
     val game: Long = 0L,
     val cache: Long = 0L,
 )
+
+/**
+ * 默认那一个游戏目录能不能改名、能不能删
+ *
+ * 不能：它就是启动器自己的 `.minecraft` 位置，不是数据库里的一项，
+ * 删掉它等于让"默认游戏目录"这一档从此不存在。旧界面的那一项也是这么禁用的。
+ *
+ * 纯函数（[GamePathManager.DEFAULT_ID] 是常量，编译期就内联了，
+ * 因此这个判断既不会碰数据库也不会碰磁盘），所以可以直接单测。
+ */
+internal fun oxideStoragePathEditable(id: String): Boolean = id != GamePathManager.DEFAULT_ID
+
+/** 某一档游戏目录在列表里显示的名字：默认那档用固定文案，其余用用户起的名字 */
+@Composable
+private fun oxideStoragePathLabel(path: GamePath): String =
+    if (path.id == GamePathManager.DEFAULT_ID) {
+        stringResource(R.string.versions_manage_game_path_default)
+    } else {
+        path.title.ifBlank { path.id }
+    }
 
 /** 目录体积统计，必须在 IO 线程调用 */
 private fun directorySize(dir: File): Long = runCatching {
@@ -1360,10 +1598,18 @@ private fun OxideAdvancedActions(
         title = stringResource(R.string.oxide_set_section_diagnostics),
         metrics = metrics,
     ) {
+        // 崩溃日志存不存在是一次磁盘 stat，不能放在组合阶段里读：
+        // 它会在每次重组时都去碰一次文件系统。改成协程里读一次，之后只读这个布尔值。
+        var crashLogExists by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            crashLogExists = withContext(Dispatchers.IO) {
+                runCatching { PathManager.FILE_CRASH_REPORT.exists() }.getOrDefault(false)
+            }
+        }
         OxideActionRow(
             label = stringResource(R.string.oxide_set_action_view_crash_log),
             hint = PathManager.FILE_CRASH_REPORT.absolutePath,
-            enabled = PathManager.FILE_CRASH_REPORT.exists(),
+            enabled = crashLogExists,
             onClick = {
                 onDismiss()
                 bridge.openLogView(PathManager.FILE_CRASH_REPORT.absolutePath)

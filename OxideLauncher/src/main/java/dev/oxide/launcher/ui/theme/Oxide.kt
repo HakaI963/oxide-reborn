@@ -240,7 +240,8 @@ data class OxideChrome(
             bgToggleOn = Color(0xFFDDDDDD),
             drawerBg = Color(0xFAFFFFFF),
             drawerScrim = Color(0x8C000000),
-            panelBackdrop = Color(0xF2050505),
+            // 浅色主题不能拿近黑的底幕，否则每个二级面板都会在浅色界面里压成一块黑
+            panelBackdrop = Color(0xF2F2F2F2),
             popoverBg = Color(0xFFFFFFFF),
             toastBg = Color(0xFFFFFFFF),
             fg = Color(0xFF141414),
