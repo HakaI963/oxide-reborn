@@ -18,6 +18,8 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import dev.oxide.launcher.utils.file.checkFilenameValidity
+import dev.oxide.launcher.utils.file.InvalidFilenameException
 import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
@@ -125,7 +127,6 @@ import dev.oxide.launcher.ui.components.imePanAnchor
 import dev.oxide.launcher.ui.screens.content.download.DownloadModViewModel
 import dev.oxide.launcher.ui.screens.content.download.assets.elements.AssetsIcon
 import dev.oxide.launcher.ui.screens.content.download.assets.elements.initAll
-import dev.oxide.launcher.ui.screens.content.elements.isFilenameInvalid
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.ui.toAndroidString
 import dev.oxide.launcher.utils.file.formatFileSize
@@ -686,7 +687,9 @@ private class OxideDiscoverViewModel : ViewModel() {
     fun openSheet(item: DiscoverItem, pinnedVersion: PlatformVersion? = null) {
         if (!discoverUsesInstallSheet(item.classes)) return
         sheetJob?.cancel()
-        val target = pinnedVersion ?: VersionsManager.currentVersion.value?.getVersionName()
+        // target 是目标**游戏版本名**，与被查看的资源版本无关：
+        // pinnedVersion 是那个模组/整合包自己的 PlatformVersion，拿它当目标版本是错的
+        val target: String? = VersionsManager.currentVersion.value?.getVersionName()
         sheet = DiscoverSheet.Resolving(item)
         sheetJob = viewModelScope.launch {
             sheet = if (pinnedVersion != null) {
@@ -1362,7 +1365,32 @@ private fun installedVersionNames(): Set<String> =
 private fun checkInstanceName(value: String): AndroidStringText? = when {
     value.isBlank() -> androidText(R.string.oxide_dis_modpack_name_required)
     VersionsManager.isVersionExists(value, true) -> androidText(R.string.oxide_dis_modpack_name_exists)
-    else -> isFilenameInvalid(value).takeIf { it.isNotBlank() }?.let { androidText(it) }
+    else -> invalidFilenameText(value)
+}
+
+/**
+ * 文件名非法时的提示
+ *
+ * 这里没有复用 `isFilenameInvalid`：它带 @Composable，因为它内部用 stringResource
+ * 取文案。而本函数是从一个普通函数和一个挂起函数里调用的，不能要求组合环境。
+ *
+ * 改成只判断、只回 AndroidStringText（StringRes 形式），真正的文案留给渲染它的那一步去取，
+ * 于是判断重新变回纯函数。文案与参数和旧实现完全一致。
+ */
+private fun invalidFilenameText(value: String): AndroidStringText? = try {
+    checkFilenameValidity(value)
+    null
+} catch (e: InvalidFilenameException) {
+    when {
+        e.containsIllegalCharacters() ->
+            androidText(R.string.generic_input_invalid_character, e.illegalCharacters ?: "")
+
+        e.isInvalidLength -> androidText(R.string.file_invalid_length, e.invalidLength ?: 0, 255)
+        e.isLeadingOrTrailingSpace ->
+            androidText(R.string.file_invalid_leading_or_trailing_space)
+
+        else -> null
+    }
 }
 
 /**

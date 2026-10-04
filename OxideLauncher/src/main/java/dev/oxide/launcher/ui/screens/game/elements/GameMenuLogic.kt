@@ -220,7 +220,8 @@ fun gameMenuNumberIn(
     range: ClosedFloatingPointRange<Float>,
     integerOnly: Boolean,
 ): Float? {
-    val parsed = if (integerOnly) text.toIntOrNull()?.toFloat() else text.toFloatOrNull() ?: return null
+    val parsed = (if (integerOnly) text.toIntOrNull()?.toFloat() else text.toFloatOrNull())
+        ?: return null
     if (parsed.isNaN()) return null
     if (parsed < range.start) return null
     if (parsed > range.endInclusive) return null
@@ -233,7 +234,7 @@ fun gameMenuNumberError(
     range: ClosedFloatingPointRange<Float>,
     integerOnly: Boolean,
 ): GameMenuNumberError? {
-    val parsed = if (integerOnly) text.toIntOrNull()?.toFloat() else text.toFloatOrNull()
+    val parsed = (if (integerOnly) text.toIntOrNull()?.toFloat() else text.toFloatOrNull())
         ?: return GameMenuNumberError.NotANumber
     if (parsed.isNaN()) return GameMenuNumberError.NotANumber
     if (parsed < range.start) return GameMenuNumberError.TooSmall

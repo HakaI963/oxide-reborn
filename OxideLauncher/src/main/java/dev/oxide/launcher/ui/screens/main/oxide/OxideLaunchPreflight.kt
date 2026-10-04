@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import androidx.compose.foundation.layout.fillMaxSize
 import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -824,7 +825,8 @@ internal fun OxideLaunchPreflight(
 
 /** 按钮上写什么 */
 @Composable
-private fun preflightActionLabel(action: OxidePreflightAction, busy: Boolean): String = when (action) {
+// busy 只影响 SubmitPassword 那一条文案，其余分支与它无关，所以给默认值
+private fun preflightActionLabel(action: OxidePreflightAction, busy: Boolean = false): String = when (action) {
     OxidePreflightAction.Abort -> stringResource(R.string.generic_cancel)
     OxidePreflightAction.LaunchAnyway -> stringResource(R.string.generic_anyway)
     OxidePreflightAction.AuthorizeStorage -> stringResource(R.string.generic_authorization)

@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import dev.oxide.launcher.ui.theme.Oxide
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues

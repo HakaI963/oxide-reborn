@@ -18,6 +18,7 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -692,7 +693,7 @@ fun OxideControlLayoutsPanel(
                         onSelect = { data -> ControlManager.selectControl(data) },
                         onCopy = { data ->
                             scope.launch {
-                                copyControlLayout(data, bridge::showToast)
+                                copyControlLayout(data) { bridge.showToast(it) }
                             }
                         },
                         onDelete = { data -> pendingDelete = data },
@@ -742,7 +743,7 @@ fun OxideControlLayoutsPanel(
                         onSelect = { data -> ControlManager.selectControl(data) },
                         onCopy = { data ->
                             scope.launch {
-                                copyControlLayout(data, bridge::showToast)
+                                copyControlLayout(data) { bridge.showToast(it) }
                             }
                         },
                         onDelete = { data -> pendingDelete = data },
@@ -846,7 +847,7 @@ fun OxideControlLayoutsPanel(
                             name = name,
                             author = author,
                             versionName = versionName,
-                            onError = bridge::showToast,
+                            onError = { bridge.showToast(it) },
                         )
                     }
                 },
