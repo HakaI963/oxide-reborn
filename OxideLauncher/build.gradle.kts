@@ -261,6 +261,18 @@ android {
         warningsAsErrors = false
         checkDependencies = false
         checkTestSources = true
+        // MissingTranslation is switched off rather than baselined.
+        //
+        // The inherited strings have 18 translations from a pipeline that lives outside this
+        // repository, and the Oxide set is new and English-only, so every string anyone adds
+        // here produces exactly one lint error. Recording them one by one put 2400+ entries
+        // in the baseline and grew it past 1.8 MB - a list of every string that has ever been
+        // added, none of which anybody can act on from here. The absence of a translation is
+        // not a code defect.
+        //
+        // Nothing else is relaxed: the baseline still carries every other finding, so a
+        // genuinely new problem still fails CI, and the full report is still published.
+        disable += "MissingTranslation"
         sarifReport = true
         htmlReport = true
         xmlReport = true
