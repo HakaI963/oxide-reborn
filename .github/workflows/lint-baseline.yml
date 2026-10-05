@@ -1,11 +1,11 @@
 name: Lint baseline
 
 # Regenerates OxideLauncher/lint-baseline.xml, the record of lint findings that are knowingly
-// accepted rather than fixed blind. Run this deliberately after reviewing the new lint report.
-//
-// With `commit` it also pushes the regenerated file to the default branch. That has to happen
-// here rather than by hand: the baseline is over a megabyte, which is past what a file read
-// through the contents API will even decode, so there is no other way to get it into git.
+# accepted rather than fixed blind. Run this deliberately after reviewing the new lint report.
+#
+# With `commit` it also pushes the regenerated file to the default branch. That has to happen
+# here rather than by hand: the baseline is over a megabyte, which is past what a file read
+# through the contents API will even decode, so there is no other way to get it into git.
 
 on:
   workflow_dispatch:
