@@ -112,7 +112,8 @@ class OxideDiscoverDependencySourceTest {
 
     @Test
     fun theFileTheTargetGetsReallyHasNoDependencies() {
-        val plain = File("sodium-1.0.0.jar", gameVersions = listOf("1.20.4"))
+        // 目标带加载器时，文件必须也声明加载器——真实平台的模组文件总是声明的
+        val plain = File("sodium-1.0.0.jar", gameVersions = listOf("1.20.4"), loaders = listOf("Fabric"))
         val result = source(listOf(plain), target1204)
         assertFalse(result.noFiles)
         assertFalse(result.noFileForTarget)
@@ -251,7 +252,8 @@ class OxideDiscoverDependencySourceTest {
     fun aTargetWithoutAMinecraftVersionOnlyFiltersByLoader() {
         // 目标只知道加载器，不知道 Minecraft 版本：这时按加载器挑，而不是报"没有文件"
         val forge = File("forge-only.jar", listOf("1.16.5"), listOf("Forge"))
-        val result = source(listOf(forge), target121.copy(loaders = emptySet()))
+        // 目标**不知道** Minecraft 版本：这时只按加载器挑，而不是报"没有文件"
+        val result = source(listOf(forge), target121.copy(minecraftVersion = null, loaders = emptySet()))
         assertFalse(result.noFileForTarget)
         assertSame(forge, result.version)
     }

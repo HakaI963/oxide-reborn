@@ -396,8 +396,20 @@ class OxideDiscoverTargetTest {
             installedInstances = installed,
         )
         assertTrue(discoverFileFitsTarget(files[2], target) { it.facts() })
-        // 原版目标不挑加载器，于是原版文件也装得进
+        // 原版目标不挑加载器，于是原版文件装得进——前提是它支持目标那一档版本。
+        // 拿只支持 1.20.x 的文件去撞 26.3 的目标，装不进去才是对的。
         assertTrue(
+            discoverFileFitsTarget(
+                files[3],
+                discoverResolveTarget(
+                    null, null,
+                    DiscoverInstanceTarget(name = "vanilla-1.20.4", minecraftVersion = "1.20.4"),
+                    installed,
+                ),
+            ) { it.facts() }
+        )
+        assertFalse(
+            "a file that does not support the target version must not fit, loader or not",
             discoverFileFitsTarget(
                 files[3],
                 discoverResolveTarget(null, null, vanilla263, installed),

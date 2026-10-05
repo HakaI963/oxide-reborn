@@ -528,6 +528,10 @@ class ControlDelayDispatchTest {
         pipeline.startMacroRepeat(40L) {
             pipeline.dispatchPress(listOf(ClickEvent(ClickEvent.Type.Key, "W", delayMs = 10))) { emitted += it.key }
         }
+        // 两次 tick：一次让宏本身到期，一次让宏排出来的那次延迟派发到期。
+        // 刻意给重复动作带 10ms 延迟——正是它能证明"宏复用同一条管道"：
+        // 另起一条管道的话，重复动作根本不会排在这一条上。
+        clock.tick()
         clock.tick()
         assertEquals(listOf("W"), emitted)
         assertTrue(pipeline.isBusy)

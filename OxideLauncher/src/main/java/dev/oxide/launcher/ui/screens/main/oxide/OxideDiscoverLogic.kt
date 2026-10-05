@@ -1212,7 +1212,9 @@ internal fun discoverQueueRow(
         )
     }
     val open = previous ?: return null
-    if (open.resolved) return open
+    // 已经收尾的那一行不再被任何后续事件复活：返回 null 让提示条离场，
+    // 而不是把一个已收尾的行留在状态里继续挂着
+    if (open.resolved) return null
 
     return when (stage) {
         DiscoverQueueStage.Downloading -> open.copy(

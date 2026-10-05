@@ -88,13 +88,15 @@ class MicrosoftAuthChainTest {
     @Test
     fun everyEndpointSitsUnderTheConsumersTenant() {
         val code = codeOf(AUTHENTICATOR)
+        // 比的是**源码里那行文本**：`\$MICROSOFT_AUTH_URL` 在 Kotlin 里会被插值成
+        // 真实的域名，于是拿插值结果去匹配源码，永远匹配不上
         assertTrue(
             "device code endpoint",
-            code.contains("\"$MICROSOFT_AUTH_URL\$TENANT/oauth2/v2.0/devicecode\"")
+            code.contains("\"\$MICROSOFT_AUTH_URL\$TENANT/oauth2/v2.0/devicecode\"")
         )
         assertTrue(
             "device code polling endpoint",
-            code.contains("\"$MICROSOFT_AUTH_URL\$TENANT/oauth2/v2.0/token\"")
+            code.contains("\"\$MICROSOFT_AUTH_URL\$TENANT/oauth2/v2.0/token\"")
         )
     }
 
@@ -131,7 +133,7 @@ class MicrosoftAuthChainTest {
         assertTrue(
             "a v2.0 refresh token must be redeemed at the v2.0 endpoint, " +
                 "login.live.com/oauth20_token.srf belongs to the Live Connect token family",
-            refresh.contains("\"$MICROSOFT_AUTH_URL\$TENANT/oauth2/v2.0/token\"")
+            refresh.contains("\"\$MICROSOFT_AUTH_URL\$TENANT/oauth2/v2.0/token\"")
         )
         assertFalse(
             "the Live Connect token endpoint cannot refresh a v2.0 token; it answers invalid_grant " +
@@ -162,7 +164,7 @@ class MicrosoftAuthChainTest {
     fun theXboxLiveRpsTicketIsSubmittedBareFirstAndTheDottedFormIsTheFallback() {
         val xbl = blockOf(AUTHENTICATOR, "private suspend fun authenticateXBL(")
         val bare = xbl.indexOf("requestXblToken(accessToken)")
-        val dotted = xbl.indexOf("requestXblToken(\"d=\$accessToken\")")
+        val dotted = xbl.indexOf("requestXblToken(\"d=${'$'}accessToken\")")
         assertTrue("the bare RpsTicket must be tried first for a v2.0 token", bare >= 0)
         assertTrue("the d= prefix must remain as a fallback", dotted > bare)
     }

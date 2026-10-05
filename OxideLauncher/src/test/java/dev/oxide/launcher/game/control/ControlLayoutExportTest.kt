@@ -426,8 +426,20 @@ class ControlLayoutExportTest {
     /** 两份真实布局：随包分发的那份字段最全，内置兜底那份是最小可用形态 */
     private fun fixtures(): List<String> = listOf(assetText, fallbackText)
 
-    /** saveToFile 会先写 .tmp 再 rename，因此占位文件先建好也无所谓 */
-    private fun scratch(name: String): File = folder.newFile(name)
+    /**
+     * saveToFile 会先写 .tmp 再 rename，因此占位文件先建好也无所谓。
+     *
+     * 这些用例会遍历多份夹具，同一个名字会被要第二次；TemporaryFolder 的
+     * newFile 撞名直接抛 IOException，于是按次数加后缀。
+     */
+    private fun scratch(name: String): File {
+        var candidate = name
+        var attempt = 0
+        while (File(folder.root, candidate).exists()) {
+            candidate = "${name.substringBeforeLast('.')}-$attempt${name.substringAfterLast('.', "")}"
+        }
+        return folder.newFile(candidate)
+    }
 }
 
 private val RAW_STRING = Regex("\"\"\"[\\s\\S]*?\"\"\"")

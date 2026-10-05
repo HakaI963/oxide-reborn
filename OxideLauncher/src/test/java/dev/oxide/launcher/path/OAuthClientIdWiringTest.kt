@@ -238,7 +238,7 @@ class OAuthClientIdWiringTest {
         )
         assertTrue(
             "the opt-in that turns the warning into a failure must be documented in the task",
-            script.contains("-$REQUIRE_FLAG=true")
+            script.contains("-P$REQUIRE_FLAG=true")
         )
         assertTrue(
             "the opt-in must be read from a Gradle property so CI can pass it",
@@ -319,12 +319,26 @@ class OAuthClientIdWiringTest {
         // 这里读原文而不是 codeOf()：codeOf 会把 "client_id" 这个字符串字面量换成空引号，
         // 恰好抹掉断言要匹配的那半行
         val source = microsoftAuthenticator().readText()
-        val formFields = Regex("""append\("client_id",\s*BuildKeys\.$BUILD_KEYS_KEY\)""")
-        // 三处：申请 device code、轮询 token、刷新 token
+        // 三处：申请 device code、轮询 token、刷新 token。三处都不直接读 BuildKeys，
+        // 而是走同一个守卫——空 id 必须在发请求之前就变成一个说得清的异常
+        val formFields = Regex("""append\("client_id",\s*microsoftAuthClientId\(\)\)""")
         assertEquals(
-            "every client_id form field must come from BuildKeys",
+            "every client_id form field must go through the guard",
             3,
             formFields.findAll(source).count(),
+        )
+        // BuildKeys 只在守卫里被读；日志文案里也提到它，因此不能按出现次数数，
+        // 要断言它出现在哪一处
+        assertEquals(
+            "no request may read BuildKeys directly",
+            0,
+            Regex("""append\("client_id",\s*BuildKeys\.$BUILD_KEYS_KEY\)""").findAll(source).count(),
+        )
+        assertTrue(
+            "the guard must reject a blank id instead of sending it",
+            source.contains("fun microsoftAuthClientId()") &&
+                source.contains("microsoftAuthClientIdOrNull(BuildKeys.$BUILD_KEYS_KEY)") &&
+                source.contains("throw MicrosoftAuthNotConfiguredException()"),
         )
         // 反过来：不能有哪一处顺手传了个字面量进去
         assertEquals(
