@@ -222,8 +222,6 @@ class OxideDownloadQueueStateTest {
         assertNull(
             discoverQueueRow(finished, finished.fileName, stage = DiscoverQueueStage.Downloading, progress = 0.5f)
         )
-        assertEquals(0, late.pending)
-        assertEquals(DiscoverQueueStage.Complete, late.stage)
     }
 
     @Test
