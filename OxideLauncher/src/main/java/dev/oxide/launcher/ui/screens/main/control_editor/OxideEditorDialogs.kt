@@ -28,14 +28,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateBottomPadding
-import androidx.compose.foundation.layout.calculateLeftPadding
-import androidx.compose.foundation.layout.calculateRightPadding
-import androidx.compose.foundation.layout.calculateTopPadding
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -73,6 +66,7 @@ import dev.oxide.launcher.R
 import dev.oxide.launcher.ui.components.ProgressDialog
 import dev.oxide.launcher.ui.components.SimpleAlertDialog
 import dev.oxide.launcher.ui.components.SimpleEditDialog
+import dev.oxide.launcher.ui.components.rememberSafeScreenInsets
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_joystick.JoystickStyleListDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_layer.EditControlLayerDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_layer.EditSwitchLayersVisibilityDialog
@@ -110,7 +104,7 @@ import kotlin.math.roundToInt
  * 夹成 `Offset.Zero`，拖动的增量同样被夹成 0，球因此永远停在左上角也永远拖不动。
  * 尺寸改由调用方从它自己的 `BoxWithConstraintsScope` 传进来。
  *
- * 停靠区由 [editorBallSafeBounds] 算，并且扣掉 `WindowInsets.safeDrawing`——圆角、
+ * 停靠区由 [editorBallSafeBounds] 算，并且扣掉系统栏与显示切口的并集——圆角、
  * 刘海与系统栏都在里面，所以球既不会被拖到圆角底下，也不会停在系统栏上。
  *
  * @param position 已落位的位置，null 表示还没落位（走 [editorBallDefaultPosition]）
@@ -138,20 +132,19 @@ internal fun EditorBall(
     val openText = stringResource(R.string.oxide_ce_open_dock)
     val closeText = stringResource(R.string.oxide_ce_close_dock)
 
-    val safeDrawing = WindowInsets.safeDrawing
+    val safeInsets = rememberSafeScreenInsets()
     val ballPx = with(density) { ballSize.toPx() }
     val bounds = with(density) {
-        // asPaddingValues 给的是与方向无关的四条边，正是"球不能被拖进圆角/系统栏"
-        // 需要的语义；getLeft/getRight 要 LayoutDirection，在这里是多余的一层
-        val insetsPx = safeDrawing.asPaddingValues()
         editorBallSafeBounds(
             available = Size(containerWidth.toPx(), containerHeight.toPx()),
             ball = ballPx,
+            // 安全区取系统栏与显示切口的并集：两者任意一个非 0，球就该让开，
+            // 免得被压在圆角、刘海或系统栏底下点不到
             insets = EditorBallInsets(
-                left = insetsPx.calculateLeftPadding().toPx(),
-                top = insetsPx.calculateTopPadding().toPx(),
-                right = insetsPx.calculateRightPadding().toPx(),
-                bottom = insetsPx.calculateBottomPadding().toPx(),
+                left = safeInsets.left.toFloat(),
+                top = safeInsets.top.toFloat(),
+                right = safeInsets.right.toFloat(),
+                bottom = safeInsets.bottom.toFloat(),
             ),
         )
     }

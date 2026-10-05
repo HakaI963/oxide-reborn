@@ -19,23 +19,19 @@
 package dev.oxide.launcher.ui.screens.game.elements
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.absolutePadding
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateBottomPadding
-import androidx.compose.foundation.layout.calculateRightPadding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.ui.components.OxideLogo
 import dev.oxide.launcher.ui.components.OxideLogoGap
 import dev.oxide.launcher.ui.components.OxideLogoWordmark
+import dev.oxide.launcher.ui.components.rememberSafeScreenInsets
 import dev.oxide.launcher.ui.theme.Oxide
 
 /**
@@ -181,18 +177,19 @@ internal fun OxideGameBrand(
     val density = LocalDensity.current
     // 游戏是全屏的（VMActivity 用的是 windowFullscreen 主题），系统栏与刘海
     // 这两项通常都是 0；但它们一旦非 0——分屏、显示切口模式——标识就会被压在
-    // 系统栏或刘海底下。safeDrawing 与控制布局编辑器的停靠球读的是同一份，
-    // 因此这里不另开一个 inset 来源，也不退回硬编码的边距。
-    // 用 asPaddingValues 取边距而不是 getRight/getBottom：后者要吃 LayoutDirection，
-    // 而这层根本不需要方向信息（右下角永远是物理意义上的右下角）。
-    val safeDrawing = WindowInsets.safeDrawing.asPaddingValues()
-    val endInset = safeDrawing.calculateRightPadding()
-    val bottomInset = safeDrawing.calculateBottomPadding()
+    // 系统栏或刘海底下。边距从平台 View 读，而不是 Compose 的 WindowInsets：
+    // 这层要的是与方向无关的物理边距（右下角就是右下角），
+    // 而 WindowInsets 的左右取值在不同 Compose 版本里要 LayoutDirection 或另有扩展，
+    // 免得每次升级都要重新对一次 API。
+    val safeInsets = rememberSafeScreenInsets()
+    val endInset = with(density) { safeInsets.right.toDp() }
+    val bottomInset = with(density) { safeInsets.bottom.toDp() }
 
     Box(
         modifier = modifier
+            // absolutePadding 的参数名就是 left/right：这里要的正是物理边距
             .absolutePadding(
-                end = endInset + GameBrandMargin,
+                right = endInset + GameBrandMargin,
                 bottom = bottomInset + GameBrandMargin,
             )
             .alpha(GameBrandAlpha)
