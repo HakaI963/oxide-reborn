@@ -525,6 +525,14 @@ object AllSettings : SettingsRegistry() {
     val menuBallOpacity = intSetting("menuBallOpacity", 100, 20..100)
 
     /**
+     * 在游戏画面右下角显示 Oxide 品牌标识
+     *
+     * 与 [showMenuBall] 一类的游戏内浮层开关，但默认开着：用户要的就是"看得见"。
+     * 标识只画在角落里、不接收任何触摸，所以关掉它不会改变下面任何一颗控件的命中。
+     */
+    val showGameBrand = boolSetting("showGameBrand", true)
+
+    /**
      * 快捷栏判定箱计算规则
      */
     val hotbarRule = enumSetting("hotbarRule", HotbarRule.Auto)

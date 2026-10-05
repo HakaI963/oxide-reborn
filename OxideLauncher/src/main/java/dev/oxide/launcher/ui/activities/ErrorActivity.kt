@@ -25,20 +25,18 @@ import android.os.Parcelable
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import com.jakewharton.processphoenix.ProcessPhoenix
+import dev.oxide.launcher.BuildKeys
 import dev.oxide.launcher.R
 import dev.oxide.launcher.context.COPY_LABEL_LINK
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.ui.base.BaseAppCompatActivity
 import dev.oxide.launcher.ui.screens.main.ErrorScreen
 import dev.oxide.launcher.ui.screens.main.crashlogs.ShareLinkOperation
+import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.ui.theme.OxideTheme
-import dev.oxide.launcher.ui.theme.backgroundColor
-import dev.oxide.launcher.ui.theme.onBackgroundColor
 import dev.oxide.launcher.utils.copyText
 import dev.oxide.launcher.utils.file.shareFile
 import dev.oxide.launcher.utils.getParcelableSafely
@@ -108,18 +106,21 @@ class ErrorActivity : BaseAppCompatActivity() {
                     logFile = File(jvmCrash.logPath).also { file ->
                         //检查日志文件是否适合上传
                         viewModel.check(file)
-                    }
+                    },
+                    // JVM 带走的进程没有可序列化的异常
+                    throwable = null,
                 )
             }
             else -> {
                 val throwable = extras.getSerializableSafely(BUNDLE_THROWABLE, Throwable::class.java) ?: return runFinish()
-                val message = getString(R.string.crash_launcher_message)
-                val messageBody = throwableToString(throwable)
                 ErrorMessage(
+                    message = getString(R.string.crash_launcher_message),
                     message = message,
-                    messageBody = messageBody,
+                    // 完整堆栈逐字符保留：页面那边一行都不会截断
+                    messageBody = throwableToString(throwable),
                     crashType = CrashType.LAUNCHER_CRASH,
-                    logFile = PathManager.FILE_CRASH_REPORT
+                    logFile = PathManager.FILE_CRASH_REPORT,
+                    throwable = throwable,
                 )
             }
         }
@@ -144,11 +145,26 @@ class ErrorActivity : BaseAppCompatActivity() {
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = backgroundColor(),
-                    contentColor = onBackgroundColor()
+                    color = Oxide.Bg,
+                    contentColor = Oxide.Fg
                 ) {
                     ErrorScreen(
                         crashType = errorMessage.crashType,
+                        // 标题与类型标签都从资源表里原样取出来再传下去，因此这一页
+                        // 只负责排版，不再自己拼文案
+                        crashTitle = if (errorMessage.crashType == CrashType.LAUNCHER_CRASH) {
+                            getString(R.string.crash_launcher_title, BuildKeys.LAUNCHER_NAME)
+                        } else {
+                            BuildKeys.LAUNCHER_NAME
+                        },
+                        crashTypeLabel = getString(
+                            R.string.crash_type,
+                            getString(errorMessage.crashType.textRes),
+                        ),
+                        crashSummary = errorMessage.message,
+                        // 完整堆栈逐字符传下去，中间不做任何截断
+                        crashTrace = errorMessage.messageBody,
+                        crashThrowable = errorMessage.throwable,
                         shareLogs = logExists,
                         canUpload = viewModel.canUpload,
                         canRestart = canRestart,
@@ -167,16 +183,7 @@ class ErrorActivity : BaseAppCompatActivity() {
                         onOrientationChanged = {
                             this@ErrorActivity.requestedOrientation = it
                         },
-                    ) {
-                        Text(
-                            text = errorMessage.message,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = errorMessage.messageBody,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -186,7 +193,15 @@ class ErrorActivity : BaseAppCompatActivity() {
         val message: String,
         val messageBody: String,
         val crashType: CrashType,
-        val logFile: File
+        val logFile: File,
+        /**
+         * 启动器崩溃时那一个原始异常
+         *
+         * 崩溃页要单独挑出**根因**（异常链最深处的那个）来显示，因此需要原始的
+         * 异常对象，而不只是已经打印好的那一大段字符串。游戏崩溃是 JVM 进程被带
+         * 走的，没有可序列化的异常，这里是 null。
+         */
+        val throwable: Throwable?
     )
 }
 

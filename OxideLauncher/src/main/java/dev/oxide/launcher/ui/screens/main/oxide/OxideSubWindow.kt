@@ -74,11 +74,65 @@ internal val OxideSubWindowMinWidth = 300.dp
 /** 子窗口最大高度占可用高度的比例 */
 internal const val OxideSubWindowHeightFraction = 0.86f
 
+/**
+ * 内容管理器那一类面板用的一档，更接近整窗
+ *
+ * 账号浏览器与许可面板是"读几句话"的面板，默认的 0.82 / 0.86 正好；模组管理是
+ * "读一张列表"的面板，同一档就把它压成两条半行——批量条一出现，列表只剩下够看
+ * 两条模组的高度。因此这两个比例单独给出来，仍然是同一套推导（可用尺寸乘比例、
+ * 减去留白、夹进区间），不是第二套设计。
+ *
+ * 它们只在 [OxideSubWindow] 的 `widthFraction` / `heightFraction` 上生效；
+ * 不传这两个参数的调用方拿到的仍然是 [OxideSubWindowWidthFraction] /
+ * [OxideSubWindowHeightFraction]。
+ */
+internal const val OxideSubWindowWideWidthFraction = 0.94f
+internal const val OxideSubWindowWideHeightFraction = 0.96f
+
 /** 子窗口离窗口边缘的留白 */
 val OxideSubWindowMargin: Dp = 14.dp
 
 /** 子窗口标题栏与内容的内边距 */
 val OxideSubWindowContentPadding: Dp = 16.dp
+
+/** 子窗口标题栏的高度：上下各 8dp 留白，加上一枚 24dp 的 [OxideIconButton] */
+internal val OxideSubWindowTitleBarHeight: Dp = 24.dp + 8.dp * 2
+
+/**
+ * 面板最终能占多大
+ *
+ * 把组合里那三行算术搬成纯函数，因此"面板永远不超过窗口"与"高度上限永远是正数"
+ * 可以在普通 JVM 单测里钉住——后者就是 v1.5.0 那个滚动容器拿到无穷大 maxHeight 的
+ * P0 崩溃的边界。
+ *
+ * @param availableWidth 可用宽度，也就是外壳那层 `BoxWithConstraints` 的 `maxWidth`
+ * @param availableHeight 可用高度，同上
+ * @param maxPanelWidth 调用方给的宽度上限
+ * @param widthFraction 宽度占可用宽度的比例
+ * @param heightFraction 高度占可用高度的比例
+ */
+internal data class OxideSubWindowBounds(
+    val width: Dp,
+    val height: Dp,
+)
+
+/**
+ * 面板的宽与高上限
+ *
+ * 宽度：可用宽度按比例 → 夹进 [OxideSubWindowMinWidth] 与 [maxPanelWidth] 之间。
+ * 高度：可用高度按比例，减去两侧 [OxideSubWindowMargin]，并且至少是 1dp——
+ * 上限必须先夹住，再在面板内部滚，反过来就是那个 P0 崩溃。
+ */
+internal fun oxideSubWindowPanelBounds(
+    availableWidth: Dp,
+    availableHeight: Dp,
+    maxPanelWidth: Dp,
+    widthFraction: Float = OxideSubWindowWidthFraction,
+    heightFraction: Float = OxideSubWindowHeightFraction,
+): OxideSubWindowBounds = OxideSubWindowBounds(
+    width = (availableWidth * widthFraction).coerceIn(OxideSubWindowMinWidth, maxPanelWidth),
+    height = ((availableHeight * heightFraction) - OxideSubWindowMargin * 2).coerceAtLeast(1.dp),
+)
 
 /**
  * @param title 标题栏文字
@@ -86,6 +140,12 @@ val OxideSubWindowContentPadding: Dp = 16.dp
  * @param onBack 有上一层时才显示的返回箭头；为 null 时不显示
  * @param trailing 标题栏右侧的额外内容，例如计数或状态
  * @param maxPanelWidth 面板宽度上限；实际宽度取可用宽度按比例、再夹进区间、再夹进这个上限
+ * @param widthFraction 宽度占可用宽度的比例。默认 [OxideSubWindowWidthFraction]
+ * @param heightFraction 高度占可用高度的比例。默认 [OxideSubWindowHeightFraction]
+ * @param fillHeight 面板是否**占满**它的高度上限，而不是包住内容。
+ *   列表型内容（模组管理）需要 true：它内部靠 `weight(1f)` 把剩下的高度交给那一列，
+ *   面板包住内容时那个权重永远拿不到东西。与 `scrollable = true` 互斥——
+ *   纵向滚动容器不能被一个纵向的 `weight` 量尺寸，那正是这里要避免的嵌套。
  * @param scrollable 内容超出时是否在面板内部滚动
  */
 @Composable
@@ -96,6 +156,9 @@ fun OxideSubWindow(
     onBack: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     maxPanelWidth: Dp = 620.dp,
+    widthFraction: Float = OxideSubWindowWidthFraction,
+    heightFraction: Float = OxideSubWindowHeightFraction,
+    fillHeight: Boolean = false,
     scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -105,16 +168,19 @@ fun OxideSubWindow(
             .background(Oxide.PanelBackdrop),
         contentAlignment = Alignment.Center,
     ) {
-        // 宽度：可用宽度按比例 -> 夹进区间 -> 不超过调用方给的上面板宽度上限
-        val width = (maxWidth * OxideSubWindowWidthFraction)
-            .coerceIn(OxideSubWindowMinWidth, maxPanelWidth)
-        // 高度：可用高度按比例，减去两侧留白
-        val heightCap = (maxHeight * OxideSubWindowHeightFraction) - OxideSubWindowMargin * 2
+        val bounds = oxideSubWindowPanelBounds(
+            availableWidth = maxWidth,
+            availableHeight = maxHeight,
+            maxPanelWidth = maxPanelWidth,
+            widthFraction = widthFraction,
+            heightFraction = heightFraction,
+        )
 
         Column(
             modifier = Modifier
-                .widthIn(max = width)
-                .heightIn(max = heightCap.coerceAtLeast(1.dp))
+                .widthIn(max = bounds.width)
+                // fillHeight 时面板占满上限，内容那一列才有确定的高度可以分配
+                .then(if (fillHeight) Modifier.height(bounds.height) else Modifier.heightIn(max = bounds.height))
                 .clip(Oxide.RadiusDrawer)
                 .background(Oxide.BgElevated)
                 .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusDrawer),
@@ -137,6 +203,10 @@ fun OxideSubWindow(
                     .then(
                         if (scrollable) {
                             Modifier.verticalScroll(rememberScrollState())
+                        } else if (fillHeight) {
+                            // 面板占满上限时，内容必须自己把剩下的高度吃掉，
+                            // 否则里面那个 `weight(1f)` 量到的是 0
+                            Modifier.weight(1f)
                         } else {
                             Modifier
                         }

@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.oxide.layercontroller.data.ButtonPosition
 import dev.oxide.layercontroller.data.ButtonSize
+import dev.oxide.layercontroller.data.MacroRepeatHolder
 import dev.oxide.layercontroller.data.NormalData
 import dev.oxide.layercontroller.data.VisibilityType
 import dev.oxide.layercontroller.data.cloneNew
@@ -33,7 +34,7 @@ import dev.oxide.layercontroller.event.EventHandler
 /**
  * 可观察的NormalData包装类
  */
-class ObservableNormalData(data: NormalData) : ObservableWidget() {
+class ObservableNormalData(data: NormalData) : ObservableWidget(), MacroRepeatHolder {
     val text = ObservableTranslatableString(data.text)
     val uuid: String = data.uuid
     var position by mutableStateOf(data.position)
@@ -48,6 +49,11 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
     var isSwipple by mutableStateOf(data.isSwipple)
     var isPenetrable by mutableStateOf(data.isPenetrable)
     var isToggleable by mutableStateOf(data.isToggleable)
+
+    /**
+     * 按住时自动重复发送按键的间隔，0 表示关闭
+     */
+    override var macroIntervalMs by mutableStateOf(data.macroIntervalMs)
 
     override val behavior: InteractionBehavior
         get() = InteractionBehavior.from(
@@ -75,7 +81,12 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
                 isPressed = true
             }
         }
-        eventHandler.onKeyPressed(clickEvents, isPressed) { event ->
+        eventHandler.onKeyPressed(
+            clickEvents = clickEvents,
+            isPressed = isPressed,
+            owner = this,
+            macroIntervalMs = macroIntervalMs
+        ) { event ->
             eventHandler.onSwitchLayer(
                 clickEvent = event,
                 allLayers = allLayers,
@@ -118,7 +129,8 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
         if (isPressed) {
             //fix: 若本身未按下，不应该输出抬起事件
             isPressed = false
-            eventHandler?.onKeyPressed(clickEvents, isPressed)
+            // 抬起顺带把这一路控件仍在等的延迟派发与宏重复收掉
+            eventHandler?.onKeyPressed(clickEvents, isPressed, owner = this)
         }
     }
 
@@ -176,10 +188,12 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
     ) {
         if (behavior is InteractionBehavior.Toggle || !isPressed) return
         isPressed = false
-        eventHandler.onKeyPressed(clickEvents, isPressed)
+        // 抬起是宏重复与延迟派发的终点：事件处理器在这里收掉这一路控件仍在等的调用
+        eventHandler.onKeyPressed(clickEvents, isPressed, owner = this)
     }
 
     fun addEvent(event: ClickEvent) {
+        // 已有同一个绑定就不再加：加一个延迟不同的副本进去，编辑器改延迟时会改不动
         if (clickEvents.none { it.type == event.type && it.key == event.key }) {
             clickEvents = clickEvents + event
         }
@@ -187,6 +201,19 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
 
     fun removeEvent(event: ClickEvent) {
         removeEvent(event.type, event.key)
+    }
+
+    /**
+     * 就地替换一个点击事件（用于改延迟这类保持位置与类型的改动）
+     *
+     * [event] 按类型与按键值定位，因此改完延迟之后它仍然算"同一个绑定"，
+     * 后面 [addEvent] 的去重也不会把它当成一个新绑定丢掉。
+     */
+    fun replaceEvent(event: ClickEvent) {
+        val index = clickEvents.indexOfFirst { it.type == event.type && it.key == event.key }
+        if (index >= 0) {
+            clickEvents = clickEvents.toMutableList().apply { set(index, event) }
+        }
     }
 
     fun removeEvent(eventType: ClickEvent.Type, key: String) {
@@ -220,7 +247,8 @@ class ObservableNormalData(data: NormalData) : ObservableWidget() {
             _clickEvents = clickEvents.filterValidEvent(),
             isSwipple = isSwipple,
             isPenetrable = isPenetrable,
-            isToggleable = isToggleable
+            isToggleable = isToggleable,
+            macroIntervalMs = macroIntervalMs
         )
     }
 }

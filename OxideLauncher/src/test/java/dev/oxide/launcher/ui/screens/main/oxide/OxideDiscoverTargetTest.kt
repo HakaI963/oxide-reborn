@@ -321,4 +321,100 @@ class OxideDiscoverTargetTest {
         )
         assertEquals("fabric-1.20.4", pick(target.minecraftVersion, target.loaders)?.name)
     }
+
+    // ---- 一个字节都没选时，默认就是当前那个能玩的实例 --------------------------
+
+    /**
+     * 用户明确要求过的那条行为：装东西时默认落在**当前选中**的实例上
+     *
+     * 确认层在什么都不选时把 [discoverResolveTarget] 的三个入口全传成"没选"，
+     * 因此这一格钉的就是"默认目标 = 当前选中的可玩实例"这件事本身，
+     * 而不是某一条别的分支。改坏了它，安装就会掉到别的实例上去。
+     */
+    @Test
+    fun theSheetDefaultTargetIsTheCurrentlySelectedPlayableInstance() {
+        val target = discoverResolveTarget(
+            selectedInstance = null,
+            pickedVersionName = null,
+            playableInstance = fabric1204,
+            installedInstances = installed,
+        )
+        assertEquals("fabric-loader-0.16.9-1.20.4", target.instanceName)
+        assertEquals("1.20.4", target.minecraftVersion)
+        assertEquals(setOf("Fabric"), target.loaders)
+        assertTrue("仍然跟着选中实例", target.detected)
+        assertTrue(target.installed)
+        assertTrue(target.hasTarget)
+        // 确认层默认显示的那一份文件就是它自己那一档的
+        assertEquals("fabric-1.20.4", pick(target.minecraftVersion, target.loaders)?.name)
+    }
+
+    @Test
+    fun aPinNeverBecomesTheDefaultTarget() {
+        // 抽屉里点了某个具体文件，那只决定"装哪一个文件"，不决定"装进哪一档"
+        val target = discoverResolveTarget(
+            selectedInstance = null,
+            pickedVersionName = null,
+            playableInstance = forge1201,
+            installedInstances = installed,
+            pinnedProjectVersion = "1.20.4",
+        )
+        assertEquals("1.20.1-forge-48.1.0", target.instanceName)
+        assertEquals("1.20.1", target.minecraftVersion)
+        assertEquals(setOf("Forge"), target.loaders)
+    }
+
+    // ---- 钉住的那一个文件与目标对不上 ---------------------------------------
+
+    /**
+     * 抽屉里点的那个文件与目标这一档对不上时，它就不是"这一档的文件"
+     *
+     * 之前确认层直接拿它当答案，于是 `File:` 行显示一个根本不支持那一档的文件，
+     * 下面的 `Minecraft version:` 行报着目标——两行自相矛盾，确认之后装进去的还是错的。
+     * 现在这一格只能判"装得进 / 装不进"，装不进时确认层开着但不能确认。
+     */
+    @Test
+    fun aPinnedFileThatDoesNotFitTheTargetIsRejected() {
+        val target = discoverResolveTarget(
+            selectedInstance = null,
+            pickedVersionName = null,
+            playableInstance = fabric1204,
+            installedInstances = installed,
+        )
+        // 1.21.1 的文件，用户当前选中的是 1.20.4
+        assertFalse(discoverFileFitsTarget(files[0], target) { it.facts() })
+        // 加载器也对不上：目标要 Fabric，那个文件标注 Forge
+        assertFalse(discoverFileFitsTarget(files[1], target) { it.facts() })
+    }
+
+    @Test
+    fun aPinnedFileThatFitsTheTargetIsKept() {
+        val target = discoverResolveTarget(
+            selectedInstance = null,
+            pickedVersionName = null,
+            playableInstance = fabric1204,
+            installedInstances = installed,
+        )
+        assertTrue(discoverFileFitsTarget(files[2], target) { it.facts() })
+        // 原版目标不挑加载器，于是原版文件也装得进
+        assertTrue(
+            discoverFileFitsTarget(
+                files[3],
+                discoverResolveTarget(null, null, vanilla263, installed),
+            ) { it.facts() }
+        )
+    }
+
+    /** 目标还不知道 Minecraft 版本时，只按加载器判，而不是报"装不进" */
+    @Test
+    fun aPinnedFileIsJudgedOnlyByLoaderWhenTheTargetVersionIsUnknown() {
+        val unknown = DiscoverTarget(
+            instanceName = "My Modpack 1.2",
+            minecraftVersion = null,
+            loaders = emptySet(),
+            installed = true,
+            detected = true,
+        )
+        assertTrue(discoverFileFitsTarget(files[4], unknown) { it.facts() })
+    }
 }

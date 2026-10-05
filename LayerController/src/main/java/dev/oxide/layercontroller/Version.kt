@@ -24,7 +24,7 @@ import dev.oxide.layercontroller.layout.ControlLayout
 /**
  * 控件编辑器的版本号
  */
-internal const val EDITOR_VERSION = 12
+internal const val EDITOR_VERSION = 13
 
 /**
  * 自动处理并逐步更新控制布局到新版编辑器
@@ -39,6 +39,7 @@ internal fun updateLayoutToNew(
         4, 5, 6, 7, 8, 9 -> updateLayoutToNew(update4To10(layout))
         10 -> updateLayoutToNew(update10To11(layout))
         11 -> updateLayoutToNew(update11To12(layout))
+        12 -> updateLayoutToNew(update12To13(layout))
         else -> layout
     }
 }
@@ -162,4 +163,17 @@ private fun update11To12(
     layout: ControlLayout
 ): ControlLayout = layout.copy(
     editorVersion = 12
+)
+
+/**
+ * 12 -> 13: 按键事件支持逐个延迟，按钮支持按住自动重复（宏）
+ *
+ * 两个新字段都有默认值，因此旧布局反序列化时就已经是新形状了，不需要在这里改写：
+ * `ClickEvent.delayMs` 取 0（立即派发，与 1.7.0 完全一致），`NormalData.macroIntervalMs`
+ * 取 0（不重复）。写在这里的只是版本号本身。
+ */
+private fun update12To13(
+    layout: ControlLayout
+): ControlLayout = layout.copy(
+    editorVersion = 13
 )

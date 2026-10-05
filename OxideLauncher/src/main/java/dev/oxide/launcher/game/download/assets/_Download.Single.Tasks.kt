@@ -42,6 +42,7 @@ import java.io.File
 import java.net.ConnectException
 import java.net.UnknownHostException
 import java.nio.channels.UnresolvedAddressException
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TAG = "DownloadSingle"
 
@@ -52,6 +53,9 @@ private const val TAG = "DownloadSingle"
  * @param folder 版本游戏目录下的相对路径
  * @param onFileCopied 文件已成功复制到版本游戏目录后 单独回调
  * @param onFileCancelled 文件安装已取消 单独回调
+ * @param onTaskCreated 任务已建好并交给任务系统后回调，参数就是那个任务本身
+ * @param onEnded 这一个任务收尾时回调（成功、失败、取消都会走到），参数是任务 id 与**是否失败**
+ * @return 交给任务系统的那个任务；没有真的开始时为 null
  */
 fun downloadSingleForVersions(
     version: PlatformVersion,
@@ -59,14 +63,21 @@ fun downloadSingleForVersions(
     folder: String,
     onFileCopied: suspend (zip: File, folder: File) -> Unit = { _, _ -> },
     onFileCancelled: (zip: File, folder: File) -> Unit = { _, _ -> },
+    onTaskCreated: (Task) -> Unit = {},
+    onEnded: (taskId: String, failed: Boolean) -> Unit = { _, _ -> },
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit
-) {
+): Task? {
     val fileKey = version.platformSha1() ?: version.platformFileName()
     val cacheFile = File(File(PathManager.DIR_CACHE, "assets"), fileKey)
+    val taskId = downloadTaskId(fileKey, versions)
 
-    downloadSingleFile(
+    // 任务系统只在真正跑完（含报错）之后才走到 onTaskEnded 的那条路，
+    // 而 onError 先于它发生，所以这里记一下"这次是不是失败了"
+    val failed = AtomicBoolean(false)
+
+    return downloadSingleFile(
         version = version,
-        taskId = downloadTaskId(fileKey, versions),
+        taskId = taskId,
         file = cacheFile,
         onDownloaded = { task ->
             task.updateProgress(-1f)
@@ -80,6 +91,7 @@ fun downloadSingleForVersions(
             }
         },
         onError = { e ->
+            failed.set(true)
             Logger.warning(TAG, "An error occurred while downloading the resource files.", e)
 
             submitError(
@@ -101,7 +113,10 @@ fun downloadSingleForVersions(
         onFinally = {
             Logger.info(TAG, "Attempting to clear cached resource files.")
             FileUtils.deleteQuietly(cacheFile)
-        }
+        },
+        onCreated = onTaskCreated,
+        // 监听器在提交之前挂上，因此不存在"任务已经跑完、监听器还没挂上"的窗口
+        onEnded = { onEnded(taskId, failed.get()) }
     )
 }
 
@@ -121,60 +136,64 @@ private fun downloadSingleFile(
     onDownloaded: suspend (Task) -> Unit,
     onError: (Throwable) -> Unit = {},
     onCancel: () -> Unit = {},
-    onFinally: () -> Unit = {}
-) {
-    TaskSystem.submitTask(
-        Task.runTask(
-            id = taskId,
-            task = { task ->
-                val totalFileSize = version.platformFileSize()
-                var downloadedSize = 0L
+    onFinally: () -> Unit = {},
+    onCreated: (Task) -> Unit = {},
+    onEnded: () -> Unit = {}
+): Task? {
+    val task = Task.runTask(
+        id = taskId,
+        task = { running ->
+            val totalFileSize = version.platformFileSize()
+            var downloadedSize = 0L
 
-                //更新下载任务进度
-                fun updateProgress() {
-                    task.updateProgress(
-                        (downloadedSize.toDouble() / totalFileSize.toDouble()).toFloat()
+            //更新下载任务进度
+            fun updateProgress() {
+                running.updateProgress(
+                    (downloadedSize.toDouble() / totalFileSize.toDouble()).toFloat()
+                )
+                running.updateMessage(
+                    androidText(
+                        R.string.download_assets_install_progress_downloading,
+                        version.platformFileName(),
+                        formatFileSize(downloadedSize),
+                        formatFileSize(totalFileSize),
                     )
-                    task.updateMessage(
-                        androidText(
-                            R.string.download_assets_install_progress_downloading,
-                            version.platformFileName(),
-                            formatFileSize(downloadedSize),
-                            formatFileSize(totalFileSize),
-                        )
-                    )
+                )
+            }
+            updateProgress()
+
+            withSpeedReport(
+                onSpeedReport = { bytes ->
+                    running.updateSpeed(bytes)
+                },
+                onClear = {
+                    running.clearSpeed()
                 }
-                updateProgress()
-
-                withSpeedReport(
-                    onSpeedReport = { bytes ->
-                        task.updateSpeed(bytes)
-                    },
-                    onClear = {
-                        task.clearSpeed()
+            ) { report ->
+                downloadFileFromSources(
+                    urls = version
+                        .platformDownloadUrl()
+                        .mapMCIMMirrorUrls(),
+                    sha1 = version.platformSha1(),
+                    outputFile = file.ensureParentDirectory(),
+                    sizeCallback = { size ->
+                        downloadedSize += size
+                        updateProgress()
+                        report(size)
                     }
-                ) { report ->
-                    downloadFileFromSources(
-                        urls = version
-                            .platformDownloadUrl()
-                            .mapMCIMMirrorUrls(),
-                        sha1 = version.platformSha1(),
-                        outputFile = file.ensureParentDirectory(),
-                        sizeCallback = { size ->
-                            downloadedSize += size
-                            updateProgress()
-                            report(size)
-                        }
-                    )
-                }
+                )
+            }
 
-                onDownloaded(task)
-            },
-            onError = onError,
-            onCancel = onCancel,
-            onFinally = onFinally
-        )
+            onDownloaded(running)
+        },
+        onError = onError,
+        onCancel = onCancel,
+        onFinally = onFinally
     )
+    // 注册监听器在提交之前，因此不存在"任务已经跑完、监听器还没挂上"的窗口
+    TaskSystem.submitTask(task) { onEnded() }
+    onCreated(task)
+    return task
 }
 
 fun mapExceptionToMessage(e: Throwable): AndroidStringText {

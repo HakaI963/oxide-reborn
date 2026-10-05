@@ -20,6 +20,7 @@ package dev.oxide.launcher.ui.screens.main.oxide.paparazzi
 
 import dev.oxide.launcher.ui.screens.main.oxide.OxideConfirmDialog
 import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogOption
+import dev.oxide.launcher.ui.screens.main.oxide.OxideHostedLinkPanel
 import dev.oxide.launcher.ui.screens.main.oxide.OxideListDialog
 import dev.oxide.launcher.ui.screens.main.oxide.OxideTaskDialog
 import dev.oxide.launcher.ui.screens.main.oxide.OxideTextEntryDialog
@@ -67,6 +68,60 @@ class OxideDialogsSnapshotTest {
 
     @get:Rule
     val paparazzi = paparazziFor(OxidePaparazzi.STANDARD)
+
+    /**
+     * The "Open in Browser" confirmation.
+     *
+     * `showOxideLinkDialog` itself needs a real Activity window, so this snapshots
+     * `OxideHostedLinkPanel` — the exact panel body and footer that function hosts — the
+     * same way `OxideConfirmDialog` and the rest of the family are shot. What matters
+     * visually is that the link is monospace, that Copy and Cancel are outlined while
+     * Confirm is solid, and that the panel carries Oxide's opaque background, radius and
+     * hairline border rather than Material's translucent grey card with salmon text
+     * buttons.
+     */
+    @Test
+    fun OpenLink_Confirm() {
+        val device = OxidePaparazzi.STANDARD
+        paparazzi.shot("OpenLink_Confirm", device) {
+            OxideHostedLinkPanel(
+                title = "Open in Browser",
+                link = "https://github.com/ZalithLauncher/NativeLibPlugin/releases",
+                confirmText = "Confirm",
+                cancelText = "Cancel",
+                copyText = "Copy",
+                closeDescription = "Close",
+                onOpen = {},
+                onCopy = {},
+                onDismiss = {},
+            )
+        }
+    }
+
+    /**
+     * The same dialog on the smallest supported landscape.
+     *
+     * 640x360 is where the three-button footer is most likely to crowd the link, and it is
+     * the size the panel's max width is derived from — so this golden is what would catch
+     * the footer wrapping, or the link being pushed out of the content area.
+     */
+    @Test
+    fun OpenLink_Confirm_Compact() {
+        val device = OxidePaparazzi.COMPACT
+        paparazzi.shot("OpenLink_Confirm_Compact", device) {
+            OxideHostedLinkPanel(
+                title = "Open in Browser",
+                link = "https://github.com/ZalithLauncher/NativeLibPlugin/releases",
+                confirmText = "Confirm",
+                cancelText = "Cancel",
+                copyText = "Copy",
+                closeDescription = "Close",
+                onOpen = {},
+                onCopy = {},
+                onDismiss = {},
+            )
+        }
+    }
 
     @Test
     fun Confirm_Default() {

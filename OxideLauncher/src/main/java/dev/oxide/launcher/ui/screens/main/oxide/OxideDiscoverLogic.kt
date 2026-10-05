@@ -20,6 +20,7 @@ package dev.oxide.launcher.ui.screens.main.oxide
 
 import androidx.compose.runtime.Immutable
 import dev.oxide.launcher.R
+import dev.oxide.launcher.coroutine.TaskStage
 import dev.oxide.launcher.game.download.assets.platform.Platform
 import dev.oxide.launcher.game.download.assets.platform.PlatformClasses
 import dev.oxide.launcher.game.download.assets.platform.PlatformDependencyType
@@ -29,6 +30,7 @@ import dev.oxide.launcher.game.download.assets.platform.PlatformSearchData
 import dev.oxide.launcher.game.download.assets.platform.PlatformSortField
 import dev.oxide.launcher.game.download.assets.platform.PlatformVersion
 import dev.oxide.launcher.game.download.assets.platform.cacheKey
+import dev.oxide.launcher.game.download.assets.autoInstalledDependency
 import dev.oxide.launcher.game.download.assets.platform.curseforge.CurseForgePaging
 import dev.oxide.launcher.game.download.assets.utils.ModTranslations
 import dev.oxide.launcher.ui.AndroidStringText
@@ -440,9 +442,13 @@ internal fun PlatformDependencyType.discoverInstallable(): Boolean =
  *
  * 必装依赖缺了游戏就起不来，工具（配置器之类）也是玩法的必要部分，
  * 所以默认勾上；可选与包含类默认不勾，让用户自己决定要不要多下东西。
+ *
+ * 判据本身是 [autoInstalledDependency]——**与依赖下载链路递归展开时用的是同一个函数**。
+ * 之前这里是 REQUIRED+TOOL、下载链路只递归 REQUIRED，于是同一个文件版本上的同一批关系，
+ * 界面默认勾了它却不装，用户看到的是"勾了没用"。
  */
 internal fun PlatformDependencyType.discoverSelectedByDefault(): Boolean =
-    this == PlatformDependencyType.REQUIRED || this == PlatformDependencyType.TOOL
+    autoInstalledDependency()
 
 /** 一个项目版本标注的依赖，取自平台返回的真实关系 */
 internal data class DiscoverDependency(
@@ -496,7 +502,12 @@ internal const val MAX_DISCOVER_DEPENDENCIES: Int = 64
  * 截断是"这份元数据太大了"这件事，两条规则各自的断言不该绑在一起。
  */
 internal fun discoverDependenciesCapped(version: PlatformVersion): List<DiscoverDependency> =
-    discoverDependenciesOf(version).take(MAX_DISCOVER_DEPENDENCIES)
+    discoverDependenciesCapped(discoverDependenciesOf(version))
+
+/** 已经去重过的关系列表，按 [MAX_DISCOVER_DEPENDENCIES] 截断 */
+internal fun discoverDependenciesCapped(
+    dependencies: List<DiscoverDependency>,
+): List<DiscoverDependency> = dependencies.take(MAX_DISCOVER_DEPENDENCIES)
 
 /** 刚打开确认界面时的默认勾选：必装与工具 */
 internal fun discoverDefaultSelection(dependencies: List<DiscoverDependency>): Set<String> =
@@ -828,6 +839,50 @@ internal class DiscoverProjectCache(
 /** 会话内缓存最多记住多少个项目 */
 internal const val DISCOVER_PROJECT_CACHE_CAPACITY: Int = 64
 
+/**
+ * 项目文件列表的会话内缓存
+ *
+ * 同一个项目的版本列表在一次会话里会被读四遍：详情抽屉的文件标签页、详情抽屉的依赖
+ * 标签页、确认层、以及抽屉里的"全部下载"。四遍里每一遍都是一次分页往返**加**一次
+ * `initAll`（每个文件一次 `initFile`，也就是每个文件一次 HTTP），而它们要的其实是同一份列表。
+ *
+ * 按 [discoverProjectKey] 记住**成功读到**的列表之后，第二次开始直接复用：
+ * 打开详情抽屉之后立刻点安装，不会再发一次那一整套请求。
+ *
+ * **只缓存成功的读取**：空列表与失败都不写进去，
+ * 否则用户点"重试"拿到的还是上一次那个结果，看起来就像重试根本没用。
+ *
+ * 容量用满按 LRU 挤掉最久没用的那个，与 [DiscoverProjectCache] 同一个理由。
+ */
+internal class DiscoverFilesCache<T>(
+    private val capacity: Int = DISCOVER_FILES_CACHE_CAPACITY,
+) {
+    // accessOrder = true：get 也算一次访问，于是反复用到的项目不会被挤出去
+    private val entries = LinkedHashMap<String, List<T>>(16, 0.75f, true)
+
+    /** 已经读到的文件列表；没读过或读过失败/空都返回 null */
+    operator fun get(key: String): List<T>? = synchronized(entries) { entries[key] }
+
+    /** 记住一次成功的读取 */
+    operator fun set(key: String, versions: List<T>) {
+        val limit = capacity.coerceAtLeast(1)
+        synchronized(entries) {
+            entries[key] = versions
+            while (entries.size > limit) {
+                val oldest = entries.entries.firstOrNull()?.key ?: break
+                entries.remove(oldest)
+            }
+        }
+    }
+
+    val size: Int get() = synchronized(entries) { entries.size }
+
+    fun clear() = synchronized(entries) { entries.clear() }
+}
+
+/** 文件列表缓存最多记住多少个项目 */
+internal const val DISCOVER_FILES_CACHE_CAPACITY: Int = 16
+
 // ---------------------------------------------------------------------------
 // 安装前确认
 // ---------------------------------------------------------------------------
@@ -931,6 +986,351 @@ internal fun discoverBuildPlan(
             .map { it.key },
         instanceName = null,
     )
+}
+
+// ---------------------------------------------------------------------------
+// 依赖的唯一来源
+// ---------------------------------------------------------------------------
+
+/**
+ * 依赖是**某一个文件版本**自己标注的，所以"这个项目有哪些依赖"这个问题没有答案，
+ * 只有"这个项目的**这个文件**有哪些依赖"才有。
+ *
+ * v1.7.0 的缺陷正是这里：详情标签页在目标实例没有兼容文件时退回
+ * `versions.first()` 再读它的依赖，确认层却不退回，于是 `version == null` 变成空依赖列表，
+ * 界面上印出 "This file has no dependencies."。同一个项目、同一个目标，两处给出相反的答案，
+ * 而且是用户点安装时才看到的那一处是错的。
+ *
+ * 这里把"挑文件 + 读它的依赖"收成**一个**纯函数，发现页的详情标签页、确认层与抽屉里的
+ * "全部下载"都只能问它，因此三者不可能再各答各的。
+ */
+@Immutable
+internal data class DiscoverDependencySource<T>(
+    /** 目标这一档真正装得上的那个文件版本；目标没有兼容文件时为 null */
+    val version: T?,
+    /** [version] 自己标注的依赖；[version] 为 null 时必然为空——那不是"没有依赖" */
+    val dependencies: List<DiscoverDependency>,
+    /**
+     * 目标没有兼容文件时用于**展示**的那一个文件版本（最新的那个）
+     *
+     * 只用来让用户看见"这个项目是有文件的，只是没有一份支持你这一档"，
+     * 它的依赖**不列**、也**不装**——依赖属于文件，不属于项目。
+     */
+    val fallbackVersion: T?,
+    /** 目标实例这一档压根没有兼容文件；这与"这个文件没有依赖"是两件事 */
+    val noFileForTarget: Boolean,
+    /** 项目本身一个文件都没有（读列表失败是另一种状态，不走这里） */
+    val noFiles: Boolean,
+) {
+    /** 真的能装：目标这一档有兼容文件 */
+    val installable: Boolean get() = version != null
+
+    /**
+     * 真的"没有依赖"
+     *
+     * 只有在**确实读到了那个文件**、而它自己一条关系都没标时才为 true。
+     * 目标没有兼容文件时依赖是空的，但那是"不知道"，不是"没有"。
+     */
+    val genuinelyEmpty: Boolean get() = version != null && dependencies.isEmpty()
+}
+
+/**
+ * 这次安装的依赖从哪来：挑目标这一档的文件，再读那个文件的依赖
+ *
+ * 规则与整条链上其他两处保持一致：
+ *  - 挑文件用 [discoverCompatibleFile]，即目标实例自己的 Minecraft 版本与加载器，
+ *    而不是搜索栏上的筛选条件（搜索回答"我想看什么"，目标回答"装得进哪个目录"）；
+ *  - **目标没有兼容文件时不退回 `versions.first()`**：那会把另一个文件的依赖
+ *    冒充成这一次要装的依赖，正是"标签页说有依赖、点安装说没有"的成因。
+ *    退回的那个文件只作为 [DiscoverDependencySource.fallbackVersion] 供展示。
+ *
+ * 纯函数：不碰协程、不碰 Compose、不读磁盘也不发网络，因此上面这条规则能被单测钉死。
+ */
+internal fun <T> discoverDependencySource(
+    versions: List<T>,
+    target: DiscoverTarget,
+    factsOf: (T) -> DiscoverFileFacts,
+    dependenciesOf: (T) -> List<DiscoverDependency>,
+): DiscoverDependencySource<T> {
+    if (versions.isEmpty()) {
+        return DiscoverDependencySource(
+            version = null,
+            dependencies = emptyList(),
+            fallbackVersion = null,
+            noFileForTarget = false,
+            noFiles = true,
+        )
+    }
+    val version = discoverCompatibleFile(
+        versions = versions,
+        minecraftVersion = target.minecraftVersion,
+        targetLoaders = target.loaders,
+        factsOf = factsOf,
+    )
+    if (version == null) {
+        return DiscoverDependencySource(
+            version = null,
+            dependencies = emptyList(),
+            fallbackVersion = versions.first(),
+            noFileForTarget = true,
+            noFiles = false,
+        )
+    }
+    return DiscoverDependencySource(
+        version = version,
+        dependencies = discoverDependenciesCapped(dependenciesOf(version)),
+        fallbackVersion = null,
+        noFileForTarget = false,
+        noFiles = false,
+    )
+}
+
+/**
+ * 详情抽屉里"按某个具体文件下载"的那一条，是否真的装得进目标
+ *
+ * 抽屉里点某个文件安装时，确认层此前直接拿它当答案，而目标仍然是当前选中的实例：
+ * 于是这一层的 `File:` 行可以显示一个根本不支持那一档 Minecraft 版本的文件，
+ * 而下面的 `Minecraft version:` 行报着目标——两行自相矛盾，确认之后装进去的还是错的。
+ *
+ * 这里把它折成一次真实判定：不装得进就不是"这一档的文件"，
+ * 确认层照旧开着（用户要的就是改目标版本），只是不能确认。
+ */
+internal fun <T> discoverFileFitsTarget(
+    file: T,
+    target: DiscoverTarget,
+    factsOf: (T) -> DiscoverFileFacts,
+): Boolean = discoverCompatibleFile(
+    versions = listOf(file),
+    minecraftVersion = target.minecraftVersion,
+    targetLoaders = target.loaders,
+    factsOf = factsOf,
+) != null
+
+// ---------------------------------------------------------------------------
+// 下载队列：提示条的状态
+// ---------------------------------------------------------------------------
+
+/**
+ * 安装提示条在一次下载里的阶段
+ *
+ * 三种"还在跑"的阶段各自对应一件真实的事，而不是三个编出来的文案：
+ * [Queued] 是任务系统已经接手、[Downloading] 是任务报出了真实的字节比例、
+ * [Installing] 是字节已经下完、任务把进度标成了不确定（`_Download.Single.Tasks` 在拷贝进
+ * 实例目录之前做的正是 `task.updateProgress(-1f)`）。
+ */
+internal enum class DiscoverQueueStage {
+    /** 已交给任务系统，还没有拿到任何进度 */
+    Queued,
+
+    /** 任务报出了真实的下载比例 */
+    Downloading,
+
+    /** 字节已下完，正在拷进实例目录；进度不确定 */
+    Installing,
+
+    /** 这一次提交已经收尾 */
+    Complete,
+
+    /** 用户手动收掉 */
+    Dismissed,
+}
+
+/**
+ * 右下角那条安装提示现在要知道的一切
+ *
+ * [progress] 直接就是 `Task.progress` 的值：**-1f 就是不确定**，界面据此不画任何比例，
+ * 绝不用一个假的数字把进度条填上一半。-1f 之外的取值一律收敛进 0..1，
+ * 于是任务那边算出来的浮点误差不会画到进度条外面去。
+ *
+ * [pending] 是这次提交里还没收尾的任务数。提示条只在它归零时才收掉——
+ * 主文件一个任务、勾上的依赖每个一个任务，最后一个跑完才轮到提示条消失。
+ */
+@Immutable
+internal data class DiscoverQueueRow(
+    val fileName: String,
+    val stage: DiscoverQueueStage,
+    /** `Task.progress` 的原值；-1f 表示不确定 */
+    val progress: Float,
+    /** 这次提交一共交给了任务系统多少个任务 */
+    val total: Int,
+    /** 还没收尾的任务数 */
+    val pending: Int,
+    /** 其中失败了多少个 */
+    val failures: Int,
+) {
+    /** 真的拿到了字节比例；-1f 时为 null，界面画的是不确定态而不是 0 */
+    val fraction: Float? get() = progress.takeIf { it >= 0f }?.coerceIn(0f, 1f)
+
+    /** 进度不确定：任务系统自己就是这么标的（拷贝/安装阶段） */
+    val indeterminate: Boolean get() = fraction == null
+
+    /** 全部任务都收尾了，提示条可以收掉 */
+    val resolved: Boolean get() = pending <= 0
+}
+
+/**
+ * 提示条状态机：纯函数，没有协程也没有 Compose
+ *
+ * 这一段就是"Queued for download 永远不消失、也没有进度"那个缺陷的形式。
+ * 之前提示条只有一个 `Queued` 状态，除了手点叉号没有任何别的出口，
+ * 于是任务系统那边的真实进度与真实结束信号一次都没有被接过。
+ *
+ * 逐条规则：
+ *
+ *  - **[DiscoverQueueStage.Queued] 开一条新的队列**，[tasks] 个任务全部记成在跑。
+ *    之前的 [previous] 无论是什么都不继承：新一次提交就是新的一件事。
+ *  - **[DiscoverQueueStage.Downloading] 落真实的比例**。[progress] 小于 0 时
+ *    不留任何假数字，直接进不确定态。
+ *  - **[DiscoverQueueStage.Installing] 明确标成不确定**：字节已经下完，
+ *    任务系统自己把进度设成了 -1f，这里照抄而不是猜一个 100%。
+ *  - **[DiscoverQueueStage.Complete] / [DiscoverQueueStage.Failed] 各收掉一个任务**。
+ *    收完还有任务在跑就继续挂着——**一条依赖失败不会把其余仍在下载的东西一起判死**；
+ *    收完刚好归零才返回 null，也就是提示条该带着出场动画离场了。
+ *  - **已经归零的队列对任何后续事件都不再反应**：迟到的进度更新不会把提示条变回来。
+ *  - **[DiscoverQueueStage.Dismissed] 永远返回 null**，所以手点叉号多少次都是同一件事。
+ */
+internal fun discoverQueueRow(
+    previous: DiscoverQueueRow?,
+    fileName: String,
+    tasks: Int = 1,
+    stage: DiscoverQueueStage,
+    progress: Float = -1f,
+    failed: Boolean = false,
+): DiscoverQueueRow? {
+    if (stage == DiscoverQueueStage.Dismissed) return null
+    if (stage == DiscoverQueueStage.Queued) {
+        return DiscoverQueueRow(
+            fileName = fileName,
+            stage = DiscoverQueueStage.Queued,
+            progress = -1f,
+            total = tasks.coerceAtLeast(1),
+            pending = tasks.coerceAtLeast(1),
+            failures = 0,
+        )
+    }
+    val open = previous ?: return null
+    if (open.resolved) return open
+
+    return when (stage) {
+        DiscoverQueueStage.Downloading -> open.copy(
+            stage = DiscoverQueueStage.Downloading,
+            progress = progress,
+        )
+
+        DiscoverQueueStage.Installing -> open.copy(
+            stage = DiscoverQueueStage.Installing,
+            // 不确定就是不确定：绝不用 1f 假装"快好了"
+            progress = -1f,
+        )
+
+        DiscoverQueueStage.Complete, DiscoverQueueStage.Failed -> open.copy(
+            stage = stage,
+            pending = (open.pending - 1).coerceAtLeast(0),
+            failures = open.failures + if (stage == DiscoverQueueStage.Failed || failed) 1 else 0,
+        ).takeUnless { it.resolved }
+
+        // Queued 与 Dismissed 已在上面处理
+        DiscoverQueueStage.Queued, DiscoverQueueStage.Dismissed -> null
+    }
+}
+
+/** 任务系统的阶段与进度，折成提示条该显示的那一个阶段 */
+internal fun discoverQueueStageOf(stage: TaskStage, progress: Float): DiscoverQueueStage = when (stage) {
+    TaskStage.PREPARING -> DiscoverQueueStage.Queued
+    TaskStage.RUNNING ->
+        if (progress < 0f) DiscoverQueueStage.Installing else DiscoverQueueStage.Downloading
+
+    TaskStage.COMPLETED -> DiscoverQueueStage.Complete
+}
+
+// ---------------------------------------------------------------------------
+// 安装提示条：可绘制的行
+// ---------------------------------------------------------------------------
+
+/**
+ * 提示条上要画的东西，全部是已经取好的普通字段
+ *
+ * 抽出来是为了让它能被快照测试直接构造：[DiscoverInstallNotice] 原本收的是
+ * `DiscoverInstall` 这个私有密封类型，那里面带着 `PlatformVersion`，
+ * 于是这一屏在 layoutlib 下画不出来（见 `OxideDiscoverSnapshotTest` 的说明）。
+ * 现在它收的是这个只有 String 与一个可选比例的形状，于是 Queued / Downloading / Failed
+ * 三种状态都能被一张金标准图钉住。
+ */
+@Immutable
+internal data class DiscoverNoticeRow(
+    val title: String,
+    val detail: AndroidStringText?,
+    /** 真实的下载比例；null 是不确定（或这一屏本来就不画进度条） */
+    val progress: Float?,
+) {
+    /** 这一屏要不要画那条极细的进度线 */
+    val showsProgress: Boolean get() = progress != null
+}
+
+// ---------------------------------------------------------------------------
+// 从实例内容管理器跳到发现页
+// ---------------------------------------------------------------------------
+
+/**
+ * 一类平台内容对应发现页的哪一栏
+ *
+ * 从**内容类别**推出来的，不写死成模组：实例的模组管理器里的一条"在发现页查看"要落到
+ * 模组那一栏，而将来任何带平台身份的内容类别都自动落到自己那一栏。
+ * [PlatformClasses] 里没有对应栏目的类别返回 null，那一类就不提供这个动作。
+ */
+fun discoverCategoryOf(classes: PlatformClasses): DiscoverCategory? = when (classes) {
+    PlatformClasses.MOD -> DiscoverCategory.MODS
+    PlatformClasses.MOD_PACK -> DiscoverCategory.MODPACKS
+    PlatformClasses.SHADERS -> DiscoverCategory.SHADERS
+    PlatformClasses.RESOURCE_PACK -> DiscoverCategory.RESOURCE_PACKS
+    PlatformClasses.SAVES -> DiscoverCategory.MAPS
+}
+
+/**
+ * 请发现页打开某一个项目
+ *
+ * 两条路，按手上有没有平台身份分：
+ *  - [platform] 与 [projectId] 都在：直接打开那个项目，不经过搜索；
+ *  - 否则退到 [searchTerm] 的普通搜索（项目 slug 或标题）。
+ *
+ * [category] 告诉发现页先切到哪一栏；它是 null 时发现页保持当前那一栏。
+ */
+@Immutable
+data class OxideDiscoverRequest(
+    val category: DiscoverCategory?,
+    val platform: Platform?,
+    val projectId: String?,
+    val searchTerm: String?,
+)
+
+/**
+ * 从一条已安装内容的字段算出"在发现页查看"该怎么走
+ *
+ * 返回 null 表示**根本没有可用的身份**，调用方据此把那个动作整个藏起来：
+ * 开一个搜不出任何东西的空白搜索，比没有这个按钮更糟。
+ *
+ * 平台身份来自本地元数据里真实记着的 `平台 + 项目 id`（模组走的是 `ModFingerprints`
+ * 那条链路），slug/标题是最后一级退路——它至少还能让用户看到自己装的那个包。
+ *
+ * 纯函数：字段全是普通字符串，因此"没有身份就藏起来"这条规则能被单测钉死。
+ */
+fun discoverOpenRequest(
+    classes: PlatformClasses,
+    platformName: String?,
+    projectId: String?,
+    projectSlug: String?,
+    projectTitle: String?,
+): OxideDiscoverRequest? {
+    val category = discoverCategoryOf(classes) ?: return null
+    val platform = platformName?.let { name -> Platform.entries.firstOrNull { it.name == name } }
+    val id = projectId?.trim()?.takeIf { it.isNotEmpty() }
+    if (platform != null && id != null) {
+        return OxideDiscoverRequest(category = category, platform = platform, projectId = id, searchTerm = null)
+    }
+    val term = projectSlug?.trim()?.takeIf { it.isNotEmpty() }
+        ?: projectTitle?.trim()?.takeIf { it.isNotEmpty() }
+        ?: return null
+    return OxideDiscoverRequest(category = category, platform = null, projectId = null, searchTerm = term)
 }
 
 // ---------------------------------------------------------------------------

@@ -75,6 +75,14 @@ class OxideHostActions(
     val openSettingsSection: (OxideSettingsSection) -> Unit,
     val openAccountManager: () -> Unit,
     val openDownloadCategory: (OxideDownloadCategory) -> Unit,
+    /**
+     * 打开发现页，并落到 [request] 说的那个项目（或那次搜索）上
+     *
+     * 实例内容管理器里的"在发现页查看"走这里：**类别跟着内容类别走**，
+     * 所以资源包落到资源包那一栏、光影落到光影那一栏，而不是一律落到模组。
+     * 请求是纯数据，因此外壳只需要把它递给发现页，不必知道发现页内部怎么用。
+     */
+    val openDiscoverProject: (OxideDiscoverRequest) -> Unit,
     /** 打开 Oxide 自己的文件页，根目录是给定的绝对路径 */
     val openFiles: (String) -> Unit,
     /** 打开 Oxide 自己的日志页；[initialLogPath] 非空时直接选中那一份 */
@@ -103,6 +111,7 @@ val LocalOxideHostActions = staticCompositionLocalOf {
         openSettingsSection = {},
         openAccountManager = {},
         openDownloadCategory = {},
+        openDiscoverProject = {},
         openFiles = {},
         openLog = {},
         openVersionExport = {},
@@ -151,6 +160,9 @@ sealed interface OxideDestination {
  * - 承载 [OxideDestination] 那几块整页表面，并在启动流程跑起来时
  *   把 [OxideLaunchPage] 压在最上面
  *
+ * 目的地与任务抽屉都记在这一层，比页面活得久：换页时它们自己不会被清掉，于是会盖在
+ * 新页面上。因此这两块的可见性按 [OxideNavState.epoch] 判——见 [oxideTransientSurface]。
+ *
  * 页面切换不经过 Navigation3 栈，所以切页不会重建 ViewModel。
  * 账号管理、实例设置、关于等仍然是栈上的独立条目，但**账号**这一项现在
  * 进的是 Oxide 自己的账号页，因此旧的 Zalith 账号界面从新界面不再可达。
@@ -188,7 +200,25 @@ fun OxideMainShell(
     // 所以这一屏不能只看 launchFlow，否则前置阶段会掉回旧界面。
     val launchOperation by launchViewModel.launchGameOperation.collectAsStateWithLifecycle()
 
+    // 目的地属于"打开它的那一页"：这里连同打开时的导航世代一起记下来。
+    // 只记目的地是不够的——它记在外壳上，比页面活得久，换一次页既不会有人清掉它，
+    // 它又会作为页面区的第二个子节点继续画在新页面上（见下面 AnimatedVisibility 那一处）。
+    // 于是读取方一律看 [liveDestination] 而不是 [destination]。
     var destination by remember { mutableStateOf<OxideDestination?>(null) }
+    var destinationEpoch by remember { mutableStateOf(nav.epoch) }
+
+    // 待处理的「在发现页查看」请求；发现页消费掉之后就被清成 null，
+    // 于是它不会被下一次重组重放，也不需要任何额外的去重标记
+    var discoverRequest by remember { mutableStateOf<OxideDiscoverRequest?>(null) }
+
+    /** 打开一块目的地：世代与目的地一起写，读的那一侧只认 [liveDestination] */
+    val openDestination: (OxideDestination) -> Unit = { target ->
+        destinationEpoch = nav.epoch
+        destination = target
+    }
+
+    // 换页同一帧就作废：世代对不上就是没打开，返回键优先级与动画可见性一起跟着回去
+    val liveDestination = oxideTransientSurface(destination, destinationEpoch, nav.epoch)
 
     // 实例相关的目的地按路径记住，而不是按 Version 对象：
     // 版本改名之后路径会变，下面的 LaunchedEffect 会顺手把那一块收掉
@@ -196,10 +226,10 @@ fun OxideMainShell(
 
     // 不在第一个页面、也没有打开任何目的地时，返回键先退回首页；
     // 后注册的这一层优先，因此打开目的地时返回先关目的地
-    BackHandler(enabled = nav.page != OxidePage.Home && destination == null) {
+    BackHandler(enabled = nav.page != OxidePage.Home && liveDestination == null) {
         nav.goBack()
     }
-    BackHandler(enabled = destination != null) {
+    BackHandler(enabled = liveDestination != null) {
         destination = null
     }
 
@@ -207,8 +237,8 @@ fun OxideMainShell(
     val livePaths = remember(versions) {
         versions.map { version -> version.getVersionPath().absolutePath }.toSet()
     }
-    LaunchedEffect(livePaths, destination) {
-        val path = when (val current = destination) {
+    LaunchedEffect(livePaths, liveDestination) {
+        val path = when (val current = liveDestination) {
             is OxideDestination.InstanceSettings -> current.versionPath
             is OxideDestination.InstanceContent -> current.versionPath
             is OxideDestination.ExportModpack -> current.versionPath
@@ -228,40 +258,54 @@ fun OxideMainShell(
         navigateTo = nav::go,
         // 「完整实例设置」现在是 Oxide 自己那一屏，而不是旧的标签页宿主
         openInstanceSettings = { version ->
-            destination = OxideDestination.InstanceSettings(
-                versionPath = version.getVersionPath().absolutePath,
+            openDestination(
+                OxideDestination.InstanceSettings(
+                    versionPath = version.getVersionPath().absolutePath,
+                )
             )
         },
         // 「修改版本 / 选择版本」现在由 Oxide 自己那一屏负责，改名成功之后那一屏
         // 会因为路径消失而自己退回来，这里只需要换掉目的地
         openVersionModify = { version ->
-            destination = OxideDestination.ModifyVersion(
-                versionPath = version.getVersionPath().absolutePath,
+            openDestination(
+                OxideDestination.ModifyVersion(
+                    versionPath = version.getVersionPath().absolutePath,
+                )
             )
         },
         openInstanceContent = { version, category ->
-            destination = OxideDestination.InstanceContent(
-                versionPath = version.getVersionPath().absolutePath,
-                category = category,
+            openDestination(
+                OxideDestination.InstanceContent(
+                    versionPath = version.getVersionPath().absolutePath,
+                    category = category,
+                )
             )
         },
         openLink = openLink,
         openSettingsSection = openSettingsSection,
-        openAccountManager = { destination = OxideDestination.Account },
+        openAccountManager = { openDestination(OxideDestination.Account) },
         // 装 Minecraft 版本已经有 Oxide 自己的三步向导，因此这一类不再推进旧的下载嵌套栈；
         // 其余分类原样交给宿主，路径与旧界面完全一致
         openDownloadCategory = { category ->
             if (category == OxideDownloadCategory.Game) {
-                destination = OxideDestination.InstallVersion
+                openDestination(OxideDestination.InstallVersion)
             } else {
                 openDownloadCategory(category)
             }
         },
-        openFiles = { path -> destination = OxideDestination.Files(path) },
-        openLog = { path -> destination = OxideDestination.Log(path) },
+        // 「在发现页查看」：先把请求放好再切页，发现页一组合起来就消费它。
+        // 请求记在这一层（比发现页活得久）而不是塞进导航参数，因此换页/旋转都不会丢。
+        openDiscoverProject = { request ->
+            discoverRequest = request
+            nav.go(OxidePage.Discover)
+        },
+        openFiles = { path -> openDestination(OxideDestination.Files(path)) },
+        openLog = { path -> openDestination(OxideDestination.Log(path)) },
         openVersionExport = { version ->
-            destination = OxideDestination.ExportModpack(
-                versionPath = version.getVersionPath().absolutePath,
+            openDestination(
+                OxideDestination.ExportModpack(
+                    versionPath = version.getVersionPath().absolutePath,
+                )
             )
         },
     )
@@ -295,19 +339,19 @@ fun OxideMainShell(
                     }
                     OxideButton(
                         text = stringResource(R.string.oxide_topbar_files),
-                        onClick = { destination = OxideDestination.Files(DEVICES_ROOT) },
+                        onClick = { openDestination(OxideDestination.Files(DEVICES_ROOT)) },
                         tone = OxideButtonTone.Ghost,
                     )
                     Spacer(Modifier.width(6.dp))
                     OxideButton(
                         text = stringResource(R.string.oxide_topbar_multiplayer),
-                        onClick = { destination = OxideDestination.Multiplayer },
+                        onClick = { openDestination(OxideDestination.Multiplayer) },
                         tone = OxideButtonTone.Ghost,
                     )
                     Spacer(Modifier.width(6.dp))
                     OxideButton(
                         text = stringResource(R.string.oxide_sec_topbar_account),
-                        onClick = { destination = OxideDestination.Account },
+                        onClick = { openDestination(OxideDestination.Account) },
                         tone = OxideButtonTone.Ghost,
                     )
                 }
@@ -323,19 +367,26 @@ fun OxideMainShell(
                             OxideInstancesPage(metrics = metrics, onNavigate = nav::go)
 
                         OxidePage.Discover ->
-                            OxideDiscoverPage(metrics = metrics, onNavigate = nav::go)
+                            OxideDiscoverPage(
+                                metrics = metrics,
+                                onNavigate = nav::go,
+                                hostRequest = discoverRequest,
+                                onHostRequestConsumed = { discoverRequest = null },
+                            )
 
                         OxidePage.Settings ->
                             OxideSettingsPage(metrics = metrics, onNavigate = nav::go)
                     }
 
-                    // 目的地：整块盖在页面区之上，退出时只淡出，不做位移
+                    // 目的地：整块盖在页面区之上，退出时只淡出，不做位移。
+                    // 可见性读的是 [liveDestination]：换页后它在同一帧就是"没打开"，
+                    // 于是走的仍是原来那条淡出，新页面不会被盖住。
                     AnimatedVisibility(
-                        visible = destination != null,
+                        visible = liveDestination != null,
                         enter = fadeIn(tween(Oxide.Motion.PopoverFadeMs)),
                         exit = fadeOut(tween(Oxide.Motion.PopoverFadeMs)),
                     ) {
-                        val target = destination ?: return@AnimatedVisibility
+                        val target = liveDestination ?: return@AnimatedVisibility
                         // 底幕统一走 OxideDestinationBackdrop：它先铺一层完全不透明的
                         // Oxide.Bg，再叠近不透明的 PanelBackdrop。单独铺 PanelBackdrop 还剩
                         // 约 5% 透出，页面标题那么粗，5% 在真机上仍然看得见，两块标题会重影。
@@ -414,7 +465,12 @@ fun OxideMainShell(
 
         // 任务抽屉：以前是 MainActivity 上那个 30% 宽的旧 Zalith 侧滑卡片，
         // 直接压在外壳上面。现在是 Oxide 自己的抽屉，和目的地同一层级。
-        if (tasksExpanded) {
+        //
+        // 展开与否本身是记在 AllSettings 里的，因此这里不写它：只按"它是哪一代导航下
+        // 展开的"判一次。`remember(tasksExpanded)` 记下的就是展开那一刻的世代，
+        // 换页之后世代对不上，抽屉这一帧就不再画，而下次按顶栏按钮它仍然是展开的。
+        val tasksEpoch = remember(tasksExpanded) { nav.epoch }
+        if (oxideTransientSurface(tasksExpanded, tasksEpoch, nav.epoch) == true) {
             CompositionLocalProvider(LocalOxideHostActions provides actions) {
                 OxideTaskDrawer(
                     tasks = tasks,

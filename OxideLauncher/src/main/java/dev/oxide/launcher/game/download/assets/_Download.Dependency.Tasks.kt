@@ -53,6 +53,19 @@ import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "DownloadDependency"
 
+/**
+ * 这一类关系是不是"少了游戏就起不来 / 是玩法的必要部分"，因而由启动器自己带上
+ *
+ * **这条判据只有一份，界面的默认勾选与这里的递归展开都调它**
+ * （界面那份在 `OxideDiscoverLogic.discoverSelectedByDefault`）。
+ * 之前界面按 REQUIRED+TOOL 默认勾上、这里只递归 REQUIRED，于是同一个文件版本上的
+ * 同一批关系，界面勾了它却没装——用户看到的是"勾了没用"。
+ *
+ * 只有必装与工具进得来：可选与包含类由用户自己决定，内嵌与互斥根本不装。
+ */
+internal fun PlatformDependencyType.autoInstalledDependency(): Boolean =
+    this == PlatformDependencyType.REQUIRED || this == PlatformDependencyType.TOOL
+
 /** 同一次依赖安装中允许处理的依赖项目数量上限，防止异常元数据导致依赖爆炸 */
 private const val MAX_DEPENDENCY_PROJECTS = 64
 
@@ -78,13 +91,16 @@ class DependencyRequest(
  * 为给定的游戏版本安装选中的依赖项，并递归展开它们标注的必装依赖
  * @param requests 需要安装的依赖项
  * @param versions 依赖项的目标游戏版本
+ * @param onTaskCreated 展开任务已建好并交给任务系统后回调，参数就是那个任务本身
+ * @return 展开任务；没有真的开始时为 null
  */
 fun downloadDependenciesForVersions(
     requests: List<DependencyRequest>,
     versions: List<Version>,
+    onTaskCreated: (Task) -> Unit = {},
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit
-) {
-    if (requests.isEmpty() || versions.isEmpty()) return
+): Task? {
+    if (requests.isEmpty() || versions.isEmpty()) return null
 
     // 整理唯一任务id
     val distinctRequests = requests.distinctBy { "${it.platform.name}/${it.projectId}/${it.versionId.orEmpty()}" }
@@ -94,35 +110,36 @@ fun downloadDependenciesForVersions(
         .joinToString(",")
         .hashCode()
 
-    TaskSystem.submitTask(
-        Task.runTask(
-            id = "dependency/${distinctRequests.first().platform.name}/$taskId",
-            task = { task ->
-                task.updateMessage(
-                    androidText(R.string.download_assets_loading_dep_project, distinctRequests.first().projectId)
-                )
+    val task = Task.runTask(
+        id = "dependency/${distinctRequests.first().platform.name}/$taskId",
+        task = { task ->
+            task.updateMessage(
+                androidText(R.string.download_assets_loading_dep_project, distinctRequests.first().projectId)
+            )
 
-                val context = DependencyContext(
-                    task = task,
-                    semaphore = Semaphore(DEPENDENCY_PARALLELISM),
-                    processed = ConcurrentHashMap<String, MutableSet<String>>(),
-                    projectCache = ConcurrentHashMap<String, PlatformProject>(),
-                    budget = AtomicInteger(MAX_DEPENDENCY_PROJECTS),
-                    downloadGroups = ConcurrentHashMap<String, DownloadGroup>(),
-                    failures = DependencyFailures()
-                )
+            val context = DependencyContext(
+                task = task,
+                semaphore = Semaphore(DEPENDENCY_PARALLELISM),
+                processed = ConcurrentHashMap<String, MutableSet<String>>(),
+                projectCache = ConcurrentHashMap<String, PlatformProject>(),
+                budget = AtomicInteger(MAX_DEPENDENCY_PROJECTS),
+                downloadGroups = ConcurrentHashMap<String, DownloadGroup>(),
+                failures = DependencyFailures()
+            )
 
-                coroutineScope {
-                    distinctRequests.forEach { request ->
-                        async { expand(request, versions, context) }
-                    }
+            coroutineScope {
+                distinctRequests.forEach { request ->
+                    async { expand(request, versions, context) }
                 }
-
-                context.publishDownloads(submitError)
-                context.failures.submit(submitError)
             }
-        )
+
+            context.publishDownloads(submitError)
+            context.failures.submit(submitError)
+        }
     )
+    TaskSystem.submitTask(task)
+    onTaskCreated(task)
+    return task
 }
 
 /**
@@ -280,7 +297,9 @@ private suspend fun expand(
             val dependencies = resolveOrNull("Failed to read the dependencies of: ${request.projectTitle}") {
                 version.platformDependencies()
             } ?: return@forEach
-            val required = dependencies.filter { it.type == PlatformDependencyType.REQUIRED }
+            // 与界面默认勾选同一判据（见 autoInstalledDependency）：
+            // 界面勾上了就一定要装，界面没勾的也不在这里偷偷装
+            val required = dependencies.filter { it.type.autoInstalledDependency() }
             if (required.isEmpty()) return@forEach
 
             coroutineScope {

@@ -28,8 +28,9 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -40,11 +41,14 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -52,6 +56,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -93,19 +98,33 @@ import kotlin.math.roundToInt
 /**
  * 打开或收起停靠面板的悬浮球
  *
- * [position] 与 [onPositionChanged] 是 ViewModel 里的那对字段，单位是像素；
- * 这里按父容器的尺寸夹住，因此转到竖屏或折叠屏展开时球不会跑到屏幕外面。
+ * [position] 是 ViewModel 里那对字段，单位是像素，null 表示还没落位。
+ * [containerWidth] / [containerHeight] 是**外层**作用域量到的可用尺寸——以前这里
+ * 自己又套了一层 `BoxWithConstraints(modifier.size(ballSize))`，于是内部的
+ * `maxWidth`/`maxHeight` 恒等于球自身的边长，`maxX`/`maxY` 也就恒为 0：默认位置被
+ * 夹成 `Offset.Zero`，拖动的增量同样被夹成 0，球因此永远停在左上角也永远拖不动。
+ * 尺寸改由调用方从它自己的 `BoxWithConstraintsScope` 传进来。
+ *
+ * 停靠区由 [editorBallSafeBounds] 算，并且扣掉 `WindowInsets.safeDrawing`——圆角、
+ * 刘海与系统栏都在里面，所以球既不会被拖到圆角底下，也不会停在系统栏上。
+ *
+ * @param position 已落位的位置，null 表示还没落位（走 [editorBallDefaultPosition]）
+ * @param containerWidth 外层容器的宽度
+ * @param containerHeight 外层容器的高度
  */
 @Composable
 internal fun EditorBall(
     modifier: Modifier = Modifier,
-    position: Offset,
+    position: Offset?,
     onPositionChanged: (Offset) -> Unit,
     opened: Boolean,
     onClick: () -> Unit,
+    containerWidth: Dp,
+    containerHeight: Dp,
 ) {
     val metrics = editorMetrics()
     val ballSize = metrics.ballSize
+    val density = LocalDensity.current
     var measured by remember { mutableStateOf(IntSize.Zero) }
     val currentPosition by rememberUpdatedState(position)
     val currentOnClick by rememberUpdatedState(onClick)
@@ -114,86 +133,92 @@ internal fun EditorBall(
     val openText = stringResource(R.string.oxide_ce_open_dock)
     val closeText = stringResource(R.string.oxide_ce_close_dock)
 
-    BoxWithConstraints(modifier = modifier.size(ballSize)) {
-        val maxX = (maxWidth - ballSize).coerceAtLeast(0.dp)
-        val maxY = (maxHeight - ballSize).coerceAtLeast(0.dp)
+    val safeDrawing = WindowInsets.safeDrawing
+    val ballPx = with(density) { ballSize.toPx() }
+    val bounds = with(density) {
+        editorBallSafeBounds(
+            available = Size(containerWidth.toPx(), containerHeight.toPx()),
+            ball = ballPx,
+            insets = EditorBallInsets(
+                left = safeDrawing.getLeft(density).toFloat(),
+                top = safeDrawing.getTop(density).toFloat(),
+                right = safeDrawing.getRight(density).toFloat(),
+                bottom = safeDrawing.getBottom(density).toFloat(),
+            ),
+        )
+    }
 
-        // 首次落位：顶边居中，与旧版一致。量到自身之前不画，
-        // 否则第一帧会在左上角闪一下
-        val anchored = remember(measured, maxX) {
-            if (measured == IntSize.Zero) {
-                currentPosition
-            } else if (currentPosition == Offset.Zero) {
-                Offset(x = maxX.value / 2f, y = 0f)
-            } else {
-                Offset(
-                    x = currentPosition.x.coerceIn(0f, maxX.value),
-                    y = currentPosition.y.coerceIn(0f, maxY.value)
+    // 每次组合都重算。以前这一段被 `remember(measured, maxX)` 冻住，于是拖动写回
+    // ViewModel 之后 anchored 也不会变——即使 maxX/maxY 不是 0，球同样拖不动
+    val anchored = editorBallClamp(
+        bounds = bounds,
+        ball = ballPx,
+        position = currentPosition ?: editorBallDefaultPosition(bounds, ballPx),
+    )
+
+    Box(
+        modifier = modifier
+            // 量到自身之前不画，否则第一帧会在默认位置上闪一下
+            .alpha(if (measured == IntSize.Zero) 0f else 1f)
+            .offset {
+                IntOffset(
+                    x = anchored.x.roundToInt(),
+                    y = anchored.y.roundToInt(),
                 )
             }
-        }
-
-        Box(
-            modifier = Modifier
-                .offset {
-                    IntOffset(
-                        x = anchored.x.toInt().coerceIn(0, maxX.value.toInt()),
-                        y = anchored.y.toInt().coerceIn(0, maxY.value.toInt()),
-                    )
-                }
-                .size(ballSize)
-                .onSizeChanged { measured = it }
-                .clip(Oxide.RadiusChip)
-                .background(Oxide.BgElevated)
-                .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusChip)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = { currentOnClick() },
-                )
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        val start = down.position
-                        var dragging = false
-                        var current = anchored
-                        // drag 返回 false 表示手势被取消，此时不触发点击
-                        val completed = drag(down.id) { change ->
-                            val delta = change.positionChange()
-                            if (!dragging &&
-                                (change.position - start).getDistance() > viewConfiguration.touchSlop
-                            ) {
-                                dragging = true
-                            }
-                            if (dragging) {
-                                val step = if (isRtl) Offset(-delta.x, delta.y) else delta
-                                current = Offset(
-                                    x = (current.x + step.x).coerceIn(0f, maxX.value),
-                                    y = (current.y + step.y).coerceIn(0f, maxY.value),
-                                )
-                                onPositionChanged(current)
-                            }
-                            change.consume()
-                        }
-                        if (completed && !dragging) currentOnClick()
-                    }
-                }
-                .semantics {
-                    role = Role.Tab
-                    stateDescription = if (opened) closeText else openText
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                modifier = Modifier.size(ballSize * 0.5f),
-                painter = painterResource(
-                    if (opened) R.drawable.ic_menu_open else R.drawable.ic_menu
-                ),
-                contentDescription = null,
-                tint = if (opened) Oxide.Fg else Oxide.FgMuted,
+            .size(ballSize)
+            .onSizeChanged { measured = it }
+            .clip(Oxide.RadiusChip)
+            .background(Oxide.BgElevated)
+            .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusChip)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { currentOnClick() },
             )
-        }
+            .pointerInput(bounds, ballPx) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    val start = down.position
+                    var dragging = false
+                    var current = anchored
+                    // drag 返回 false 表示手势被取消，此时不触发点击
+                    val completed = drag(down.id) { change ->
+                        val delta = change.positionChange()
+                        if (!dragging &&
+                            (change.position - start).getDistance() > viewConfiguration.touchSlop
+                        ) {
+                            dragging = true
+                        }
+                        if (dragging) {
+                            val step = if (isRtl) Offset(-delta.x, delta.y) else delta
+                            current = editorBallClamp(
+                                bounds = bounds,
+                                ball = ballPx,
+                                position = current + step,
+                            )
+                            onPositionChanged(current)
+                        }
+                        change.consume()
+                    }
+                    if (completed && !dragging) currentOnClick()
+                }
+            }
+            .semantics {
+                role = Role.Tab
+                stateDescription = if (opened) closeText else openText
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            modifier = Modifier.size(ballSize * 0.5f),
+            painter = painterResource(
+                if (opened) R.drawable.ic_menu_open else R.drawable.ic_menu
+            ),
+            contentDescription = null,
+            tint = if (opened) Oxide.Fg else Oxide.FgMuted,
+        )
     }
 }
 

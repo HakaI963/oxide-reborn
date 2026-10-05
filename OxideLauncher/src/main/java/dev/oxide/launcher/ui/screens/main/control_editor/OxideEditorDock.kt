@@ -71,8 +71,12 @@ import dev.oxide.launcher.ui.screens.main.oxide.OxideBadgeTone
  * 位置与尺寸检视器、新建、预览与保存都在里面按顺序往下铺。因此不存在嵌套滚动，
  * 也不需要在展开某一块时把别的块推走。
  *
- * 面板覆盖画布的那部分**必须**吃掉触摸（[editorConsumeTouches]），否则落在面板
- * 空白处的那一下会被画布当成玩家按了控件。面板之外的点击仍然照旧交给画布。
+ * 面板**开着**时，画布那一层整个变成只读的（见 `ControlEditor.kt` 里传给
+ * `ControlEditorLayer` 的 `interactive`）：背景点击、控件的拖动/点选与两个缩放
+ * 手柄都不再安装指针输入。面板这一侧因此**不挂** [editorConsumeTouches]——它是一
+ * 个 `PointerEventPass.Main` 的消费者，挂在每一行的**祖先**上只能取消子节点的手势，
+ * 挡不住下面那块画布收到同一下；把它留在遮罩上（`EditorScrim`）才有意义。
+ * 面板之外的点击仍然照旧交给画布。
  */
 @Composable
 internal fun EditorDock(
@@ -122,8 +126,7 @@ internal fun EditorDock(
                     start = metrics.dockMargin,
                     top = metrics.dockMargin,
                     bottom = metrics.dockMargin,
-                )
-                .editorConsumeTouches(),
+                ),
             header = {
                 EditorDockHeader(
                     selectedLayerName = selectedLayer?.name,
