@@ -19,8 +19,8 @@
 package dev.oxide.launcher.game.account.microsoft
 
 import dev.oxide.launcher.R
-import dev.oxide.launcher.utils.AndroidStringText
-import dev.oxide.launcher.utils.androidText
+import dev.oxide.launcher.ui.AndroidStringText
+import dev.oxide.launcher.ui.androidText
 
 /**
  * 这个构建里没有配置微软应用（客户端）id
