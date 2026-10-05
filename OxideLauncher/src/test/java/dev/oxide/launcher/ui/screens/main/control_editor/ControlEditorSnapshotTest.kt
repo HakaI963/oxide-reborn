@@ -296,7 +296,7 @@ class ControlEditorSnapshotTest {
                     previewScenario = PreviewScenario.InMenu,
                     onPreviewScenarioChanged = {},
                     previewHideLayerWhen = HideLayerWhen.None,
-                    onPreviewHideLayerWhenChanged = {},
+                    onPreviewHideLayerChanged = {},
                     onSave = {},
                     saveAndExit = {},
                     onExit = {},

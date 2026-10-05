@@ -263,14 +263,14 @@ class OAuthClientIdWiringTest {
         val properties = moduleGradleProperties()
         assertTrue(
             "#$PROPERTY_NAME must stay commented out; that is what keeps the client id out of git",
-            properties.lineSequence().any { it.trim() == "#$PROPERTY_NAME=xxx" }
+            properties.readText().lineSequence().any { it.trim() == "#$PROPERTY_NAME=xxx" }
         )
     }
 
     @Test
     fun thereIsNoActiveAssignmentOfTheClientIdProperty() {
         // 提交一份真实的 client id 等于允许任何人冒充这个启动器登录
-        val active = moduleGradleProperties().lineSequence().filter { line ->
+        val active = moduleGradleProperties().readText().lineSequence().filter { line ->
             Regex("""^\s*$PROPERTY_NAME\s*=""").containsMatchIn(line)
         }.toList()
         assertEquals("no active '$PROPERTY_NAME' assignment may exist in gradle.properties", 0, active.size)
@@ -281,7 +281,7 @@ class OAuthClientIdWiringTest {
         // 上一轮的改动就在同一份文件里：本次只动版本与 OAuth 那一段
         assertTrue(
             "curseforge_api_key must stay declared, it is what release builds fall back to",
-            moduleGradleProperties().lineSequence().any { line ->
+            moduleGradleProperties().readText().lineSequence().any { line ->
                 Regex("""^\s*curseforge_api_key\s*=""").containsMatchIn(line)
             },
         )
@@ -427,7 +427,7 @@ class OAuthClientIdWiringTest {
 
         /** 只读活跃的属性赋值，注释掉的行返回 null */
         fun propertyValue(properties: String, name: String): String? =
-            properties.lineSequence()
+            properties.readText().lineSequence()
                 .map { it.trim() }
                 .firstOrNull { Regex("""^$name\s*=(.*)$""").matches(it) }
                 ?.let { Regex("""^$name\s*=(.*)$""").matchEntire(it)!!.groupValues[1].trim() }

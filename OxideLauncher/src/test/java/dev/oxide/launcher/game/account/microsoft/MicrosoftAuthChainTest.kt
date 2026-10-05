@@ -162,7 +162,7 @@ class MicrosoftAuthChainTest {
     fun theXboxLiveRpsTicketIsSubmittedBareFirstAndTheDottedFormIsTheFallback() {
         val xbl = blockOf(AUTHENTICATOR, "private suspend fun authenticateXBL(")
         val bare = xbl.indexOf("requestXblToken(accessToken)")
-        val dotted = xbl.indexOf("requestXblToken(\"d=$accessToken\")")
+        val dotted = xbl.indexOf("requestXblToken(\"d=\$accessToken\")")
         assertTrue("the bare RpsTicket must be tried first for a v2.0 token", bare >= 0)
         assertTrue("the d= prefix must remain as a fallback", dotted > bare)
     }
@@ -210,7 +210,7 @@ class MicrosoftAuthChainTest {
 
     @Test
     fun theActionableMessageExistsAndNamesTheSecret() {
-        val strings = File(locate("res/values/strings.xml")).readText()
+        val strings = locate("res/values/strings.xml").readText()
         val entry = Regex("<string name=\"account_microsoft_not_configured\">(.*?)</string>", RegexOption.DOT_MATCHES_ALL)
             .find(strings)
         assertTrue("the string must exist", entry != null)
@@ -235,7 +235,7 @@ class MicrosoftAuthChainTest {
         var i = 0
         while (i < source.length) {
             val c = source[i]
-            val next = if (i + 1 < source.length) source[i + 1] else ' '
+            val next = if (i + 1 < source.length) source[i + 1] else ' '
             when {
                 // 原始字符串 """ ... """ —— Kotlin 里字符串可以嵌套，因此按深度数
                 c == '"' && next == '"' && source.startsWith("\"\"\"", i) -> {
@@ -329,8 +329,8 @@ class MicrosoftAuthChainTest {
     }
 
     /**
-     * 块注释的结束位置（跳过 `/*` 与 `*/`）
-     * 注释里出现字符串字面量不影响结束位置，所以直接找 `*/` 即可
+     * 块注释的结束位置（跳过开头的两个斜杠星号与结尾的星号斜杠）
+     * 注释里出现字符串字面量不影响结束位置，所以直接找收尾那对符号即可
      */
     private fun blockCommentEnd(source: String, start: Int): Int {
         var i = start + 2
