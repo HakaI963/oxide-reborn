@@ -1218,6 +1218,10 @@ fun OxideStorageDrawer(
     val context = LocalContext.current
     val bridge = rememberOxideLauncherBridge()
 
+    // 取一次 contentResolver 就够了：它在 SAF 回调里用，而回调不是组合期，
+    // 组合期才谈得上下一次 configuration 变了会不会读到旧值。
+    val contentResolver = remember(context) { context.contentResolver }
+
     val paths by GamePathManager.gamePathData.collectAsStateWithLifecycle()
     val currentGamePath by GamePathManager.currentPath.collectAsStateWithLifecycle()
 
@@ -1233,6 +1237,9 @@ fun OxideStorageDrawer(
     var addPathError by remember { mutableStateOf<String?>(null) }
     var addPathPending by remember { mutableStateOf<String?>(null) }
     val addScope = rememberCoroutineScope()
+    // 文案在组合期取一次，回调与协程里只拿得到字符串，拿不到 stringResource
+    val unsupportedPathMessage = stringResource(R.string.oxide_cap_storage_game_dir_unsupported)
+    val duplicatePathMessage = stringResource(R.string.oxide_cap_storage_game_dir_conflict)
     val treePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -1248,11 +1255,11 @@ fun OxideStorageDrawer(
             }
         if (picked.isNullOrBlank()) {
             // 游戏目录后面全部按真实路径处理，因此只能覆盖这台设备主存储上的文件夹
-            addPathError = context.getString(R.string.oxide_cap_storage_game_dir_unsupported)
+            addPathError = unsupportedPathMessage
             addPathStage = null
         } else {
             runCatching {
-                context.contentResolver.takePersistableUriPermission(
+                contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                 )
@@ -1455,7 +1462,7 @@ fun OxideStorageDrawer(
                                 bridge.showToast(R.string.oxide_cap_storage_game_dir_added)
                             }.onFailure { error ->
                                 addPathError = if (storageViewModel.isDuplicatePathConflict(error)) {
-                                    context.getString(R.string.oxide_cap_storage_game_dir_conflict)
+                                    duplicatePathMessage
                                 } else {
                                     error.getMessageOrToString()
                                 }

@@ -57,6 +57,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -310,8 +311,8 @@ fun OxideInstancesPage(
     // 页头两个动作各自的实测宽度。标题会不会被截断由它们决定，因此必须量而不是猜。
 // 两者分开记：折走之后不再绘制"刷新"，但它的宽度仍然留着，
 // 于是判据不会因为"现在画了什么"而变来变去。
-    var refreshButtonWidth by remember { mutableStateOf(0f) }
-    var installButtonWidth by remember { mutableStateOf(0f) }
+    var refreshButtonWidth by remember { mutableFloatStateOf(0f) }
+    var installButtonWidth by remember { mutableFloatStateOf(0f) }
 
     val gridState = rememberLazyGridState()
     // 滚动时收起浮层：它的锚点是卡片，滚走之后浮层会停在原地不动
