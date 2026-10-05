@@ -44,8 +44,9 @@ class BatchDownloadException(summary: String, cause: Throwable? = null) : IOExce
 /**
  * 批量下载编排器：文件级并发由信号量控制，同一时刻至多 [maxConnections] 个文件在传输；
  * 每个文件在单个候选源内的重试与换源由引擎消化，全部候选源耗尽的文件还会参与下一轮整批重试。
- * 系统性故障熔断：整批零成功时，连续 [SYSTEMIC_FAILURE_LIMIT] 个文件永久失败即取消剩余文件并立即失败，
- * 避免在确定性故障（如引擎或源配置错误）上空转数万次重试。
+ * 系统性故障熔断：整批零成功时，连续 [SYSTEMIC_FAILURE_LIMIT] 个文件永久失败即熔断并立即失败，
+ * 排队中的文件不再发起新的请求（作业在拿到并发许可前后各看一次熔断标志），
+ * 已在途的作业被取消——避免在确定性故障（如引擎或源配置错误）上空转数万次重试。
  * 文件维度的统计在 run() 之前登记（调用方可先把本地已复用文件计入），
  * 因此 [run] 对同一实例至多调用一次。
  */
@@ -101,10 +102,19 @@ class BatchDownloader(
             try {
                 val fileJobs = requests.map { request ->
                     launch(Dispatchers.IO) {
-                        //先取得一个文件许可再打开临时文件：
-                        //否则全部作业同时持着打开的句柄排队，海量句柄会拖垮存储层
-                        files.withPermit {
-                            runOne(request, failures)
+                        // 熔断标志先看一眼，拿到许可之后再看一眼。
+                        // 只靠 activeFileJobs 里的取消是不够的：那批作业是在
+                        // 下面这个 map 跑完之后才挂上去的，文件一多，前几个作业失败得
+                        // 足够快时，熔断那一刻还读不到任何作业，"取消剩余文件"就成了空动作，
+                        // 排队中的作业会一个接一个把整批都试完——熔断形同虚设。
+                        if (systemicAbortCause.get() == null) {
+                            //先取得一个文件许可再打开临时文件：
+                            //否则全部作业同时持着打开的句柄排队，海量句柄会拖垮存储层
+                            files.withPermit {
+                                if (systemicAbortCause.get() == null) {
+                                    runOne(request, failures)
+                                }
+                            }
                         }
                     }
                 }
