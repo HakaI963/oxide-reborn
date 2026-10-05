@@ -245,8 +245,8 @@ private fun TaskItem(
             }
             Spacer(Modifier.width(metrics.cardGap * 0.5f))
             OxideBadge(
-                text = stringResource(item.state.labelRes()),
-                tone = item.state.badgeTone(),
+                text = stringResource(state.labelRes()),
+                tone = state.badgeTone(),
             )
         }
     }
