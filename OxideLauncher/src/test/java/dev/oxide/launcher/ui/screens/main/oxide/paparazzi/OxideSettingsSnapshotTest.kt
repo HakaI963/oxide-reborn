@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.InstantAnimationsRule
 import dev.oxide.launcher.ui.screens.main.oxide.OxideLauncherBridge
+import dev.oxide.launcher.ui.screens.main.oxide.OxideMetrics
 import dev.oxide.launcher.ui.screens.main.oxide.OxidePage
 import dev.oxide.launcher.ui.screens.main.oxide.OxidePageColumn
 import dev.oxide.launcher.ui.screens.main.oxide.OxideSettingsCategory
@@ -90,8 +91,7 @@ class OxideSettingsSnapshotTest {
     )
 
     @Composable
-    private fun Settings(device: DeviceConfig, category: OxideSettingsCategory) {
-        val metrics = metrics
+    private fun Settings(metrics: OxideMetrics, category: OxideSettingsCategory) {
         OxidePageColumn(metrics = metrics) {
             OxideSettingsPanel(
                 // No extra padding here: OxidePageColumn has already applied pagePaddingH, and

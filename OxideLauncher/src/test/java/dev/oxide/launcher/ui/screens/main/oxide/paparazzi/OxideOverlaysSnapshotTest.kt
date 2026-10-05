@@ -33,6 +33,7 @@ import dev.oxide.launcher.ui.screens.main.oxide.OxideGameWaitingOverlay
 import dev.oxide.launcher.ui.screens.main.oxide.OxideGameWaitingState
 import dev.oxide.launcher.ui.screens.main.oxide.OxideInstanceErrorRow
 import dev.oxide.launcher.ui.screens.main.oxide.OxideLaunchPreflight
+import dev.oxide.launcher.ui.screens.main.oxide.OxideMetrics
 import dev.oxide.launcher.ui.screens.main.oxide.OxidePreflightAction
 import dev.oxide.launcher.ui.screens.main.oxide.OxidePreflightAsk
 import dev.oxide.launcher.ui.screens.main.oxide.OxidePreflightBranch

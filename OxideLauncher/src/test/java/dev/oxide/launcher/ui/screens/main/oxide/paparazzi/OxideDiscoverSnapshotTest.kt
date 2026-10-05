@@ -33,6 +33,7 @@ import dev.oxide.launcher.ui.screens.main.oxide.DiscoverItem
 import dev.oxide.launcher.ui.screens.main.oxide.DiscoverMobileDataDialog
 import dev.oxide.launcher.ui.screens.main.oxide.DiscoverResultsGrid
 import dev.oxide.launcher.ui.screens.main.oxide.DiscoverResultsHeader
+import dev.oxide.launcher.ui.screens.main.oxide.OxideMetrics
 import dev.oxide.launcher.ui.screens.main.oxide.OxidePageColumn
 import dev.oxide.launcher.ui.screens.main.oxide.paparazzi.OxidePaparazzi.shot
 import dev.oxide.launcher.ui.screens.main.oxide.paparazzi.oxideInstantAnimations

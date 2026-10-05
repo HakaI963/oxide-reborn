@@ -28,6 +28,7 @@ import app.cash.paparazzi.InstantAnimationsRule
 import dev.oxide.launcher.game.account.Account
 import dev.oxide.launcher.ui.screens.main.oxide.OxideAccountCurrentCard
 import dev.oxide.launcher.ui.screens.main.oxide.OxideAccountListCard
+import dev.oxide.launcher.ui.screens.main.oxide.OxideMetrics
 import dev.oxide.launcher.ui.screens.main.oxide.OxidePageColumn
 import dev.oxide.launcher.ui.screens.main.oxide.paparazzi.OxidePaparazzi.shot
 import dev.oxide.launcher.ui.screens.main.oxide.paparazzi.oxideInstantAnimations
