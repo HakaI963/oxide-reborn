@@ -29,6 +29,11 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateBottomPadding
+import androidx.compose.foundation.layout.calculateLeftPadding
+import androidx.compose.foundation.layout.calculateRightPadding
+import androidx.compose.foundation.layout.calculateTopPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -136,14 +141,17 @@ internal fun EditorBall(
     val safeDrawing = WindowInsets.safeDrawing
     val ballPx = with(density) { ballSize.toPx() }
     val bounds = with(density) {
+        // asPaddingValues 给的是与方向无关的四条边，正是"球不能被拖进圆角/系统栏"
+        // 需要的语义；getLeft/getRight 要 LayoutDirection，在这里是多余的一层
+        val insetsPx = safeDrawing.asPaddingValues()
         editorBallSafeBounds(
             available = Size(containerWidth.toPx(), containerHeight.toPx()),
             ball = ballPx,
             insets = EditorBallInsets(
-                left = safeDrawing.getLeft(density).toFloat(),
-                top = safeDrawing.getTop(density).toFloat(),
-                right = safeDrawing.getRight(density).toFloat(),
-                bottom = safeDrawing.getBottom(density).toFloat(),
+                left = insetsPx.calculateLeftPadding().toPx(),
+                top = insetsPx.calculateTopPadding().toPx(),
+                right = insetsPx.calculateRightPadding().toPx(),
+                bottom = insetsPx.calculateBottomPadding().toPx(),
             ),
         )
     }

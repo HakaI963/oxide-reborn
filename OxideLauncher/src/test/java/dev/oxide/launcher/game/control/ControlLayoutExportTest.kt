@@ -406,7 +406,9 @@ class ControlLayoutExportTest {
         // 默认布局解不开时用户目录里会一份布局都没有
         assertTrue(
             "the embedded fallback layout must stay declared",
-            managerRaw.contains("internal const val EMBEDDED_FALLBACK_CONTROL_LAYOUT")
+            // `val` 而不是 `const val`：这是一段多行原始字符串，const 要求编译期常量，
+            // trimIndent() 之类的调用它都接受不了
+            managerRaw.contains("internal val EMBEDDED_FALLBACK_CONTROL_LAYOUT")
         )
         assertTrue(
             "the bundled asset path must stay declared",

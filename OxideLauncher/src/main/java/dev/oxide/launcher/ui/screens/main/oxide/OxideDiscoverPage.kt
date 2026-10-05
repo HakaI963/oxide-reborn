@@ -1771,7 +1771,8 @@ private class OxideDiscoverViewModel : ViewModel() {
         // 回调发生在任务系统自己的线程上，状态必须回到主线程写
         viewModelScope.launch {
             if (cleared) return@launch
-            if (taskId !in queueTasks) return@launch
+            // queueTasks 装的是 Task 本身，这里比的是 id，因此不能靠 `in` 的隐式转换
+            if (queueTasks.none { it.id == taskId }) return@launch
             if (!queueEnded.add(taskId)) return@launch
             val queued = install as? DiscoverInstall.Queued ?: return@launch
             val next = discoverQueueRow(

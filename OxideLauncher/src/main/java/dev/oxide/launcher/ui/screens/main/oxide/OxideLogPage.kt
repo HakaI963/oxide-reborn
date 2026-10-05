@@ -157,6 +157,9 @@ fun OxideLogPage(
                 availableWidth = maxWidth,
                 cardMinWidth = metrics.cardMinWidth,
             )
+            // 先把高度取出来：在 Row/Column 的内容 lambda 里，隐式接收者是 RowScope/ColumnScope，
+            // BoxWithConstraintsScope 的 maxHeight 在那里不是一个可用的隐式接收者
+            val availableHeight = maxHeight
 
             Column(modifier = Modifier.fillMaxSize()) {
                 OxideContentHeader(
@@ -200,7 +203,7 @@ fun OxideLogPage(
                             onOpenFolder = {
                                 bridge.openFileManager(PathManager.DIR_LAUNCHER_LOGS.absolutePath)
                             },
-                            availableHeight = maxHeight,
+                            availableHeight = availableHeight,
                         )
 
                         OxideLogViewer(
@@ -236,7 +239,7 @@ fun OxideLogPage(
                                     PathManager.DIR_LAUNCHER_LOGS.absolutePath
                                 )
                             },
-                            availableHeight = maxHeight,
+                            availableHeight = availableHeight,
                         )
 
                         OxideLogViewer(

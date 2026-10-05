@@ -245,7 +245,8 @@ internal fun oxideModsChromeHeight(metrics: OxideMetrics, instanceFacts: Boolean
         MODS_HEADER_ACTION,
         oxideModsLineHeight(MODS_ROW_TITLE_BASE, metrics) +
             if (instanceFacts) {
-                oxideModsLineHeight(MODS_FACTS_BASE, metrics) * MODS_FACTS_LINES
+                // 实例信息那几行也是小标签，与行尾那几行同一份基准行高
+                oxideModsLineHeight(MODS_LABEL_BASE, metrics) * MODS_FACTS_LINES
             } else {
                 0.dp
             },

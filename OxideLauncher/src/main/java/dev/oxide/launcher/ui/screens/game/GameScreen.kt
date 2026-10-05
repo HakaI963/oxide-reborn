@@ -268,9 +268,11 @@ private class GameViewModel(
     val gameTextSender = GameTextSender(viewModelScope)
 
     /** 控制布局控件点击事件处理器 */
-    val eventHandler = EventHandler { event, pressed ->
-        onKeyEvent(event, pressed)
-    }
+    val eventHandler = EventHandler(
+        handle = { event, pressed ->
+            onKeyEvent(event, pressed)
+        }
+    )
 
     /** 处理控制布局类点击事件 */
     fun onKeyEvent(event: ClickEvent, pressed: Boolean) {
