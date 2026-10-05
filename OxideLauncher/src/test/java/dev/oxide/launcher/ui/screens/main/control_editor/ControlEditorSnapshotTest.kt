@@ -255,6 +255,7 @@ class ControlEditorSnapshotTest {
         // 同上：StateFlow 的 .value 不能在组合里读
         val fixture = editorFixture(deviceHeightDp)
         val layout = fixture.layout
+        val layers = fixture.layers
         val selectedLayer = fixture.selectedLayer
         val widgetsInLayer = fixture.widgetsInLayer
 
@@ -349,6 +350,7 @@ class ControlEditorSnapshotTest {
     /** 一次构造里要用的三样东西；取自 StateFlow，因此只能在组合之外读 */
     private data class EditorFixture(
         val layout: ObservableControlLayout,
+        val layers: List<ObservableControlLayer>,
         val selectedLayer: ObservableControlLayer,
         val widgetsInLayer: List<ObservableWidget>,
     )
@@ -362,9 +364,11 @@ class ControlEditorSnapshotTest {
      */
     private fun editorFixture(screenHeightDp: Int): EditorFixture {
         val layout = editorTestLayout(screenHeightDp)
-        val selectedLayer = layout.layers.value.first()
+        val layers = layout.layers.value
+        val selectedLayer = layers.first()
         return EditorFixture(
             layout = layout,
+            layers = layers,
             selectedLayer = selectedLayer,
             widgetsInLayer = selectedLayer.allWidgets(),
         )
