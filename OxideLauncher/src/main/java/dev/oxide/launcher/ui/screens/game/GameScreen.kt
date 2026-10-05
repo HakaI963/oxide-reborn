@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
@@ -88,6 +89,7 @@ import dev.oxide.launcher.ui.screens.game.elements.GameMenuSubscreen
 import dev.oxide.launcher.ui.screens.game.elements.GamepadModePromptDialog
 import dev.oxide.launcher.ui.screens.game.elements.LogBox
 import dev.oxide.launcher.ui.screens.game.elements.LogState
+import dev.oxide.launcher.ui.screens.game.elements.OxideGameBrand
 import dev.oxide.launcher.ui.screens.game.elements.ReplacementControlOperation
 import dev.oxide.launcher.ui.screens.game.elements.ReplacementControlState
 import dev.oxide.launcher.ui.screens.game.elements.SendKeycodeOperation
@@ -693,6 +695,23 @@ fun GameScreen(
                 displayOffset = gameDisplayLayout.offset,
                 onOccupiedPointer = { viewModel.occupiedPointers.add(it) },
                 onReleasePointer = { viewModel.occupiedPointers.remove(it) }
+            )
+        }
+
+        // 游戏画面右下角的 Oxide 品牌标识
+        //
+        // 组合在控制布局层与快捷栏触发层**之后**、游戏菜单与日志框**之前**：
+        // 因此它压得住游戏画面（那一层就是 VMActivity 的 surface），
+        // 又被菜单、对话框与日志完整盖住——它只在"游戏自己在前面"时才露出来。
+        //
+        // 它不吃任何触摸，所以它出现的位置不会改变下面任何一颗控件的命中区域；
+        // 开关与它出现与否都在 AllSettings.showGameBrand 一处决定。
+        // 编辑控制布局时这一层被编辑器整个盖住，因此不组合，省一次绘制。
+        if (!viewModel.isEditingLayout && AllSettings.showGameBrand.state) {
+            OxideGameBrand(
+                availableWidth = maxWidth,
+                availableHeight = maxHeight,
+                modifier = Modifier.align(Alignment.BottomEnd),
             )
         }
 

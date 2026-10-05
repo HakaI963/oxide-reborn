@@ -10,6 +10,11 @@ on:
         description: "Tag whose release the APKs are attached to"
         required: true
         type: string
+      require_oauth_client_id:
+        description: "Fail the build when the OAUTH_CLIENT_ID secret is missing instead of warning"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -70,6 +75,60 @@ jobs:
         with:
           add-job-summary: on-failure
 
+      # The Microsoft application (client) id lives in Actions secrets, never in the repository:
+      # a committed one would let anyone impersonate this launcher's sign-in. An unconfigured
+      # secret expands to an *empty string* rather than being absent, so a release assembled
+      # without this check ships a blank client id and every Microsoft sign-in is rejected with
+      # `invalid_client` - an error that points nowhere near the missing configuration.
+      #
+      # The repository has no such secret yet and it cannot be added from inside the repository, so
+      # the default is a loud warning plus the exact remediation, and the build carries on. Only the
+      # `all` matrix entry runs this so the job summary says it once rather than five times; the
+      # value is repo-wide, so checking it per architecture would add nothing.
+      - name: Check the Microsoft OAuth client id secret
+        if: matrix.arch == 'all'
+        env:
+          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+          REQUIRE_OAUTH_CLIENT_ID: ${{ inputs.require_oauth_client_id }}
+        run: |
+          set -euo pipefail
+          if [ -n "${OAUTH_CLIENT_ID:-}" ]; then
+            echo "OAUTH_CLIENT_ID is set (${#OAUTH_CLIENT_ID} characters; value not shown)."
+            exit 0
+          fi
+          {
+            echo "## :warning: The \`OAUTH_CLIENT_ID\` secret is not set"
+            echo
+            echo "The APKs from this run ship **without** a Microsoft application (client) id, so every"
+            echo "Microsoft sign-in will be rejected by Microsoft with \`invalid_client\`."
+            echo
+            echo "### Remediation"
+            echo
+            echo 'Register the id once as a repository secret:'
+            echo
+            echo '```sh'
+            echo "gh secret set OAUTH_CLIENT_ID                       # prompts for the value"
+            echo "gh secret set OAUTH_CLIENT_ID --body '<client id>'   # or pass it inline"
+            echo '```'
+            echo
+            echo "Or in the repository UI: **Settings > Secrets and variables > Actions > New repository"
+            echo "secret**, named \`OAUTH_CLIENT_ID\`. Then re-run this workflow."
+            echo
+            echo "The value is the **Application (client) ID** of the Azure AD app registration that the"
+            echo "Microsoft login flow uses (tenant \`consumers\`, device code flow, so no redirect URI is"
+            echo "needed). \`.oauth_client_id.txt\` next to the root build script, or the \`oauth_client_id\`"
+            echo "Gradle property, work as local sources."
+            echo
+            echo "To make a missing secret **fail** the build instead of warning, dispatch this workflow"
+            echo "with \`require_oauth_client_id\` enabled."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::OAUTH_CLIENT_ID secret is not set; Microsoft sign-in will fail with invalid_client. See the job summary."
+          if [ "${REQUIRE_OAUTH_CLIENT_ID:-false}" = "true" ]; then
+            echo "::error::require_oauth_client_id was requested but the OAUTH_CLIENT_ID secret is empty."
+            exit 1
+          fi
+          echo "Continuing: the secret is not set yet, and it can only be added from outside the repository."
+
       # The release keystore is not part of the repository. Restore the stored key when the
       # repository provides one, so consecutive releases can be upgrade-installed; otherwise
       # create an ephemeral key that is valid for this run only.
@@ -103,13 +162,17 @@ jobs:
             echo "KEY_ALIAS=$ALIAS"
           } >> "$GITHUB_ENV"
 
+      # The flag is empty unless require_oauth_client_id was requested, so the default is the
+      # Gradle task's warning-and-continue behaviour. The expansion is deliberately unquoted: an
+      # empty value then disappears entirely instead of reaching Gradle as an empty argument.
       - name: Assemble release APK
         env:
           OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          OAUTH_REQUIRE_FLAG: ${{ inputs.require_oauth_client_id && '-PrequireOauthClientId=true' || '' }}
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon assembleRelease -Darch=${{ matrix.arch }}
+          ./gradlew --no-daemon assembleRelease -Darch=${{ matrix.arch }} ${OAUTH_REQUIRE_FLAG:-}
 
       - name: Upload release APK (${{ matrix.arch }})
         uses: actions/upload-artifact@v7

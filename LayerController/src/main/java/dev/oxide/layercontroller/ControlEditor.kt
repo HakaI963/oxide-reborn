@@ -95,6 +95,9 @@ import kotlin.math.roundToInt
  * @param focusedLayer 聚焦的层级，需要针对性对某一层级进行编辑时
  * @param localSnapRange 局部吸附范围（仅在Local模式下有效）
  * @param snapThresholdValue 吸附距离阈值
+ * @param interactive 画布是否接收编辑手势。为 false 时背景点击、控件的拖动/点选与
+ * 两个缩放手柄全部不再安装指针输入，画布只剩绘制——菜单面板压在上面时必须这样，
+ * 否则落在面板上的一下会同时被下面的控件看见
  */
 @Composable
 fun ControlEditorLayer(
@@ -109,7 +112,8 @@ fun ControlEditorLayer(
     focusedLayer: ObservableControlLayer? = null,
     isDark: Boolean = isSystemInDarkTheme(),
     localSnapRange: Dp = 20.dp,
-    snapThresholdValue: Dp = 4.dp
+    snapThresholdValue: Dp = 4.dp,
+    interactive: Boolean = true
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         val primaryColor = MaterialTheme.colorScheme.primary
@@ -140,17 +144,21 @@ fun ControlEditorLayer(
             /** 拖动中的右下角的手柄位置 BottomRight */
             var dragBR by remember { mutableStateOf(Offset.Zero) }
 
-            //空白可点击层，点击背景清除选中的按钮
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(0f)
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                        onClick = onBackgroundClick
-                    )
-            )
+            //空白可点击层，点击背景清除选中的按钮。
+            //interactive 为 false 时整层不组合：它是全屏命中区，只要它在，
+            //落在停靠面板上的那一下就仍然会被画布当成"点了背景"而清掉选择
+            if (interactive) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .alpha(0f)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() },
+                            onClick = onBackgroundClick
+                        )
+                )
+            }
 
             val density = LocalDensity.current
             val screenSize = remember(maxWidth, maxHeight) {
@@ -191,6 +199,7 @@ fun ControlEditorLayer(
                 snapMode = snapMode,
                 localSnapRange = localSnapRange,
                 snapThresholdValue = snapThresholdValue,
+                interactive = interactive,
                 onButtonTap = onButtonTap,
                 drawLine = { data, line ->
                     guideLines[data] = line
@@ -226,8 +235,11 @@ fun ControlEditorLayer(
                 }
             }
 
-            //绘制调整大小的手柄
+            //绘制调整大小的手柄。
+            //interactive 为 false 时手柄整个不组合：每个手柄都是 30dp 的全屏同级命中区，
+            //它装上就意味着停在它下面的面板行会被手柄抢走
             selectedWidget?.takeIf { widget ->
+                interactive &&
                 //控件的大小类型为包裹内容时，调整大小是无意义的
                 widget.widgetSize.type != ButtonSize.Type.WrapContent
             }?.let { widget ->
@@ -489,6 +501,7 @@ private fun DrawScope.drawLine(
  * @param snapThresholdValue 吸附距离阈值
  * @param drawLine 绘制吸附参考线
  * @param onLineCancel 取消吸附参考线
+ * @param interactive 是否安装编辑手势。为 false 时控件只画不响应指针输入
  */
 @Composable
 private fun ControlWidgetRenderer(
@@ -504,7 +517,8 @@ private fun ControlWidgetRenderer(
     snapThresholdValue: Dp,
     onButtonTap: (data: ObservableWidget, layer: ObservableControlLayer) -> Unit,
     drawLine: (ObservableWidget, List<GuideLine>) -> Unit,
-    onLineCancel: (ObservableWidget) -> Unit
+    onLineCancel: (ObservableWidget) -> Unit,
+    interactive: Boolean
 ) {
     val allWidgetsMap = remember { mutableStateMapOf<ObservableControlLayer, List<ObservableWidget>>() }
     val snapInAllLayers1 by rememberUpdatedState(snapInAllLayers)
@@ -516,7 +530,9 @@ private fun ControlWidgetRenderer(
         isPressed: Boolean
     ) {
         TextButton(
-            isEditMode = true,
+            // false 时 Modifier.editMode 整个不挂上去，
+            // 于是 detectDragGestures 与 detectTapGestures 都不会安装
+            isEditMode = interactive,
             data = data,
             allStyles = styles,
             screenSize = screenSize,
@@ -566,7 +582,7 @@ private fun ControlWidgetRenderer(
                         joystickStyles = joystickStyles,
                         screenSize = screenSize,
                         isDark = isDark,
-                        isEditMode = true,
+                        isEditMode = interactive,
                         enableSnap = enableSnap,
                         snapMode = snapMode,
                         localSnapRange = localSnapRange,

@@ -19,7 +19,9 @@
 package dev.oxide.launcher.game.account.offline
 
 import dev.oxide.launcher.BuildKeys
+import dev.oxide.launcher.context.GlobalContext
 import dev.oxide.launcher.game.account.Account
+import dev.oxide.launcher.game.account.isLocalAccount
 import dev.oxide.launcher.game.account.wardrobe.SkinModelType
 import dev.oxide.launcher.utils.logging.Logger
 import io.ktor.http.ContentType
@@ -59,6 +61,33 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "OfflineYggdrasil"
+
+/**
+ * 随包分发的默认皮肤与默认披风（assets/ 下，与既有的 assets/steve.png 同处一地）
+ */
+private const val DEFAULT_SKIN_ASSET = "default_skin.png"
+private const val DEFAULT_CAPE_ASSET = "default_cape.png"
+
+/**
+ * 账号缺少本地贴图时的内置默认值
+ *
+ * **只对离线账号生效**：微软账号的皮肤由 Mojang 下发、Ely.by 账号的皮肤由其认证服务器下发，
+ * 账号自带的披风（offline/local 之外的账号同样可以在衣橱里保存披风）也都保存在
+ * DIR_ACCOUNT_CAPE 下。这三者都以本地文件为准，只有当本地文件不存在、且账号本身是离线
+ * 账号时，才回落到内置贴图，所以绝不会覆盖用户自己的选择。
+ *
+ * 读取失败（资源缺失、GlobalContext 尚未初始化等）一律返回 null，退回到改动之前的行为：
+ * 游戏使用原版 Steve/Alex，而不是让整个启动流程失败。
+ */
+private fun Account.defaultTextureOrNull(assetName: String): ByteArray? {
+    if (!isLocalAccount()) return null
+
+    return runCatching {
+        GlobalContext.assets.open(assetName).use { it.readBytes() }
+    }.onFailure {
+        Logger.warning(TAG, "Could not read the bundled default texture $assetName", it)
+    }.getOrNull()
+}
 
 /**
  * 离线账号 Yggdrasil 服务器，用于本地加载玩家皮肤、披风
@@ -171,11 +200,15 @@ class OfflineYggdrasilServer(
         val skinFile = account.getSkinFile()
         val capeFile = account.getCapeFile()
 
+        // 离线账号从不下载贴图（downloadYggdrasil 的 baseUrl 对它为 null），此前这里因此永远是
+        // null，游戏里只会看到原版 Steve/Alex。改为在本地贴图缺失时回落到内置默认贴图。
         val skinBytes = skinFile.takeIf { it.exists() }?.readBytes()
+            ?: account.defaultTextureOrNull(DEFAULT_SKIN_ASSET)
         val skinHash = skinBytes?.let { DigestUtils.digestToString("SHA-256", it) }
         // The /textures endpoint already serves capes, but the cape was never loaded here, so an
         // account that only has a cape never showed one in game.
         val capeBytes = capeFile.takeIf { it.exists() }?.readBytes()
+            ?: account.defaultTextureOrNull(DEFAULT_CAPE_ASSET)
         val capeHash = capeBytes?.let { DigestUtils.digestToString("SHA-256", it) }
 
         val character = Character(

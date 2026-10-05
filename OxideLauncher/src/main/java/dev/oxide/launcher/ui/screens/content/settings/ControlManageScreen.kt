@@ -18,6 +18,9 @@
 
 package dev.oxide.launcher.ui.screens.content.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.horizontalScroll
@@ -61,6 +64,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,10 +100,12 @@ import dev.oxide.layercontroller.utils.VERSION_NAME_LENGTH
 import dev.oxide.layercontroller.utils.newRandomFileName
 import dev.oxide.layercontroller.utils.saveToFile
 import dev.oxide.launcher.R
+import dev.oxide.launcher.game.control.CONTROL_LAYOUT_MIME_TYPE
 import dev.oxide.launcher.game.control.ControlData
 import dev.oxide.launcher.game.control.ControlManager
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.setting.AllSettings
+import dev.oxide.launcher.ui.AndroidStringText
 import dev.oxide.launcher.ui.activities.startEditorActivity
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.base.BaseScreen
@@ -133,6 +139,7 @@ import dev.oxide.launcher.utils.string.getMessageOrToString
 import dev.oxide.launcher.utils.string.isEmptyOrBlank
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import dev.oxide.launcher.viewmodel.EventViewModel
+import dev.oxide.launcher.viewmodel.sendToast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -223,10 +230,64 @@ fun ControlManageScreen(
 ) {
     val viewModel = rememberControlViewModel()
     val dataList by ControlManager.dataList.collectAsStateWithLifecycle()
+    // 导出的是当前选中的那一份，因此选中项与列表读同一个 StateFlow
+    val selectedLayout by ControlManager.selectedLayout.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // 刻意不叫 scope：AnimatedRow 的 lambda 也叫 scope，exportScope 才不会被下面那一层遮住
+    val exportScope = rememberCoroutineScope()
 
     val configuration = LocalConfiguration.current
     val locale = configuration.locales[0]
+
+    /**
+     * 导出：目标位置由系统的创建文档契约给出
+     *
+     * 选中项先进中转站，再交给系统文件选择器决定写到哪儿——这一段与账号备份那几处的写法一致。
+     * 中转站存在的理由和它们一样：布局对象活在对齐/观察的包装里，不能跨过系统选择器那一步。
+     */
+    var pendingExport by remember { mutableStateOf<ControlData?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(CONTROL_LAYOUT_MIME_TYPE)
+    ) { uri: Uri? ->
+        val data = pendingExport
+        pendingExport = null
+        if (uri == null || data == null) return@rememberLauncherForActivityResult
+
+        fun reportError(message: AndroidStringText) {
+            submitError(
+                ErrorViewModel.ThrowableMessage(
+                    title = androidText(R.string.control_manage_failed_to_save),
+                    message = message
+                )
+            )
+        }
+
+        val outputStream = try {
+            context.contentResolver.openOutputStream(uri)
+        } catch (e: Exception) {
+            reportError(androidText(e.getMessageOrToString()))
+            return@rememberLauncherForActivityResult
+        }
+        if (outputStream == null) {
+            reportError(androidText("Could not open the chosen file for writing"))
+            return@rememberLauncherForActivityResult
+        }
+
+        exportScope.launch {
+            var done = false
+            ControlManager.exportControl(
+                data = data,
+                outputStream = outputStream,
+                onError = { e ->
+                    reportError(androidText(e.getMessageOrToString()))
+                },
+                onFinished = { done = true }
+            )
+            if (done) {
+                eventViewModel.sendToast(androidText(R.string.generic_done))
+            }
+        }
+    }
 
     ControlOperation(
         operation = viewModel.operation,
@@ -265,7 +326,6 @@ fun ControlManageScreen(
         Triple(key, mainScreenKey, false),
         Triple(NormalNavKey.Settings.ControlManager, settingsScreenKey, false)
     ) { isVisible ->
-        val selectedLayout by ControlManager.selectedLayout.collectAsStateWithLifecycle()
         val isRefreshing by ControlManager.isRefreshing.collectAsStateWithLifecycle()
 
         AnimatedRow(
@@ -282,11 +342,21 @@ fun ControlManageScreen(
                     dataList = dataList,
                     locale = locale,
                     isLoading = isRefreshing,
+                    // 没有选中项就没什么可导出的，按钮因此只在真的有选中项时可点
+                    canExport = selectedLayout != null,
                     onRefresh = {
                         ControlManager.refresh()
                     },
                     onCreate = {
                         viewModel.operation = ControlOperation.CreateNew
+                    },
+                    onExport = {
+                        // 文件名沿用布局在磁盘上的那份：布局名里的字符不受文件名规则约束，
+                        // 用它当建议名迟早被系统选择器改掉，而这份名字一定合法
+                        selectedLayout?.let { data ->
+                            pendingExport = data
+                            exportLauncher.launch(data.file.name)
+                        }
                     },
                     onCopy = { data ->
                         viewModel.copyNew(data.controlLayout) { e ->
@@ -445,8 +515,10 @@ private fun ControlLayoutList(
     dataList: List<ControlData>,
     locale: Locale,
     isLoading: Boolean,
+    canExport: Boolean,
     onRefresh: () -> Unit,
     onCreate: () -> Unit,
+    onExport: () -> Unit,
     onCopy: (ControlData) -> Unit,
     onDelete: (ControlData) -> Unit,
     eventViewModel: EventViewModel,
@@ -467,6 +539,8 @@ private fun ControlLayoutList(
                 modifier = Modifier.fillMaxWidth(),
                 onRefresh = onRefresh,
                 onCreate = onCreate,
+                onExport = onExport,
+                canExport = canExport,
                 eventViewModel = eventViewModel,
             )
 
@@ -517,6 +591,8 @@ private fun ControlListHeader(
     modifier: Modifier = Modifier,
     onRefresh: () -> Unit,
     onCreate: () -> Unit,
+    onExport: () -> Unit,
+    canExport: Boolean,
     eventViewModel: EventViewModel,
 ) {
     CardTitleLayout {
@@ -548,6 +624,14 @@ private fun ControlListHeader(
                 progressUris = { uris ->
                     eventViewModel.sendEvent(EventViewModel.Event.ImportControls(uris))
                 }
+            )
+            //导出：紧挨着导入，方向相反；没有选中项时无事可导，按钮因此禁用而不是弹空窗
+            IconTextButton(
+                onClick = onExport,
+                painter = painterResource(R.drawable.ic_file_export_outlined),
+                contentDescription = stringResource(R.string.control_manage_export_description),
+                text = stringResource(R.string.control_manage_export),
+                enabled = canExport,
             )
             IconTextButton(
                 onClick = onCreate,

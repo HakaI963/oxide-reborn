@@ -24,7 +24,6 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.core.net.toUri
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.oxide.launcher.R
 import dev.oxide.launcher.context.COPY_LABEL_LINK
 import dev.oxide.launcher.game.download.engine.DownloadEngine
@@ -32,7 +31,7 @@ import dev.oxide.launcher.game.download.engine.DownloadRequest
 import dev.oxide.launcher.path.DOWNLOAD_OKHTTP_CLIENT
 import dev.oxide.launcher.path.TIME_OUT
 import dev.oxide.launcher.path.createRequestBuilder
-import dev.oxide.launcher.ui.theme.showThemed
+import dev.oxide.launcher.ui.screens.main.oxide.showOxideLinkDialog
 import dev.oxide.launcher.utils.copyText
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.utils.string.isEmptyOrBlank
@@ -233,6 +232,18 @@ fun Activity.openLink(link: String) {
 
 /**
  * 展示一个提示弹窗，告知用户接下来将要在浏览器内访问的链接，用户可以选择不进行访问
+ *
+ * 此前这里是一个 Material 的 `MaterialAlertDialogBuilder`：灰卡片 + 鲑鱼色文字按钮，
+ * 是 Oxide 界面上唯一还在用的那套 Material 外观，而且它从设置页的"下载"一路可达
+ * （`OxideNativeInvoker.openLink`）。现在走 [showOxideLinkDialog]，面板、正文与
+ * 三枚按钮都由 Oxide 那套对话框拼出来。
+ *
+ * 三行文案、剪贴板标签与打开行为都没有变，公开签名也保持原样——依赖它的调用点很多。
+ *
+ * **不要再在这里引回 `MaterialAlertDialogBuilder`。** 它的 import 已被移除，因此
+ * 编译器会直接挡住回退；`OxideLegacyDialogGuardTest` 另外从源码上钉住这一点，
+ * 因为这个文件的调用链要穿过 JNI 桥接，编译器管不到调用方那一侧。
+ *
  * @param link 要访问的链接
  * @param dataType 设置 intent 的数据以及显式 MIME 数据类型
  */
@@ -241,20 +252,20 @@ fun Activity.openLink(link: String, dataType: String?) {
         return
     }
 
-    MaterialAlertDialogBuilder(this)
-        .setTitle(R.string.generic_open_link)
-        .setMessage(link)
-        .setPositiveButton(R.string.generic_confirm) { _, _ ->
-            openLinkInternal(link, dataType)
-        }
-        .setNegativeButton(R.string.generic_cancel) { dialog, _ ->
-            dialog.dismiss()
-        }
-        .setNeutralButton(R.string.generic_copy) { dialog, _ ->
-            copyText(COPY_LABEL_LINK, link, this)
-            dialog.dismiss()
-        }
-        .showThemed()
+    showOxideLinkDialog(
+        context = this,
+        title = getString(R.string.generic_open_link),
+        link = link,
+        confirmText = getString(R.string.generic_confirm),
+        cancelText = getString(R.string.generic_cancel),
+        copyText = getString(R.string.generic_copy),
+        onOpen = { opened ->
+            openLinkInternal(opened, dataType)
+        },
+        onCopy = { copied ->
+            copyText(COPY_LABEL_LINK, copied, this)
+        },
+    )
 }
 
 /**

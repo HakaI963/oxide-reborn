@@ -114,6 +114,7 @@
     <string name="crash_share_logs">Share Logs</string>
     <string name="crash_restart">Restart</string>
     <string name="crash_exit">Exit</string>
+    <string name="crash_rotate">Rotate screen</string>
     <string name="crash_link_share_button">Share Link</string>
     <string name="crash_link_share_tip">The launcher will upload game logs to a public platform. You will receive a link that can be conveniently shared with others for diagnosis.</string>
     <string name="crash_link_share_uploading">Uploading logs to %s</string>
@@ -1125,6 +1126,8 @@
     <string name="control_manage_info_description_empty">No description</string>
     <string name="control_manage_info_edit">Edit Control Layout</string>
     <string name="control_manage_import">Import control layout</string>
+    <string name="control_manage_export">Export control layout</string>
+    <string name="control_manage_export_description">Write the selected control layout to a file you choose</string>
     <string name="control_manage_import_failed">Failed to import control layout file</string>
     <string name="control_manage_import_failed_to_parse">Control layout format error, the launcher cannot recognize it!</string>
     <string name="control_editor_menu_title">Editor Menu</string>
@@ -1219,9 +1222,12 @@
     <string name="control_editor_edit_event_key">Key</string>
     <string name="control_editor_edit_event_key_new">Add New Trigger Key Value</string>
     <string name="control_editor_edit_event_key_value">Trigger Key Value: %s</string>
+    <string name="control_editor_edit_event_key_delay">Trigger Key Delay</string>
     <string name="control_editor_edit_event_swipple">Swipe Trigger</string>
     <string name="control_editor_edit_event_penetrable">Move with Mouse</string>
     <string name="control_editor_edit_event_toggleable">Toggleable</string>
+    <string name="control_editor_edit_event_macro">Hold to Repeat</string>
+    <string name="control_editor_edit_event_macro_interval">Repeat Interval</string>
     <string name="control_editor_edit_visibility">Visibility Scenario</string>
     <string name="control_editor_edit_visibility_always">Always Visible</string>
     <string name="control_editor_edit_visibility_in_game">Visible In-Game</string>
@@ -1869,6 +1875,8 @@
     <string name="oxide_set_show_memory_detail">Draw the used memory on the in-game floating menu.</string>
     <string name="oxide_set_show_menu_ball">Floating menu</string>
     <string name="oxide_set_show_menu_ball_detail">Show the in-game floating menu.</string>
+    <string name="oxide_set_show_game_brand">Oxide branding</string>
+    <string name="oxide_set_show_game_brand_detail">Draw a small Oxide mark in the corner of the running game.</string>
     <string name="oxide_set_menu_ball_opacity">Floating menu opacity</string>
     <string name="oxide_set_hotbar_rule">Hotbar hit box</string>
     <string name="oxide_set_hotbar_rule_detail">How the hotbar hit box is calculated.</string>

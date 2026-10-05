@@ -85,8 +85,12 @@ import java.io.File
  *
  * 触摸的分工（画布是一块正在接收游戏输入的活表面，这一层不能搞错）：
  *
- * - 面板**开着**时，遮罩与面板吃掉落在它们身上的事件，剩下的那半块画布照旧可拖。
- * - 面板**关着**时，悬浮球吃掉自己那一小块，其余全部落到画布。
+ * - 面板**开着**时，画布整块**不接收编辑手势**（`ControlEditorLayer` 的
+ *   `interactive = false`）：它的全屏背景点击、控件的拖动/点选与两个缩放手柄
+ *   全都不再安装指针输入。遮罩仍然吃掉落在它身上的事件，画布则退成一块纯画面。
+ *   这不是保守——面板只是压在画布上而不是把它换掉，面板底下那一块画布同样会
+ *   收到同一路指针事件，于是被点中的那一行会因为 `selectedWidget` 被改写而跳走。
+ * - 面板**关着**时，画布恢复成可拖可点，悬浮球吃掉自己那一小块。
  * - 画布上那排快捷按钮由 `ControlEditorLayer` 摆在选中控件下方；它们同样自己
  *   消费事件，因此点它们不会顺带被画布当成"点背景"而清掉选择。
  *
@@ -172,7 +176,14 @@ fun BoxWithConstraintsScope.ControlEditor(
                 snapInAllLayers = AllSettings.editorSnapInAllLayers.state,
                 snapMode = AllSettings.editorWidgetSnapMode.state,
                 focusedLayer = viewModel.selectedLayer?.takeIf { viewModel.isLayerFocus },
-                isDark = isLauncherInDarkTheme()
+                isDark = isLauncherInDarkTheme(),
+                // 停靠面板开着的时候画布整块变成只读的。面板只是"压"在画布上，
+                // 画布本身仍然是一块活表面：它的全屏背景点击、控件的拖动/点选与两个
+                // 30dp 缩放手柄都装在画布这一层，落在面板行上的那一下会同时被它们看到。
+                // onTapInEditMode 于是改写 viewModel.selectedWidget，被点中的那一行立刻
+                // 跳走（列表会自动滚到选中项）——这就是 v1.7.0 里"整块面板只有退出那
+                // 三个按钮点得动"的原因
+                interactive = viewModel.editorMenu != MenuState.SHOW,
             )
         }
     }
@@ -323,6 +334,10 @@ fun BoxWithConstraintsScope.ControlEditor(
             onPositionChanged = { viewModel.editorBallPosition = it },
             opened = dockOpen,
             onClick = { viewModel.switchMenu() },
+            // 尺寸取这一层自己的作用域，不是球自己的：球的拖动边界要按整块画布算，
+            // 内部再套一层量到自身就永远量不到可移动的范围了
+            containerWidth = maxWidth,
+            containerHeight = maxHeight,
         )
     }
 

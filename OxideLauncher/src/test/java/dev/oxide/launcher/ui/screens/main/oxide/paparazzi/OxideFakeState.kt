@@ -189,4 +189,54 @@ object OxideFake {
     /** Same titles across five ids, one per platform kind, so each row has a distinct identity. */
     fun modProjectIds(): List<String> =
         modTitles().mapIndexed { index, _ -> "project-${index + 1}" }
+
+    // -----------------------------------------------------------------------
+    // Logs
+    // -----------------------------------------------------------------------
+
+    /**
+     * [count] lines of a real-looking game log, in the order they would appear in the file.
+     *
+     * Deterministic by construction: the same [count] always produces the same lines, because the
+     * timestamp is derived from the line index rather than from a clock. That is what lets the
+     * `Logs_Pane_Large` golden show a tailed log without it turning into a flake.
+     *
+     * The shapes are the ones a launcher's `latest.log` actually contains — a startup banner, per
+     * subsystem lines, and a stack trace under an `ERROR` — rather than `lorem ipsum`, so a golden
+     * that shows a line getting clipped shows a line that really is that long. Stack frames are
+     * longer than the card is wide on purpose: that horizontal overflow is the thing the terminal's
+     * horizontal scrolling exists for.
+     */
+    fun logLines(count: Int): List<String> {
+        if (count <= 0) return emptyList()
+        return (1..count).map { line ->
+            when {
+                line == 1 -> "[07:28:14] [main/INFO]: Environment: Environment[sessionHost=https://sessionserver.mojang.com,"
+                line == 2 -> "[07:28:14] [main/INFO]: Environment: Session host: https://sessionserver.mojang.com,"
+                line <= BANNER_END -> "[07:28:14] [main/INFO]: Environment: ModLauncher: 11.0.1"
+                else -> logBodyLine(line)
+            }
+        }
+    }
+
+    /** The banner block runs for the first few lines, then the body repeats a fixed cycle. */
+    private const val BANNER_END = 3
+
+    /**
+     * One steady-state log line.
+     *
+     * The stack-trace frame is deliberately long enough to need horizontal scrolling: it is the
+     * only way a plain `Text` can stand in for `SoraEditor` while still showing what the golden is
+     * about — a terminal that fills the whole pane and scrolls sideways.
+     */
+    private fun logBodyLine(line: Int): String = when (line % 4) {
+        0 -> "[07:28:2${line % 10}] [Render thread/INFO]: Backend library: LWJGL version 3.3.3"
+
+        1 -> "[07:28:2${line % 10}] [Render thread/ERROR]: Failed to create backend Vulkan"
+
+        2 -> "    at knot//com.mojang.blaze3d.systems.RenderSystem.reportRenderableCrash(RenderSystem.java:626)" +
+            " (Direct method handle: Owner Object=null, Receiver Object=null)"
+
+        else -> "    at knot//net.minecraft.client.Minecraft.<init>(Minecraft.java:530)"
+    }
 }

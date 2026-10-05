@@ -38,9 +38,12 @@ import dev.oxide.layercontroller.data.ButtonPosition
 import dev.oxide.layercontroller.data.ButtonSize
 import dev.oxide.layercontroller.data.JOYSTICK_MIN_SIZE_DP
 import dev.oxide.layercontroller.data.JOYSTICK_MIN_SIZE_PERCENTAGE
+import dev.oxide.layercontroller.data.MACRO_MAX_INTERVAL_MS
+import dev.oxide.layercontroller.data.MACRO_MIN_INTERVAL_MS
 import dev.oxide.layercontroller.data.MIN_SIZE_DP
 import dev.oxide.layercontroller.data.SIZE_PERCENTAGE_EDITOR
 import dev.oxide.layercontroller.data.VisibilityType
+import dev.oxide.layercontroller.data.clampMacroIntervalMs
 import dev.oxide.layercontroller.observable.ObservableJoystickData
 import dev.oxide.layercontroller.observable.ObservableNormalData
 import dev.oxide.layercontroller.observable.ObservableTextData
@@ -50,6 +53,7 @@ import dev.oxide.launcher.ui.base.BaseScreen
 import dev.oxide.launcher.ui.screens.TitledNavKey
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutListItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSliderItem
+import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSwitchItem
 import dev.oxide.launcher.ui.screens.main.control_editor.getVisibilityText
 
 /**
@@ -111,6 +115,12 @@ fun EditWidgetInfo(
                         buttonSize = data.buttonSize,
                         onButtonSizeChanged = { data.buttonSize = it }
                     )
+
+                    item {
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+
+                    macroInfos(data)
                 }
                 is ObservableJoystickData -> {
                     joystickInfos(
@@ -317,6 +327,44 @@ private fun LazyListScope.commonInfos(
             }
         }
         ButtonSize.Type.WrapContent -> {}
+    }
+}
+
+/**
+ * 按住自动重复（宏）
+ *
+ * 开关与间隔在数据层是同一个字段（0 表示关闭），因此这里只有一个开关加一个间隔滑杆，
+ * 而不是两个各自独立的设置——两个独立设置必然有一个组合是"开着但不重复"。
+ */
+private fun LazyListScope.macroInfos(data: ObservableNormalData) {
+    val enabled = data.macroIntervalMs > 0L
+
+    item {
+        InfoLayoutSwitchItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_event_macro),
+            value = enabled,
+            onValueChange = { checked ->
+                // 打开时给一个下界值，而不是 0：0 就是"关闭"，留在 0 等于开了个空档
+                data.macroIntervalMs = if (checked) MACRO_MIN_INTERVAL_MS else 0L
+            }
+        )
+    }
+
+    if (enabled) {
+        item {
+            InfoLayoutSliderItem(
+                modifier = Modifier.fillMaxWidth(),
+                title = stringResource(R.string.control_editor_edit_event_macro_interval),
+                value = data.macroIntervalMs.toFloat(),
+                onValueChange = {
+                    data.macroIntervalMs = clampMacroIntervalMs(it)
+                },
+                valueRange = MACRO_MIN_INTERVAL_MS.toFloat()..MACRO_MAX_INTERVAL_MS.toFloat(),
+                decimalFormat = "#0",
+                suffix = "ms"
+            )
+        }
     }
 }
 

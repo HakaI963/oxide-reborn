@@ -105,7 +105,8 @@ import kotlin.math.roundToInt
  * 1. **不做每帧的工作**。格式化按输入缓存，数字解析只发生在一次提交之前，
  *    轨道与定位板用 `Canvas` 一遍画完而不是拼一串 `Box`。
  * 2. **不抢画布的触摸**。每一行只消费自己收到的事件，[editorConsumeTouches] 只挂在
- *    停靠面板与遮罩这两块"整片都该吃掉"的地方，因此面板外的那一下点击仍然落到
+ *    遮罩这一块"整片都该吃掉"的地方（面板那一侧改由 `ControlEditorLayer` 的
+ *    `interactive = false` 整体关掉画布输入），因此面板外的那一下点击仍然落到
  *    控制布局上，而不是被顺手吞掉。
  * 3. **状态不靠颜色说话**。开关用 `Role.Switch`，单选用 `Role.RadioButton`，滑杆给出
  *    `ProgressBarRangeInfo` 与 `setProgress`，选中项除了强调色还多一条指示条与
@@ -1210,9 +1211,23 @@ internal fun EditorScrim(onClick: () -> Unit) {
     )
 }
 
-/** 停靠面板共用的填充色：一层低透明度的面 + 面板渐变 */
+/**
+ * 停靠面板共用的填充色：不透明的面 + 面板渐变
+ *
+ * 底色是 [Oxide.BgElevated] 而不是 [Oxide.SurfaceBase]。后者深色下只有
+ * `0x170A0A0A`（约 9% 不透明），是给**卡片**用的：卡片浮在不透明页面上没问题，
+ * 拿来做面板就正好变成"能看穿"——而这块面板压着的恰恰是控制布局画布本身。
+ * v1.7.0 的设备截图里，画布上的控件从面板的每一行底下透出来，于是整个面板读起来
+ * 像"控件盖在面板上面"，每一行看上去都点不动。
+ *
+ * 选 [Oxide.BgElevated] 而不是新造一个颜色，是因为它就是启动器里其它二级表面
+ * 已经用的那一块不透明底：[OxideSubWindow] 的面板本体、[OxideContentSurface]、
+ * [OxideDialogs] 与 [OxideLicencePanel] 都是它，理由逐字相同。斜向高光
+ * （[Oxide.SurfaceBrush]）仍然叠在上面，层次关系与圆角、描边一概没动——
+ * 变的只有"底下透不透着"。
+ */
 internal fun Modifier.editorPanelBackground(): Modifier = this
-    .background(Oxide.SurfaceBase)
+    .background(Oxide.BgElevated)
     .background(Oxide.SurfaceBrush)
 
 /** 面板里带内边距的一列。给面板外那些仍然是旧结构的对话框用 */

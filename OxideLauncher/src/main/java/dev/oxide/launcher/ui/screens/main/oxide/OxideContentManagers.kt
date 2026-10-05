@@ -46,6 +46,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,9 +63,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.oxide.launcher.R
 import dev.oxide.launcher.game.version.installed.Version
@@ -76,6 +79,7 @@ import dev.oxide.launcher.game.version.saves.isCompatible
 import dev.oxide.launcher.game.version.saves.parseLevelDatFile
 import dev.oxide.launcher.ui.screens.content.versions.elements.ShaderPackInfo
 import dev.oxide.launcher.ui.theme.Oxide
+import dev.oxide.launcher.ui.theme.oxideScaledTextStyle
 import dev.oxide.launcher.utils.file.formatFileSize
 import dev.oxide.launcher.utils.formatDate
 import dev.oxide.launcher.utils.logging.Logger
@@ -100,8 +104,12 @@ private const val RENAME_MAX_LENGTH = 120
  *
  * 与设置页那一列同一套推导：155px 起步、跟着界面缩放一起放大，再夹在 132..260dp 之间。
  * 窄到这个宽度放不下"分类 + 面板"时就折叠成顶部一排横向标签。
+ *
+ * 选中动作那一栏（[OxideContentSelectionRail]）用的是**同一个**宽度：它是同一次
+ * 会话里第二条窄栏，两条窄栏等宽才读得出它们是一对；而且这一栏上的按钮有
+ * "删除选中"这样的长文案，宽度必须跟着界面缩放走，不能写死一个 dp。
  */
-private fun OxideMetrics.contentRailWidth(): Dp = (155f * guiScale).coerceIn(132f, 260f).dp
+internal fun OxideMetrics.contentRailWidth(): Dp = (155f * guiScale).coerceIn(132f, 260f).dp
 
 /**
  * 一个实例的五类内容
@@ -304,6 +312,146 @@ private fun OxideContentCategoryItem(
 }
 
 // ---------------------------------------------------------------------------
+// 版面（纯函数）
+//
+// 这一块面板在列表上方占掉多少高度、以及选中动作那一栏有多宽，都可以脱离组合算出来，
+// 因此"勾选任何东西都不会让下面的列表变矮"这句话能钉在普通 JVM 单测里，
+// 而不是靠人眼在设备上数行。做法与 [oxideModsPanelLayout] 同一套：把组合里的
+// 算术搬成纯函数，UI 与单测共用同一个数。
+//
+// 文字的行高不读 `Oxide.Type`：那几份跟着设置变，在没有 MMKV 的 JVM 单测里读不到。
+// 这里把基准行高各存一份（与 `OxideModsSurface` / `OxideLogPage` 里的做法相同），
+// 再乘 [OxideMetrics.guiScale]——几何与排版因此仍然是同一个比例。
+// ---------------------------------------------------------------------------
+
+/**
+ * 分类面板的版面
+ *
+ * @param chromeHeight 列表上方那一整块占掉的高度，见 [oxideContentChromeHeight]
+ * @param railWidth 选中动作栏的宽度；没有选中时是 0.dp（那一栏整个不画）
+ * @param selectionRowHeight 选中动作在纵向流里占掉的高度。横过来之后恒为 0.dp
+ */
+@Immutable
+internal data class OxideContentPanelLayout(
+    val chromeHeight: Dp,
+    val railWidth: Dp,
+    val selectionRowHeight: Dp,
+)
+
+/**
+ * 分类面板的版面
+ *
+ * [selected] 只影响 [OxideContentPanelLayout.railWidth]：选中动作现在住在与搜索/筛选
+ * 并排的那一条窄栏里，是横向的，因此**不占纵向空间**。
+ * [hasImportRow] 只决定"从设备导入"那一行在不在（截图不支持导入）。
+ *
+ * 两个参数都不会改变 [OxideContentPanelLayout.chromeHeight] 与
+ * [OxideContentPanelLayout.selectionRowHeight]：这正是本次要修的那条回归。
+ */
+internal fun oxideContentPanelLayout(
+    metrics: OxideMetrics,
+    category: OxideContentCategory,
+    hasImportRow: Boolean = true,
+    selected: Boolean = false,
+): OxideContentPanelLayout = OxideContentPanelLayout(
+    chromeHeight = oxideContentChromeHeight(metrics, category, hasImportRow),
+    railWidth = if (selected) metrics.contentRailWidth() else 0.dp,
+    // 此前"删除选中 / 取消选择"是压在列表上面的一整行 28dp 加一段间距，
+    // 那一行现在住进右边的窄栏，因此在纵向流里不再占任何高度
+    selectionRowHeight = 0.dp,
+)
+
+/**
+ * 列表上方那一整块占多高
+ *
+ * 与 [OxideSettingsGroup] 内部那一列的子项一一对应，顺序也一样：
+ *
+ *  - 小节标题那一行（[OxideSection]）与它下方的 6dp 留白；
+ *  - [OxideSurface] 的上下各 [OxideMetrics.rowGap] 内边距；
+ *  - 搜索框（[OxideMetrics.secInputHeight]）与它后面那一段显式的间距；
+ *  - "排序 + 刷新 + 只看有效 + 全选"那一行——"全选"此前独占一整行，
+ *    现在并进本来就有的一行，因此它不再多花掉任何纵向空间；
+ *  - 模组之外那三类没有状态筛选；[OxideContentCategory.canEnable] 说了算；
+ *  - "从设备导入"那一行（[hasImportRow] 为 false 时没有）。
+ *  - 分组底下与列表之间的那一段 [OxideMetrics.cardGap]。
+ *
+ * 不计入的只有**一次性反馈条**（错误、提示、就地确认与改名输入框）：它们出现时本来就会
+ * 占位置，但那是一次性的状态，不是这一块的常态版面。选中动作那一栏同样不在这里——
+ * 它是横向的，见 [oxideContentPanelLayout]。
+ */
+internal fun oxideContentChromeHeight(
+    metrics: OxideMetrics,
+    category: OxideContentCategory,
+    hasImportRow: Boolean,
+): Dp {
+    // 与组合里那一列的子项逐项对应：显式的 Spacer 也算一个子项，
+    // 因为 Column 自己的 spacedBy 会在它们之间**再**加一段
+    val children = buildList {
+        add(metrics.secInputHeight)
+        add(metrics.secRowGap)
+        add(contentControlRowHeight(metrics))
+        if (category.canEnable) {
+            add(metrics.secRowGap)
+            add(contentChipRowHeight(metrics))
+        }
+        add(metrics.secRowGap)
+        if (hasImportRow) {
+            add(contentControlRowHeight(metrics))
+            add(metrics.secRowGap)
+        }
+    }
+    var body = 0.dp
+    children.forEach { body += it }
+    return contentSectionTitleHeight(metrics) +
+        metrics.rowGap * 2 +
+        body +
+        metrics.rowGap * (children.size - 1) +
+        metrics.cardGap
+}
+
+/**
+ * "排序 + 刷新 + 只看有效 + 全选"与"从设备导入"这两行有多高
+ *
+ * 取两者里更高的那个：[OxideButton] 固定 28dp，而"只看有效"走的是
+ * [OxideSettingRow]，高度是它的上下内边距加一行正文。
+ */
+private fun contentControlRowHeight(metrics: OxideMetrics): Dp = maxOf(
+    CONTENT_BUTTON_HEIGHT,
+    contentSettingRowHeight(metrics),
+)
+
+/** 筛选芯片那一行有多高：[OxideSecChip] 的上下各一段内边距加一行正文 */
+private fun contentChipRowHeight(metrics: OxideMetrics): Dp =
+    metrics.secRowGap * 2 + oxideContentLineHeight(CONTENT_BODY_BASE, metrics)
+
+/** [OxideSettingRow] 那一行有多高：上下内边距加一行正文 */
+private fun contentSettingRowHeight(metrics: OxideMetrics): Dp =
+    CONTENT_SETTING_ROW_PADDING_V * 2 + oxideContentLineHeight(CONTENT_BODY_BASE, metrics)
+
+/** 小节标题那一行有多高：`Oxide.Type.MicroLabel` 加 `OxideSection` 的下留白 */
+private fun contentSectionTitleHeight(metrics: OxideMetrics): Dp =
+    oxideContentLineHeight(CONTENT_MICRO_LABEL_BASE, metrics) + CONTENT_SECTION_TITLE_GAP
+
+/** `OxideSettingRow` 的上下内边距，"只看有效"那一行由它决定高度 */
+private val CONTENT_SETTING_ROW_PADDING_V: Dp = 7.dp
+
+/** `OxideButton` 的固定高度 */
+private val CONTENT_BUTTON_HEIGHT: Dp = 28.dp
+
+/** `OxideSection` 标题行下的留白 */
+private val CONTENT_SECTION_TITLE_GAP: Dp = 6.dp
+
+/** 正文的基准行高，与 `Oxide.Type.Body` 一致 */
+private val CONTENT_BODY_BASE = TextStyle(fontSize = 8.sp, lineHeight = 12.sp)
+
+/** 小标签的基准行高，与 `Oxide.Type.MicroLabel` 一致 */
+private val CONTENT_MICRO_LABEL_BASE = TextStyle(fontSize = 6.sp, lineHeight = 9.sp)
+
+/** 文字的基准行高乘上界面缩放，与 [OxideMetrics] 里的几何同一个系数 */
+private fun oxideContentLineHeight(base: TextStyle, metrics: OxideMetrics): Dp =
+    oxideScaledTextStyle(base, metrics.guiScale).lineHeight.value.dp
+
+// ---------------------------------------------------------------------------
 // 分类面板
 // ---------------------------------------------------------------------------
 
@@ -317,6 +465,19 @@ private fun OxideContentCategoryItem(
  * 整块面板是**一个** LazyColumn：控件区是它的前几项，下面才是列表。
  * 因此在 360dp 高的屏幕上长列表能正常滚动，而不会被套在另一个纵向滚动里
  * （同一个方向上嵌套两个可滚容器会在测量时直接抛异常）。
+ *
+ * v1.7.0 设备截图里的缺陷（菜单太小、选中一个之后就没地方选第二个、按钮堆在列表上面）
+ * 在这里由 [oxideContentPanelLayout] 这一笔账决定：
+ *
+ *  - 选中动作不再压在列表上面，而是横过来放进控件那一项右侧的窄栏
+ *    （[OxideContentSelectionRail]）。它是**横向**的一栏，不吃纵向空间，
+ *    因此勾选任何一个条目都不会让下面的列表少一行。
+ *  - 全选那枚从独占一整行并进本来就有的一行，因此上方这一块的纵向高度是常数。
+ *
+ * 窄栏能放进控件那一项而不是做成列表的兄弟节点，正是因为整块面板只有那一个滚动容器：
+ * 做成兄弟节点就得把面板拆成不滚的控件区加一个 LazyColumn，那样搜索框与筛选会从
+ * 随列表一起滚走变成常驻——那是另一处行为变更，不该和这一次的高度修复混在一起。
+ * 代价是这一栏会随控件区一起滚走；换来的是列表高度与选中状态彻底无关。
  *
  * 实例设置那一页的五个内容标签直接复用这一块，因此这里不是 private。
  */
@@ -394,7 +555,6 @@ internal fun OxideContentPanel(
     val backupLabel = stringResource(R.string.oxide_mgr_action_backup)
     val selectAllLabel = stringResource(R.string.oxide_mgr_action_select_all)
     val clearLabel = stringResource(R.string.oxide_mgr_action_clear_selection)
-    val deleteSelectedLabel = stringResource(R.string.oxide_mgr_action_delete_selected)
     val categoryTitle = stringResource(category.titleRes)
 
     // 读取：换分类、换版本或手动刷新都重新走一遍，全部在 IO 上且可取消
@@ -549,144 +709,140 @@ internal fun OxideContentPanel(
         }
 
         item(key = "controls") {
-            Column {
-                OxideSettingsGroup(
-                    title = categoryTitle,
-                    metrics = metrics,
-                    trailing = {
-                        // 计数只在真正读到东西之后才给，读的时候不给一个假数字
-                        if (!loading) {
-                            OxideBadge(text = stringResource(R.string.oxide_mgr_count, rawEntries.size))
-                        }
-                    },
-                ) {
-                    OxideSecInput(
+            // 控件与选中动作并排。窄栏是横向的，不吃纵向空间，因此勾选任何条目
+            // 都不会把下面的列表压矮——这正是 v1.7.0 截图里"选中第一个之后就没地方
+            // 选第二个"的成因。整块面板仍然只有这一个 LazyColumn。
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    OxideSettingsGroup(
+                        title = categoryTitle,
                         metrics = metrics,
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = searchLabel,
-                    )
-                    Spacer(Modifier.height(metrics.secRowGap))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // 排序当前值以文字给出，符号本身不作为唯一信息
-                        OxideButton(
-                            text = stringResource(
-                                R.string.oxide_mgr_sort_label,
-                                sortLabelKey(sort, ascending),
-                            ),
-                            onClick = {
-                                val next = nextOxideContentSort(category, sort, ascending)
-                                sort = next.first
-                                ascending = next.second
-                            },
-                        )
-                        OxideIconButton(
-                            onClick = { refreshKey++ },
-                            enabled = !loading && !busy,
-                            glyph = "↻",
-                            modifier = Modifier.oxideIconDescription(refreshLabel),
-                        )
-                        if (category.hasValidity) {
-                            OxideSecPickerRow(
-                                label = onlyValidLabel,
-                                selected = onlyValid,
-                                onClick = { onlyValid = !onlyValid },
-                                modifier = Modifier.weight(1f),
-                            )
-                        } else {
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
-
-                    if (category.canEnable) {
-                        Spacer(Modifier.height(metrics.secRowGap))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
-                        ) {
-                            listOf(
-                                OxideContentState.All to counts.all,
-                                OxideContentState.Enabled to counts.enabled,
-                                OxideContentState.Disabled to counts.disabled,
-                            ).forEach { (filter, count) ->
-                                OxideSecChip(
-                                    label = stringResource(
-                                        R.string.oxide_mgr_filter_count,
-                                        filterLabel(filter),
-                                        count,
-                                    ),
-                                    selected = stateFilter == filter,
-                                    metrics = metrics,
-                                    onClick = { stateFilter = filter },
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(metrics.secRowGap))
-
-                    // 从设备导入：这一类不支持时连这一行都不出现（截图）
-                    val importAction = oxideContentImportAction(
-                        version = version,
-                        category = category,
-                        onImported = { refreshKey++ },
-                    )
-                    if (importAction != null) {
-                        OxideContentImportRow(
-                            metrics = metrics,
-                            category = category,
-                            enabled = !busy && !loading,
-                            onPick = importAction,
-                        )
-                        Spacer(Modifier.height(metrics.secRowGap))
-                    }
-
-                    if (selection.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
-                        ) {
-                            OxideButton(
-                                text = deleteSelectedLabel,
-                                onClick = {
-                                    deleteArmed = oxideContentDeleteTargets(selectedEntries)
-                                },
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f),
-                            )
-                            OxideButton(
-                                text = clearLabel,
-                                onClick = { selection.clear() },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Spacer(Modifier.height(metrics.secRowGap))
-                    }
-
-                    OxideButton(
-                        text = if (everythingSelected) clearLabel else selectAllLabel,
-                        onClick = {
-                            if (everythingSelected) {
-                                selection.clear()
-                            } else {
-                                visible.forEach { entry ->
-                                    if (entry.selectable && entry.key !in selection) {
-                                        selection.add(entry.key)
-                                    }
-                                }
+                        trailing = {
+                            // 计数只在真正读到东西之后才给，读的时候不给一个假数字
+                            if (!loading) {
+                                OxideBadge(text = stringResource(R.string.oxide_mgr_count, rawEntries.size))
                             }
                         },
-                        enabled = visible.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        OxideSecInput(
+                            metrics = metrics,
+                            value = query,
+                            onValueChange = { query = it },
+                            placeholder = searchLabel,
+                        )
+                        Spacer(Modifier.height(metrics.secRowGap))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // 排序当前值以文字给出，符号本身不作为唯一信息
+                            OxideButton(
+                                text = stringResource(
+                                    R.string.oxide_mgr_sort_label,
+                                    sortLabelKey(sort, ascending),
+                                ),
+                                onClick = {
+                                    val next = nextOxideContentSort(category, sort, ascending)
+                                    sort = next.first
+                                    ascending = next.second
+                                },
+                            )
+                            OxideIconButton(
+                                onClick = { refreshKey++ },
+                                enabled = !loading && !busy,
+                                glyph = "↻",
+                                modifier = Modifier.oxideIconDescription(refreshLabel),
+                            )
+                            if (category.hasValidity) {
+                                OxideSecPickerRow(
+                                    label = onlyValidLabel,
+                                    selected = onlyValid,
+                                    onClick = { onlyValid = !onlyValid },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            } else {
+                                Spacer(Modifier.weight(1f))
+                            }
+                            // 全选此前独占一整行 28dp 加一段间距；并进本来就有的一行之后，
+                            // 它自己并不随选中状态出现或消失，上方这一块的高度因此是常数
+                            OxideButton(
+                                text = if (everythingSelected) clearLabel else selectAllLabel,
+                                onClick = {
+                                    if (everythingSelected) {
+                                        selection.clear()
+                                    } else {
+                                        visible.forEach { entry ->
+                                            if (entry.selectable && entry.key !in selection) {
+                                                selection.add(entry.key)
+                                            }
+                                        }
+                                    }
+                                },
+                                enabled = visible.isNotEmpty(),
+                            )
+                        }
+
+                        if (category.canEnable) {
+                            Spacer(Modifier.height(metrics.secRowGap))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
+                            ) {
+                                listOf(
+                                    OxideContentState.All to counts.all,
+                                    OxideContentState.Enabled to counts.enabled,
+                                    OxideContentState.Disabled to counts.disabled,
+                                ).forEach { (filter, count) ->
+                                    OxideSecChip(
+                                        label = stringResource(
+                                            R.string.oxide_mgr_filter_count,
+                                            filterLabel(filter),
+                                            count,
+                                        ),
+                                        selected = stateFilter == filter,
+                                        metrics = metrics,
+                                        onClick = { stateFilter = filter },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(metrics.secRowGap))
+
+                        // 从设备导入：这一类不支持时连这一行都不出现（截图）
+                        val importAction = oxideContentImportAction(
+                            version = version,
+                            category = category,
+                            onImported = { refreshKey++ },
+                        )
+                        if (importAction != null) {
+                            OxideContentImportRow(
+                                metrics = metrics,
+                                category = category,
+                                enabled = !busy && !loading,
+                                onPick = importAction,
+                            )
+                            Spacer(Modifier.height(metrics.secRowGap))
+                        }
+                    }
+                    Spacer(Modifier.height(metrics.cardGap))
+                }
+
+                // 没有选中时这一栏整个不出现，控件区因此拿回全部宽度
+                if (selection.isNotEmpty()) {
+                    Spacer(Modifier.width(metrics.secRowGap))
+                    OxideContentSelectionRail(
+                        metrics = metrics,
+                        busy = busy,
+                        onDeleteSelected = {
+                            deleteArmed = oxideContentDeleteTargets(selectedEntries)
+                        },
+                        onClearSelection = { selection.clear() },
                     )
                 }
-                Spacer(Modifier.height(metrics.cardGap))
             }
         }
 
@@ -785,6 +941,53 @@ internal fun OxideContentPanel(
                 Spacer(Modifier.height(metrics.secRowGap))
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 选中动作栏
+// ---------------------------------------------------------------------------
+
+/**
+ * 控件右侧那条选中动作栏
+ *
+ * v1.7.0 的选中动作是**压在列表上面的一整行**：一勾选就把列表的高度砍掉约一行，
+ * 于是"选中第一个之后就没地方选第二个"。这里把同样这两个动作竖着放进控件区右侧的
+ * 窄栏：宽度取 [OxideMetrics.contentRailWidth]——与左边那条分类列同一份推导，
+ * 不是写死的 dp——高度由内容决定，与控件区并排而不是压在列表上面。
+ *
+ * 每个动作的文案、启用条件与回调与此前逐字相同，变的只有摆放的位置。
+ * 它是横向的一栏，因此**不吃纵向空间**：这是 [oxideContentPanelLayout] 里
+ * `selected` 只影响 `railWidth` 的原因。没有选中时调用方整个不画它。
+ */
+@Composable
+internal fun OxideContentSelectionRail(
+    metrics: OxideMetrics,
+    busy: Boolean,
+    onDeleteSelected: () -> Unit,
+    onClearSelection: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OxideContentSurface(
+        modifier = modifier.width(metrics.contentRailWidth()),
+        shape = Oxide.RadiusControl,
+        contentPadding = PaddingValues(
+            horizontal = metrics.secControlPadding,
+            vertical = metrics.secRowGap,
+        ),
+    ) {
+        OxideButton(
+            text = stringResource(R.string.oxide_mgr_action_delete_selected),
+            onClick = onDeleteSelected,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(metrics.secRowGap))
+        OxideButton(
+            text = stringResource(R.string.oxide_mgr_action_clear_selection),
+            onClick = onClearSelection,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

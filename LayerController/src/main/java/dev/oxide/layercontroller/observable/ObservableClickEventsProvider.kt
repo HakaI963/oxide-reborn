@@ -30,6 +30,18 @@ abstract class ObservableClickEventsProvider {
     abstract fun onRemoveAllEvents(type: ClickEvent.Type)
     abstract fun onAddEvent(event: ClickEvent)
     abstract fun onRemoveEvent(event: ClickEvent)
+
+    /**
+     * 就地替换一个已存在的绑定（用于改延迟这类保持位置与类型的改动）
+     *
+     * 默认实现是"先删后加"，它会把这一条挪到列表末尾，而列表顺序就是组合键的
+     * 派发顺序——改一次延迟就会把用户排好的组合打乱。持有方按类型与按键值
+     * 覆写它来保住位置。
+     */
+    open fun onReplaceEvent(event: ClickEvent) {
+        onRemoveEvent(event)
+        onAddEvent(event)
+    }
 }
 
 /**
@@ -50,6 +62,9 @@ fun clickEventsProvider(data: ObservableNormalData): ObservableClickEventsProvid
         }
         override fun onRemoveEvent(event: ClickEvent) {
             data.removeEvent(event)
+        }
+        override fun onReplaceEvent(event: ClickEvent) {
+            data.replaceEvent(event)
         }
     }
 }
@@ -74,6 +89,9 @@ fun joystickLockEventsProvider(data: ObservableJoystickData): ObservableClickEve
         }
         override fun onRemoveEvent(event: ClickEvent) {
             data.removeLockEvent { it == event }
+        }
+        override fun onReplaceEvent(event: ClickEvent) {
+            data.replaceLockEvent(event)
         }
     }
 }
@@ -101,6 +119,9 @@ fun joystickDirectionEventsProvider(
         }
         override fun onRemoveEvent(event: ClickEvent) {
             data.removeDirectionEvent(direction) { it == event }
+        }
+        override fun onReplaceEvent(event: ClickEvent) {
+            data.replaceDirectionEvent(direction, event)
         }
     }
 }

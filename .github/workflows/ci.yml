@@ -93,8 +93,13 @@ jobs:
           ./gradlew --no-daemon assembleDebug
 
       # Exercises R8 and the ProGuard keep rules (which name the renamed JNI classes) on every
-      # push, so a release-only breakage cannot reach a published release.
+      # push, so a release-only breakage cannot reach a published release. OAUTH_CLIENT_ID comes
+      # from the same secret release.yml uses, so this step assembles with exactly the value a
+      # release build gets rather than with an empty client id that release.yml would also have
+      # produced.
       - name: Assemble release APK (R8 check, arm64)
+        env:
+          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleRelease -Darch=arm64

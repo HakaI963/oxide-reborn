@@ -25,6 +25,7 @@ import dev.oxide.launcher.game.download.assets.platform.PlatformDisplayLabel
 import dev.oxide.launcher.game.download.assets.platform.PlatformReleaseType
 import dev.oxide.launcher.game.download.assets.platform.PlatformVersion
 import dev.oxide.launcher.game.download.assets.platform.cacheKey
+import dev.oxide.launcher.game.download.assets.autoInstalledDependency
 import dev.oxide.launcher.ui.AndroidStringText
 import java.time.Instant
 import org.junit.Assert.assertEquals
@@ -315,6 +316,133 @@ class OxideDiscoverInstallTest {
         assertTrue(states.first { it.first == "a" }.second.retryable().not())
         assertTrue(states.first { it.first == "b" }.second.retryable())
         assertEquals(3, states.size)
+    }
+
+    // ---- 界面与下载链路对依赖类型的判断必须一致 -------------------------------
+
+    /**
+     * 工具类依赖：界面默认勾上它，下载链路就必须真的装它
+     *
+     * 此前界面按 REQUIRED+TOOL 默认勾选，而依赖下载链路递归展开时只认 REQUIRED。
+     * 于是同一个文件版本上的同一条 TOOL 关系，用户看到它被勾上了、确认之后却没装——
+     * 这正是"勾了没用"那一类缺陷。判据现在只有一份
+     * （[autoInstalledDependency]），两处都调它，因此这条断言同时钉住两边。
+     */
+    @Test
+    fun aToolDependencyIsBothCheckedByDefaultAndFollowedByTheDownloadPipeline() {
+        assertTrue(PlatformDependencyType.TOOL.autoInstalledDependency())
+        assertTrue(PlatformDependencyType.TOOL.discoverSelectedByDefault())
+        assertEquals(
+            setOf(toolDep.key),
+            discoverDefaultSelection(listOf(toolDep)),
+        )
+    }
+
+    @Test
+    fun theAutomaticSetIsExactlyRequiredAndTool() {
+        assertEquals(
+            setOf(PlatformDependencyType.REQUIRED, PlatformDependencyType.TOOL),
+            PlatformDependencyType.entries.filter { it.autoInstalledDependency() }.toSet(),
+        )
+        // 内嵌与互斥永远不在其中：装它们必然出问题
+        assertFalse(PlatformDependencyType.EMBEDDED.autoInstalledDependency())
+        assertFalse(PlatformDependencyType.INCOMPATIBLE.autoInstalledDependency())
+        // 可选与包含类由用户自己决定，链路不偷偷装
+        assertFalse(PlatformDependencyType.OPTIONAL.autoInstalledDependency())
+        assertFalse(PlatformDependencyType.INCLUDE.autoInstalledDependency())
+    }
+
+    // ---- 从实例内容管理器跳到发现页 ---------------------------------------
+
+    /**
+     * 类别跟着**内容类别**走，不写死成模组
+     *
+     * 用户要的是"在模组信息里直接打开到发现页的模组那一区"，但同一件事在资源包、
+     * 光影与存档上也说得通，因此映射必须从类别推出来，而不是从"这是模组管理器"推出来。
+     */
+    @Test
+    fun everyContentClassMapsToItsOwnDiscoverCategory() {
+        assertEquals(DiscoverCategory.MODS, discoverCategoryOf(PlatformClasses.MOD))
+        assertEquals(DiscoverCategory.MODPACKS, discoverCategoryOf(PlatformClasses.MOD_PACK))
+        assertEquals(DiscoverCategory.SHADERS, discoverCategoryOf(PlatformClasses.SHADERS))
+        assertEquals(DiscoverCategory.RESOURCE_PACKS, discoverCategoryOf(PlatformClasses.RESOURCE_PACK))
+        assertEquals(DiscoverCategory.MAPS, discoverCategoryOf(PlatformClasses.SAVES))
+    }
+
+    /** 有平台身份时直接按 id 打开，不绕搜索 */
+    @Test
+    fun aPlatformIdentityOpensThatProjectDirectly() {
+        val request = requireNotNull(
+            discoverOpenRequest(
+                classes = PlatformClasses.MOD,
+                platformName = "MODRINTH",
+                projectId = "AANobbMI",
+                projectSlug = "sodium",
+                projectTitle = "Sodium",
+            )
+        )
+        assertEquals(DiscoverCategory.MODS, request.category)
+        assertEquals(Platform.MODRINTH, request.platform)
+        assertEquals("AANobbMI", request.projectId)
+        assertNull("有 id 就不需要搜索词", request.searchTerm)
+    }
+
+    /** 没有平台 id 时退到 slug / 标题的普通搜索，类别仍然跟着内容走 */
+    @Test
+    fun withoutAPlatformIdentityItFallsBackToAPlainSearch() {
+        val bySlug = requireNotNull(
+            discoverOpenRequest(
+                classes = PlatformClasses.RESOURCE_PACK,
+                platformName = null,
+                projectId = null,
+                projectSlug = "faithful",
+                projectTitle = "Faithful",
+            )
+        )
+        assertEquals(DiscoverCategory.RESOURCE_PACKS, bySlug.category)
+        assertNull(bySlug.platform)
+        assertNull(bySlug.projectId)
+        assertEquals("faithful", bySlug.searchTerm)
+
+        val byTitle = requireNotNull(
+            discoverOpenRequest(
+                classes = PlatformClasses.SHADERS,
+                platformName = "",
+                projectId = "   ",
+                projectSlug = "",
+                projectTitle = "Complementary Shaders",
+            )
+        )
+        assertEquals(DiscoverCategory.SHADERS, byTitle.category)
+        assertEquals("Complementary Shaders", byTitle.searchTerm)
+    }
+
+    /**
+     * 什么身份都没有时**整个动作藏起来**
+     *
+     * 开一个搜不出任何东西的空白搜索页比没有这个按钮更糟——用户会以为是自己装错了。
+     */
+    @Test
+    fun withNoUsableIdentityTheActionIsHidden() {
+        assertNull(
+            discoverOpenRequest(
+                classes = PlatformClasses.MOD,
+                platformName = null,
+                projectId = null,
+                projectSlug = null,
+                projectTitle = null,
+            )
+        )
+        // 平台名认不出来 + 空白 id：同样没有可用身份
+        assertNull(
+            discoverOpenRequest(
+                classes = PlatformClasses.MOD,
+                platformName = "SOME_UNKNOWN_PLATFORM",
+                projectId = "  ",
+                projectSlug = "",
+                projectTitle = "",
+            )
+        )
     }
 
     // ---- 工具 ---------------------------------------------------------------

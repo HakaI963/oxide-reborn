@@ -683,6 +683,20 @@ private fun GameCategory(metrics: OxideMetrics, onNavigate: (OxidePage) -> Unit)
             onValueChange = { AllSettings.logBufferFlushInterval.save(it) },
         )
     }
+
+    // 游戏内浮层里与"日志"无关的那一项：画在游戏画面右下角的那块 Oxide 标识。
+    // 它与帧率、内存、悬浮球是同一类东西，只是那些在高级抽屉的"游戏内浮层"分组里，
+    // 而这一块跟着游戏本体走——游戏本体这一类本来就是关于"游戏运行时"的。
+    // 复用已存在的分组名，而不是另起一个：分组名只有一处出处，
+    // 同一屏里出现两个"游戏内浮层"分组会读成两套不同的东西。
+    Group(index = 3, title = stringResource(R.string.oxide_set_section_overlay), metrics = metrics) {
+        OxideToggleRow(
+            label = stringResource(R.string.oxide_set_show_game_brand),
+            hint = stringResource(R.string.oxide_set_show_game_brand_detail),
+            checked = AllSettings.showGameBrand.state,
+            onCheckedChange = { AllSettings.showGameBrand.save(it) },
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------

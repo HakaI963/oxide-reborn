@@ -206,6 +206,18 @@ class ObservableJoystickData(data: JoystickData) : ObservableWidget() {
     }
 
     /**
+     * 就地替换锁定状态下的一个触发事件（用于改延迟这类保持位置的改动）
+     *
+     * 先删后加会把这一条挪到列表末尾，而列表顺序就是派发顺序
+     */
+    fun replaceLockEvent(event: ClickEvent) {
+        val index = lockEvents.indexOfFirst { it.type == event.type && it.key == event.key }
+        if (index >= 0) {
+            lockEvents = lockEvents.toMutableList().apply { set(index, event) }
+        }
+    }
+
+    /**
      * 为指定方向添加触发事件
      */
     fun addDirectionEvent(
@@ -230,6 +242,23 @@ class ObservableJoystickData(data: JoystickData) : ObservableWidget() {
         if (direction != null) {
             val current = directionEvents[direction] ?: emptyList()
             directionEvents += (direction to current.filterNot(filterNot))
+        }
+    }
+
+    /**
+     * 就地替换指定方向的一个触发事件（用于改延迟这类保持位置的改动）
+     *
+     * 先删后加会把这一条挪到列表末尾，而列表顺序就是派发顺序
+     */
+    fun replaceDirectionEvent(
+        direction: JoystickDirection?,
+        event: ClickEvent
+    ) {
+        if (direction == null) return
+        val current = directionEvents[direction] ?: emptyList()
+        val index = current.indexOfFirst { it.type == event.type && it.key == event.key }
+        if (index >= 0) {
+            directionEvents += (direction to current.toMutableList().apply { set(index, event) })
         }
     }
 

@@ -185,24 +185,23 @@ class LaunchArgs(
         val argsList: MutableList<String> = ArrayList()
 
         if (account.isLocalAccount()) {
-            if (account.hasSkinFile || account.getCapeFile().exists()) {
-                //该离线账号拥有本地皮肤或披风，启用离线yggdrasil服务器
-                offlineServer.start()
-                offlineServer.addCharacter(account)
-                offlineServer.getPort()?.let { port ->
-                    val msg = "Using offline Yggdrasil server on port $port"
-                    LoggerBridge.append(msg)
-                    Logger.info(TAG, msg)
-                    argsList.add("-javaagent:${LibPath.AUTHLIB_INJECTOR.absolutePath}=http://localhost:$port")
-                    argsList.add("-Dauthlibinjector.side=client")
-                } ?: run {
-                    //无法获取端口号，说明服务器未成功启动
-                    val msg = "Failed to start offline Yggdrasil server!"
-                    LoggerBridge.append(msg)
-                    Logger.warning(TAG, msg)
-                    //本次启动将被忽略，为避免浪费性能，关停服务器
-                    offlineServer.stop()
-                }
+            // 该离线账号拥有本地皮肤或披风时启用离线yggdrasil服务器
+            // 没有本地贴图时，服务器会用内置默认皮肤与默认披风补齐，所以离线账号总是启动它
+            offlineServer.start()
+            offlineServer.addCharacter(account)
+            offlineServer.getPort()?.let { port ->
+                val msg = "Using offline Yggdrasil server on port $port"
+                LoggerBridge.append(msg)
+                Logger.info(TAG, msg)
+                argsList.add("-javaagent:${LibPath.AUTHLIB_INJECTOR.absolutePath}=http://localhost:$port")
+                argsList.add("-Dauthlibinjector.side=client")
+            } ?: run {
+                //无法获取端口号，说明服务器未成功启动
+                val msg = "Failed to start offline Yggdrasil server!"
+                LoggerBridge.append(msg)
+                Logger.warning(TAG, msg)
+                //本次启动将被忽略，为避免浪费性能，关停服务器
+                offlineServer.stop()
             }
         } else if (account.isAuthServerAccount()) {
             if (account.otherBaseUrl!!.contains("auth.mc-user.com")) {

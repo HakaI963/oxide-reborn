@@ -90,6 +90,79 @@ fun getKeyFromLocal(envKey: String, fileName: String? = null, default: String? =
 val resolvedCurseForgeApiKey = getKeyFromLocal("CURSEFORGE_API_KEY", ".curseforge_api.txt", defaultCurseForgeApiKey)
 
 /**
+ * Microsoft OAuth 客户端 ID（Azure AD 应用注册里的 Application (client) ID）。
+ *
+ * 只用于 device code 流程里那一次带外启动的浏览器授权，因此不需要重定向 URI；租户固定是
+ * `/consumers`，范围见 MicrosoftAuthenticator.kt。和 CurseForge 密钥一样提前解析一次，让编译进
+ * BuildKeys 的值和下面 [verifyOauthClientId] 检查的值**永远是同一个**。
+ *
+ * 这里**不写死任何值**，也不把值打进日志：仓库里没有这个 secret（gradle.properties 中
+ * `oauth_client_id` 是注释掉的），能提供它的只有维护者本地的环境或 GitHub Actions 的 secret。
+ */
+val resolvedOauthClientId = getKeyFromLocal("OAUTH_CLIENT_ID", ".oauth_client_id.txt", defaultOAuthClientID)
+
+/**
+ * 是否要求 OAuth 客户端 ID 必须存在。默认 false。
+ *
+ * 本仓库目前**还没有**这个 secret，因此默认行为必须是"警告并继续"：一个仓库内部无法修复的缺失
+ * 绝不能挡住 v1.8.0 的签名包产出。维护者拿到 client id 之后，CI 或本地加上
+ * `-PrequireOauthClientId=true`，同一个任务就会把空值变成硬失败——那时才是"保证不漏"的时候。
+ */
+val requireOauthClientId = project.findProperty("requireOauthClientId")
+    ?.toString()
+    ?.trim()
+    ?.equals("true", ignoreCase = true)
+    ?: false
+
+/**
+ * 构建期护栏：报告 OAuth 客户端 ID 是否解析出来，只在显式要求时失败。
+ *
+ * 空 client id 的表现是 device code 流程在提交 client_id 之后被 Microsoft 以 `invalid_client`
+ * 拒绝——错误信息不指向本地配置，看起来像是凭据类型错了，而实际上只是这个包没带 ID。
+ *
+ * 失败消息里只说来源和字符数，绝不打印值本身。
+ */
+val verifyOauthClientId = tasks.register("verifyOauthClientId") {
+    group = "verification"
+    description =
+        "Warns when the Microsoft OAuth client id resolves to a blank value, and fails a release " +
+            "build when -PrequireOauthClientId=true is set."
+    // 立即捕获，任务执行时不再回头去读构建脚本的局部状态
+    val clientId = resolvedOauthClientId
+    val required = requireOauthClientId
+    doFirst {
+        if (clientId.isNotBlank()) {
+            // 只打印长度，不打印 client id 本身
+            logger.lifecycle("[verifyOauthClientId] Microsoft OAuth client id resolved (${clientId.length} chars).")
+            return@doFirst
+        }
+        val remedy =
+            "Provide it as the OAUTH_CLIENT_ID environment variable, as a .oauth_client_id.txt file " +
+                "next to the root build script, or as the 'oauth_client_id' Gradle property. " +
+                "A blank value in any of those counts as absent and falls back to the next source, " +
+                "so an unset CI secret no longer silently empties the id. On GitHub Actions, " +
+                "register it once with 'gh secret set OAUTH_CLIENT_ID' (or Settings > Secrets and " +
+                "variables > Actions > New repository secret)."
+        if (required) {
+            throw GradleException(
+                "OAUTH_CLIENT_ID resolved to a blank value, so this APK would ship without a " +
+                    "Microsoft application (client) id and every Microsoft sign-in would be rejected " +
+                    "with invalid_client. " + remedy
+            )
+        }
+        // 默认只警告：secret 还没有配置，而它只能由维护者提供，仓库内部无法补上。
+        logger.warn(
+            "[verifyOauthClientId] OAUTH_CLIENT_ID resolved to a blank value (0 chars): Microsoft " +
+                "sign-in will fail with invalid_client. " + remedy
+        )
+        logger.warn(
+            "[verifyOauthClientId] Continuing because -PrequireOauthClientId was not set; pass " +
+                "-PrequireOauthClientId=true to turn this into a build failure."
+        )
+    }
+}
+
+/**
  * 构建期护栏：release 构建不允许带着空的 CurseForge 客户端标识产出。
  *
  * 空密钥会让 `curseForgeAuthHeaders` 直接返回空列表（它对空值返回空是为了避免误导调用方），
@@ -287,6 +360,7 @@ androidComponents {
             val variantNameCap = variant.name.replaceFirstChar { it.uppercaseChar() }
             tasks.matching { it.name == "pre${variantNameCap}Build" }.configureEach {
                 dependsOn(verifyCurseForgeApiKey)
+                dependsOn(verifyOauthClientId)
             }
         }
         variant.outputs.forEach { output ->
@@ -357,7 +431,7 @@ kotlin {
 }
 
 buildKeys {
-    string("OAUTH_CLIENT_ID", getKeyFromLocal("OAUTH_CLIENT_ID", ".oauth_client_id.txt", defaultOAuthClientID), true)
+    string("OAUTH_CLIENT_ID", resolvedOauthClientId, true)
     string("LAUNCHER_NAME", launcherAPPName, true)
     string("LAUNCHER_IDENTIFIER", launcherName, true)
     string("LAUNCHER_SHORT_NAME", launcherShortName, true)

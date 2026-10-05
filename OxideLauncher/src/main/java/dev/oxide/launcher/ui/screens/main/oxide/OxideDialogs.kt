@@ -1145,3 +1145,160 @@ private fun OxideHostedMessagePanel(
         )
     }
 }
+
+/**
+ * 在一个自己的窗口里展示 Oxide 面板，用来确认一条链接
+ *
+ * 这一段此前是 Material 的 `MaterialAlertDialogBuilder`：`generic_open_link` 作标题、
+ * 链接作正文、`generic_copy` / `generic_cancel` / `generic_confirm` 三个按钮。那
+ * 套弹窗是整条 Oxide 界面上**唯一**还活着的 Material 外观——灰卡片、鲑鱼色文字
+ * 按钮，且 9% 的底在游戏画面上直接看穿——而且它的宿主窗口本来就是一个 Activity，
+ * 也就是说这里从来就没有"非要用 Material"的道理（[showOxideMessageDialog] 已经
+ * 证明了这一点）。
+ *
+ * 内容与行为一字未改：同样的三行文案、同样的剪贴板标签常量（`COPY_LABEL_LINK`
+ * 由调用方带进来）、确认与复制都走调用方给的回调，因此 `Activity.openLink` 的
+ * 公开签名与它的几十个调用点都不受影响。变的只有那块面板本身。
+ *
+ * 链接用等宽字体而不是正文字体：它就是要被人选中并逐字符比对的地址。
+ *
+ * @param confirmText 确认（打开）文案
+ * @param cancelText 取消文案；给空串则不画这一枚按钮
+ * @param copyText 复制文案；给空串则不画这一枚按钮
+ * @param onOpen 确认时回调，参数就是这块面板上显示的那条链接
+ * @param onCopy 复制时回调，参数同上
+ */
+fun showOxideLinkDialog(
+    context: Context,
+    title: String,
+    link: String,
+    confirmText: String = context.getString(R.string.generic_confirm),
+    cancelText: String = context.getString(R.string.generic_cancel),
+    copyText: String = context.getString(R.string.generic_copy),
+    onOpen: (link: String) -> Unit,
+    onCopy: (link: String) -> Unit,
+) {
+    if (context !is Activity) {
+        // 与 showOxideMessageDialog 同一个理由：没有窗口可以承载它
+        Logger.error(TAG, "Cannot present an Oxide dialog without an Activity window")
+        return
+    }
+
+    val host = AndroidDialog(context)
+    host.requestWindowFeature(Window.FEATURE_NO_TITLE)
+    // 这一块是有得选的弹窗（取消 / 关闭 / 点遮罩都该关掉它），与只有一枚"知道了"的
+    // 通知弹窗不同
+    host.setCancelable(true)
+    host.setCanceledOnTouchOutside(false)
+
+    host.setContentView(
+        ComposeView(context).apply {
+            // 对话框的窗口没有 ViewTreeLifecycleOwner，同 showOxideMessageDialog
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                ProvideOxideChrome {
+                    OxideHostedLinkPanel(
+                        title = title,
+                        link = link,
+                        confirmText = confirmText,
+                        cancelText = cancelText,
+                        copyText = copyText,
+                        closeDescription = context.getString(R.string.oxide_dlg_close),
+                        onOpen = {
+                            host.dismiss()
+                            onOpen(link)
+                        },
+                        onCopy = {
+                            host.dismiss()
+                            onCopy(link)
+                        },
+                        onDismiss = { host.dismiss() },
+                    )
+                }
+            }
+        }
+    )
+
+    host.window?.apply {
+        setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
+        setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+    }
+    host.show()
+}
+
+/**
+ * [showOxideLinkDialog] 里那块面板
+ *
+ * 与弹窗里那一份共用同一个 [OxideDialogPanel]，因此颜色、圆角、按钮栏与读屏行为
+ * 和确认对话框完全一致；单独拆出来是因为 `setContent` 的内容不能提到外面去，
+ * 而快照测试要能直接拍它（见 `OxideDialogsSnapshotTest.OpenLink_Confirm`）。
+ */
+@Composable
+internal fun OxideHostedLinkPanel(
+    title: String,
+    link: String,
+    confirmText: String,
+    cancelText: String,
+    copyText: String,
+    closeDescription: String,
+    onOpen: () -> Unit,
+    onCopy: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val metrics = rememberOxideMetrics()
+    OxideDialogScrimLayer(
+        dismissByDialog = true,
+        onDismissRequest = onDismiss,
+    ) {
+        OxideDialogPanel(
+            size = rememberOxideDialogSize(metrics),
+            metrics = metrics,
+            title = title,
+            closeDescription = closeDescription,
+            // 关闭按钮与取消是同一件事：都不打开、都不复制
+            onClose = onDismiss,
+            body = { contentMaxHeight ->
+                val scrollState = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = contentMaxHeight)
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState),
+                ) {
+                    Text(
+                        text = link,
+                        color = Oxide.FgMuted,
+                        fontSize = Oxide.Type.Mono.fontSize,
+                        lineHeight = Oxide.Type.Mono.lineHeight,
+                    )
+                }
+            },
+            footer = {
+                // 三枚按钮的先后与旧 Material 弹窗一致：复制、取消、确认。
+                // 取消与复制都是描边、确认是实心，主次由语气而不是左右位置承担
+                if (copyText.isNotBlank()) {
+                    OxideButton(
+                        text = copyText,
+                        onClick = onCopy,
+                        tone = OxideButtonTone.Secondary,
+                    )
+                }
+                if (cancelText.isNotBlank()) {
+                    OxideButton(
+                        text = cancelText,
+                        onClick = onDismiss,
+                        tone = OxideButtonTone.Secondary,
+                    )
+                }
+                OxideButton(
+                    text = confirmText,
+                    onClick = onOpen,
+                    tone = OxideButtonTone.Primary,
+                )
+            },
+        )
+    }
+}

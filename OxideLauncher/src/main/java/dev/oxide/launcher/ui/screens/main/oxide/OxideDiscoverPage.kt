@@ -23,6 +23,12 @@ import dev.oxide.launcher.utils.file.checkFilenameValidity
 import dev.oxide.launcher.utils.file.InvalidFilenameException
 import android.content.Context
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -87,6 +93,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.TaskStage
 import dev.oxide.launcher.coroutine.TaskSystem
+import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.coroutine.TitledTask
 import dev.oxide.launcher.game.download.assets.DependencyRequest
 import dev.oxide.launcher.game.download.assets.favorites.FavoriteProjectsRepository
@@ -136,15 +143,32 @@ import dev.oxide.launcher.utils.formatNumberByLocale
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.viewmodel.ErrorViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 
 private const val TAG = "OxideDiscoverPage"
+
+/**
+ * 依赖解析的并发度
+ *
+ * 与依赖下载链路自己的 `DEPENDENCY_PARALLELISM` 同量级：先把 N 条依赖的往返摊平，
+ * 又不至于把平台打到一个会被限流的程度。
+ */
+private const val DEPENDENCY_READ_PARALLELISM = 4
 
 // ---------------------------------------------------------------------------
 // 尺寸：一律由 metrics 推导，页面不写死任何一个用于布局的 dp
@@ -196,8 +220,11 @@ private val OxideMetrics.searchFieldWidth: Dp get() = cardMinWidth * 0.86f
  *
  * 全部来自真实的 [PlatformClasses]，平台与加载器过滤能力也和资源搜索页一致：
  * 存档只有 CurseForge 一个平台，只有模组与整合包才按加载器过滤。
+ *
+ * 它是 `public` 而不是 `internal`：实例内容管理器里"在发现页查看"那条宿主动作要带着
+ * 它穿过 [OxideHostActions]，而那是一个 public 的类——public 的属性不能露出 internal 的类型。
  */
-internal enum class DiscoverCategory(
+enum class DiscoverCategory(
     @StringRes val labelRes: Int,
     val classes: PlatformClasses,
     @StringRes val typeLabelRes: Int,
@@ -248,8 +275,8 @@ private sealed interface DiscoverInstall {
     /** 平台上的项目没有符合当前过滤条件的文件 */
     data object NoFile : DiscoverInstall
 
-    /** 已经交给任务系统开始下载 */
-    data class Queued(val fileName: String) : DiscoverInstall
+    /** 已经交给任务系统开始下载；[queue] 带着真实的进度与真实的任务数 */
+    data class Queued(val queue: DiscoverQueueRow) : DiscoverInstall
 
     /** 整合包安装完成，新建了实例 */
     data class Created(val instanceName: String) : DiscoverInstall
@@ -287,10 +314,25 @@ private sealed interface DiscoverFilesState {
     data class Failed(val message: AndroidStringText) : DiscoverFilesState
 }
 
-/** 详情抽屉里依赖列表的状态 */
-private sealed interface DiscoverDependenciesState {
+/**
+ * 详情抽屉与确认层里依赖列表的状态
+ *
+ * [NoFileForTarget] 是这一轮补上的第四种：目标实例这一档压根没有兼容文件。
+ * 它此前被并进了 [Empty]，于是界面上印出 "This file has no dependencies."——
+ * 而用户点安装时走的确认层却不退回 `versions.first()`，于是两处给出相反的答案。
+ * "没有依赖"与"没有文件给你装"是完全不同的两件事，必须各有一句。
+ *
+ * 这些类型是 `internal` 而不是 `private`：行模型里只有平台自己那份依赖关系的快照与
+ * 依赖请求（都是普通数据），因此 `DiscoverDependencySection` 能在 layoutlib 下渲染，
+ * 快照测试也才画得出 [NoFileForTarget]（见 `OxideDiscoverSnapshotTest`）。
+ */
+internal sealed interface DiscoverDependenciesState {
     data object Loading : DiscoverDependenciesState
     data object Empty : DiscoverDependenciesState
+
+    /** 目标这一档没有兼容文件；[message] 是"为什么没有" */
+    data class NoFileForTarget(val message: AndroidStringText) : DiscoverDependenciesState
+
     data class Loaded(val rows: List<DiscoverDependencyRow>) : DiscoverDependenciesState
     data class Failed(val message: AndroidStringText) : DiscoverDependenciesState
 }
@@ -302,10 +344,11 @@ private sealed interface DiscoverDependenciesState {
  * 判死，所以状态是逐条的一行，而不是一份统一的"依赖安装失败"。
  *
  * [card] 里的字段全部在解析时就算好，绘制与测量因此不碰平台模型、不读磁盘、不发网络。
+ * 整行因此也只是普通数据，`internal` 之后可以交给快照测试去画。
  *
  * @param request 已经解析出的真实依赖请求；重试直接复用它，不重新猜
  */
-private data class DiscoverDependencyRow(
+internal data class DiscoverDependencyRow(
     val dependency: DiscoverDependency,
     val card: DiscoverDependencyCard,
     val selected: Boolean,
@@ -375,13 +418,6 @@ private data class DiscoverInstallSheet(
     /** 整合包要创建的实例名 */
     val instanceName: String,
     val dependencies: List<DiscoverDependencyRow>,
-)
-
-/** 安装提示条的内容 */
-private data class DiscoverNotice(
-    val title: String,
-    val detail: AndroidStringText?,
-    val action: (@Composable () -> Unit)? = null
 )
 
 /**
@@ -474,16 +510,48 @@ private class OxideDiscoverViewModel : ViewModel() {
      */
     private val projectCache = DiscoverProjectCache()
 
+    /**
+     * 项目文件列表的会话内缓存
+     *
+     * 同一个项目的版本列表此前一次会话里要被取四遍（详情抽屉的文件页、详情抽屉的依赖页、
+     * 确认层、抽屉里的"全部下载"），而每一遍都是一次分页往返**加**一次 `initAll`。
+     * 命中这里之后全部复用，打开抽屉之后立刻点安装不会再发一次那一整套请求。
+     */
+    private val filesCache = DiscoverFilesCache<PlatformVersion>()
+
+    /**
+     * 正在飞的文件列表读取，键是项目键
+     *
+     * 详情抽屉会同时要文件列表与依赖列表，而两者要的是**同一份**列表。
+     * 只有缓存不够：两个调用几乎同时发起，缓存这时还是空的，两边仍然各发一次请求。
+     * 这里让它们等同一个 `Deferred`，因此整个会话里同一个项目只取一次。
+     */
+    private val filesLock = Mutex()
+    private val inFlightFiles = HashMap<String, Deferred<DiscoverFilesResult>>()
+
     private var searchJob: Job? = null
     private var resolveJob: Job? = null
     private var sheetJob: Job? = null
     private var projectJob: Job? = null
     private var filesJob: Job? = null
-    private var dependenciesJob: Job? = null
     private var mobileDataContinuation: Continuation<Boolean>? = null
+
+    /** 这一次提交交给任务系统的任务，用来算出提示条该显示什么 */
+    private val queueTasks = LinkedHashSet<Task>()
+    /** 已经算过一次收尾的任务 id；两条路（监听器与补算）撞上时靠它去重 */
+    private val queueEnded = LinkedHashSet<String>()
+    private var queueJob: Job? = null
+    private var cleared = false
+
+    /** 任务自己写的那句说明（真实的文件名与字节数），提示条直接显示它 */
+    var queueMessage by mutableStateOf<AndroidStringText?>(null)
+        private set
 
     /** 上一次搜索用的条件，用来判断这次响应还该不该落地 */
     private var lastQuery: DiscoverQuery? = null
+
+    /** 从实例内容管理器跳进来时等着被自动打开的那个项目键 */
+    private var pendingProjectKey: String? = null
 
     /** 条目标题要按当前语言与 mcmod 译名解析，只有组合期做得到，所以由界面递进来 */
     private var titleResolver: ((PlatformSearchData, ModTranslations.McMod?) -> String)? = null
@@ -599,11 +667,13 @@ private class OxideDiscoverViewModel : ViewModel() {
                 install = DiscoverInstall.NoFile
                 return@launch
             }
-            submitFile(
-                version = pickVersionFor(versions, playableTarget()) ?: versions.first(),
+            val version = pickVersionFor(versions, playableTarget()) ?: versions.first()
+            val task = submitFile(
+                version = version,
                 classes = entry.project.classes,
                 projectId = entry.project.projectId,
             )
+            startQueue(version.platformDisplayName(), listOfNotNull(task))
         }
     }
 
@@ -634,6 +704,52 @@ private class OxideDiscoverViewModel : ViewModel() {
         gameVersion = ""
         modloader = null
         sortField = PlatformSortField.RELEVANCE
+    }
+
+    // ---- 从别处跳进来 -----------------------------------------------------
+
+    /**
+     * 打开某个平台项目，或者退成一次普通搜索
+     *
+     * 两条路的区别只在手上有没有平台身份：
+     *  - 有：先切到**内容类别对应的那一栏**，把 [pendingProjectKey] 记下来，然后发一次真实的
+     *    搜索；结果里出现那个项目就打开它的详情。直接按 id 打开需要一份 `PlatformSearchData`，
+     *    而本地只有 `PlatformProject`——两者是平台层的两个不同形状，硬造一个等于让快照
+     *    断言一份真实解析器永远产不出的数据。
+     *  - 没有：只有 slug 或标题，于是把它填进搜索框；这是最后一级退路。
+     *
+     * 找不到就一直找不到：**不会**造一条假记录塞进结果，也不会拿别的项目顶上。
+     * 页面本身不知道这条请求的来路，[OxideMainShell] 只负责导航与转发。
+     */
+    fun openFromRequest(request: OxideDiscoverRequest) {
+        request.category?.let { selectCategory(it) }
+        val platform = request.platform
+        val projectId = request.projectId?.trim()?.takeIf { it.isNotEmpty() }
+        pendingProjectKey = if (platform != null && projectId != null) {
+            discoverProjectKey(platform, projectId)
+        } else {
+            null
+        }
+        query = request.searchTerm?.trim().orEmpty()
+        search()
+    }
+
+    /**
+     * 结果里出现了那个等着打开的项目就打开它，只消费一次
+     *
+     * 消费点只有一个：[fetch] 每次落地一页之后，因此它与真实分页是同一件事，
+     * 不需要额外的一次轮询或延时。翻到尽头还没找到就放弃，并把键清掉，
+     * 免得它在后面某一次不相干的搜索里突然自己弹出来。
+     */
+    private fun openPendingProjectIfReady() {
+        val wanted = pendingProjectKey ?: return
+        val item = feed.items.firstOrNull { it.key == wanted }
+        if (item == null) {
+            if (feed.endOfResults) pendingProjectKey = null
+            return
+        }
+        pendingProjectKey = null
+        openDetail(item)
     }
 
     // ---- 翻页 ------------------------------------------------------------
@@ -730,6 +846,8 @@ private class OxideDiscoverViewModel : ViewModel() {
                         },
                         classes = request.classes,
                     )
+                    // 从实例内容管理器跳进来时等着打开的那个项目，就在这一页里落地了
+                    openPendingProjectIfReady()
                 },
                 onError = { error ->
                     if (lastQuery != request) {
@@ -771,13 +889,17 @@ private class OxideDiscoverViewModel : ViewModel() {
             when (val resolved = readAllVersions(item)) {
                 is DiscoverFilesResult.Failed -> install = DiscoverInstall.Failed(resolved.message)
                 is DiscoverFilesResult.Empty -> install = DiscoverInstall.NoFile
-                is DiscoverFilesResult.Ok -> submitFile(
+                is DiscoverFilesResult.Ok -> {
                     // 直接安装的类别也照目标实例挑文件，而不是照搜索栏上的筛选条件
-                    version = pickVersionFor(resolved.versions, playableTarget())
-                        ?: resolved.versions.first(),
-                    classes = item.classes,
-                    projectId = item.data.platformId(),
-                )
+                    val version = pickVersionFor(resolved.versions, playableTarget())
+                        ?: resolved.versions.first()
+                    val task = submitFile(
+                        version = version,
+                        classes = item.classes,
+                        projectId = item.data.platformId(),
+                    )
+                    startQueue(version.platformDisplayName(), listOfNotNull(task))
+                }
             }
         }
     }
@@ -793,11 +915,42 @@ private class OxideDiscoverViewModel : ViewModel() {
             install = DiscoverInstall.NeedsInstance
             return
         }
-        submitFile(version, item.classes, item.data.platformId())
+        val task = submitFile(version, item.classes, item.data.platformId())
+        startQueue(version.platformDisplayName(), listOfNotNull(task))
     }
 
-    /** 读项目的全部文件版本；失败如实上报，绝不退化成"没有文件" */
+    /**
+     * 读项目的全部文件版本；失败如实上报，绝不退化成"没有文件"
+     *
+     * 三层复用，从便宜到贵：
+     *  1. [filesCache] 里已经成功读到过的列表——直接给；
+     *  2. [inFlightFiles] 里已经在飞的同一次读取——等它，不再发第二次请求。
+     *     详情抽屉的文件页与依赖页要的是同一份列表，没有这一层它们会各发一次；
+     *  3. 才真的去平台取，并且**立刻 `initAll`**（每个文件一次 `initFile`），
+     *     所以复用必须是复用 `initAll` 之后的列表——缓存里存的正是它。
+     *
+     * 失败与空列表都不写缓存：否则"重试"拿到的还是上一次那个结果。
+     */
     private suspend fun readAllVersions(item: DiscoverItem): DiscoverFilesResult {
+        val key = item.key
+        filesCache[key]?.let { cached -> return DiscoverFilesResult.Ok(cached) }
+
+        val pending = filesLock.withLock {
+            filesCache[key]?.let { cached -> return DiscoverFilesResult.Ok(cached) }
+            inFlightFiles[key] ?: viewModelScope.async { loadAllVersions(item) }
+                .also { inFlightFiles[key] = it }
+        }
+        return try {
+            pending.await()
+        } finally {
+            filesLock.withLock<Unit> {
+                if (inFlightFiles[key] === pending) inFlightFiles.remove(key)
+            }
+        }
+    }
+
+    /** 真正去平台取一次文件列表 */
+    private suspend fun loadAllVersions(item: DiscoverItem): DiscoverFilesResult {
         val projectId = item.data.platformId()
         val target = item.data.platform()
         val raw = try {
@@ -817,6 +970,7 @@ private class OxideDiscoverViewModel : ViewModel() {
             return DiscoverFilesResult.Failed(mapExceptionToMessage(e))
         }
         if (versions.isEmpty()) return DiscoverFilesResult.Empty
+        filesCache[item.key] = versions
         return DiscoverFilesResult.Ok(versions)
     }
 
@@ -864,6 +1018,12 @@ private class OxideDiscoverViewModel : ViewModel() {
      * 目标来自当前选中的实例（一个字节都没选时的默认值），**不是** [pinnedVersion]：
      * pinnedVersion 是那个模组/整合包自己的文件版本，它回答的是"这个文件属于哪一档
      * Minecraft 版本"，拿它当目标就是拿模组的自述当用户的选择。
+     *
+     * [pinnedVersion] 仍然决定"装哪一个文件"，但要**先过一次目标判定**
+     * （[pinnedSource]）：抽屉里的文件页与确认层可能看到的是不同的一档，
+     * 那个文件装不进当前实例时，确认层要如实说而不是照样列它的依赖，
+     * 否则这一层的 `File:` 行与下面的 `Minecraft version:` 行会自相矛盾。
+     * 这一条路径也不再取文件列表——文件已经在手上，没什么可取的。
      */
     fun openSheet(item: DiscoverItem, pinnedVersion: PlatformVersion? = null) {
         if (!discoverUsesInstallSheet(item.classes)) return
@@ -872,7 +1032,7 @@ private class OxideDiscoverViewModel : ViewModel() {
         sheet = DiscoverSheet.Resolving(item)
         sheetJob = viewModelScope.launch {
             sheet = if (pinnedVersion != null) {
-                buildSheet(item, pinnedVersion, target, target.instanceName)
+                buildSheet(item, pinnedSource(pinnedVersion, target), target, target.instanceName)
             } else {
                 resolveSheet(item, target, target.instanceName)
             }
@@ -977,29 +1137,76 @@ private class OxideDiscoverViewModel : ViewModel() {
                 androidText(R.string.oxide_dis_install_no_file_title),
             )
 
-            is DiscoverFilesResult.Ok -> {
-                val version = pickVersionFor(files.versions, target)
-                buildSheet(
-                    item = item,
-                    version = version,
-                    target = target,
-                    pickedName = pickedName,
-                    noFileMessage = if (version == null) noFileMessage(target) else null,
-                )
-            }
+            is DiscoverFilesResult.Ok -> buildSheet(
+                item = item,
+                source = dependencySourceOf(files.versions, target),
+                target = target,
+                pickedName = pickedName,
+            )
         }
     }
 
+    /**
+     * 依赖的唯一来源：挑目标这一档的文件，再读那个文件的依赖
+     *
+     * 详情抽屉的依赖标签页、这一层确认层、以及"全部下载"全都问它，
+     * 因此"标签页说有依赖、点安装说没有"这件事在结构上就不可能再发生。
+     */
+    private fun dependencySourceOf(
+        versions: List<PlatformVersion>,
+        target: DiscoverTarget,
+    ): DiscoverDependencySource<PlatformVersion> = discoverDependencySource(
+        versions = versions,
+        target = target,
+        factsOf = ::fileFactsOf,
+        dependenciesOf = ::dependenciesOf,
+    )
+
+    /**
+     * 抽屉里点某个具体文件安装时的那一次来源判定
+     *
+     * 装得进目标就是那个文件与它的依赖；装不进就**不是**"这一档的文件"：
+     * 确认层仍然开着（用户要的就是改目标版本），但不能确认，
+     * 而且依赖那一块要说"目标这一档没有文件"而不是"这个文件没有依赖"。
+     */
+    private fun pinnedSource(
+        pinned: PlatformVersion,
+        target: DiscoverTarget,
+    ): DiscoverDependencySource<PlatformVersion> =
+        if (discoverFileFitsTarget(pinned, target, ::fileFactsOf)) {
+            DiscoverDependencySource(
+                version = pinned,
+                dependencies = discoverDependenciesCapped(pinned),
+                fallbackVersion = null,
+                noFileForTarget = false,
+                noFiles = false,
+            )
+        } else {
+            Logger.info(
+                TAG,
+                "The pinned file does not fit ${target.minecraftVersion ?: target.instanceName}; " +
+                        "keeping the install sheet open so the target can be changed."
+            )
+            DiscoverDependencySource(
+                version = null,
+                dependencies = emptyList(),
+                fallbackVersion = pinned,
+                noFileForTarget = true,
+                noFiles = false,
+            )
+        }
+
     private suspend fun buildSheet(
         item: DiscoverItem,
-        version: PlatformVersion?,
+        source: DiscoverDependencySource<PlatformVersion>,
         target: DiscoverTarget,
         pickedName: String?,
-        noFileMessage: AndroidStringText? = null,
     ): DiscoverSheet {
         val classes = item.classes
-        // 没有兼容文件就没有依赖可列：依赖是那个文件自己标注的
-        val dependencies = version?.let { discoverDependenciesCapped(it) }.orEmpty()
+        val version = source.version
+        // 目标这一档没有兼容文件时没有依赖可列：依赖是那个文件自己标注的。
+        // 这里不说成"没有依赖"——确认层照着 [DiscoverInstallSheet.noFileMessage] 说实话。
+        val dependencies = source.dependencies
         val defaultSelected = discoverDefaultSelection(dependencies)
 
         val rows = buildDependencyRows(
@@ -1012,13 +1219,7 @@ private class OxideDiscoverViewModel : ViewModel() {
         val instanceName = if (classes == PlatformClasses.MOD_PACK) uniqueInstanceName(item.title) else ""
         instanceNameProblem = if (classes == PlatformClasses.MOD_PACK) checkInstanceName(instanceName) else null
 
-        if (noFileMessage != null) {
-            Logger.info(
-                TAG,
-                "No file of ${item.title} fits ${target.minecraftVersion ?: target.instanceName}; " +
-                        "keeping the install sheet open so the target can be changed."
-            )
-        }
+        val noFileMessage = if (source.noFileForTarget) noFileMessage(target) else null
 
         return DiscoverSheet.Ready(
             DiscoverInstallSheet(
@@ -1042,8 +1243,13 @@ private class OxideDiscoverViewModel : ViewModel() {
      *  1. 逐条解析出与目标 Minecraft 版本匹配的文件版本，项目 id 从这个版本上读；
      *  2. 把这些项目 id 去重、截断之后**批量**读项目元数据（名字、图标、作者）。
      *
-     * 两步都在 [Dispatchers.IO] 上跑：这个函数由确认层与详情抽屉的 `viewModelScope` 调用，
-     * 整段解析期间不会回到主线程，组合与测量因此不会被网络往返卡住。
+     * 两步都是**并发**的。此前两步各自是串行的 `map`，于是 N 条依赖要 2N 次顺序往返
+     * 才画得出第一行——依赖卡里每一条的名字都要等前一条回来，这就是"点安装之后
+     * 稍微停一下才出现"的成因。并发度按 [DEPENDENCY_READ_PARALLELISM] 收着，
+     * 与依赖下载链路自己的 [DEPENDENCY_PARALLELISM] 同量级，不会把平台打爆。
+     *
+     * 整段在 [Dispatchers.IO] 上跑：这个函数由确认层与详情抽屉的 `viewModelScope` 调用，
+     * 组合与测量因此不会被网络往返卡住。
      */
     private suspend fun buildDependencyRows(
         dependencies: List<DiscoverDependency>,
@@ -1051,34 +1257,44 @@ private class OxideDiscoverViewModel : ViewModel() {
         target: DiscoverTarget,
         defaultSelected: Set<String>,
     ): List<DiscoverDependencyRow> = withContext(Dispatchers.IO) {
-        val resolutions = dependencies.map { resolveDependency(it, classes, target) }
+        coroutineScope {
+            val resolutions = dependencies
+                .map { dependency -> async { resolveDependency(dependency, classes, target) } }
+                .awaitAll()
 
-        // 同一个项目可能出现在多条关系里，按 (平台, 项目 id) 去重后再按上限截断
-        val targets = discoverProjectTargets(resolutions.mapNotNull { it.target })
-        val resolvedKeys = discoverProjectKeys(targets)
-        val projects = targets.associate { projectTarget ->
-            projectTarget.key to readDependencyProject(projectTarget)
-        }
+            // 同一个项目可能出现在多条关系里，按 (平台, 项目 id) 去重后再按上限截断
+            val targets = discoverProjectTargets(resolutions.mapNotNull { it.target })
+            val resolvedKeys = discoverProjectKeys(targets)
+            val reads = Semaphore(DEPENDENCY_READ_PARALLELISM)
+            val projects = targets
+                .map { projectTarget ->
+                    async {
+                        projectTarget.key to reads.withPermit { readDependencyProject(projectTarget) }
+                    }
+                }
+                .awaitAll()
+                .toMap()
 
-        resolutions.map { resolution ->
-            val dependencyTarget = resolution.target
-            val outcome = when {
-                dependencyTarget == null -> DiscoverProjectOutcome.Unknown
-                dependencyTarget.key !in resolvedKeys -> DiscoverProjectOutcome.Skipped
-                else -> projects.getValue(dependencyTarget.key)
-            }
-            DiscoverDependencyRow(
-                dependency = resolution.dependency,
-                card = discoverDependencyCard(
+            resolutions.map { resolution ->
+                val dependencyTarget = resolution.target
+                val outcome = when {
+                    dependencyTarget == null -> DiscoverProjectOutcome.Unknown
+                    dependencyTarget.key !in resolvedKeys -> DiscoverProjectOutcome.Skipped
+                    else -> projects.getValue(dependencyTarget.key)
+                }
+                DiscoverDependencyRow(
                     dependency = resolution.dependency,
-                    outcome = outcome,
-                    version = resolution.version,
-                    state = resolution.state,
-                    targetGameVersion = target.minecraftVersion,
-                ),
-                selected = resolution.dependency.key in defaultSelected,
-                request = resolution.request,
-            )
+                    card = discoverDependencyCard(
+                        dependency = resolution.dependency,
+                        outcome = outcome,
+                        version = resolution.version,
+                        state = resolution.state,
+                        targetGameVersion = target.minecraftVersion,
+                    ),
+                    selected = resolution.dependency.key in defaultSelected,
+                    request = resolution.request,
+                )
+            }
         }
     }
 
@@ -1089,17 +1305,10 @@ private class OxideDiscoverViewModel : ViewModel() {
      * 所以"重试"是真的重新查一次，而不是把上一次的错再拿出来。
      */
     private suspend fun readDependencyProject(target: DiscoverDependencyTarget): DiscoverProjectOutcome {
-        projectCache[target.key]?.let { cached ->
-            return DiscoverProjectOutcome.Resolved(cached.toDiscoverDependencyProject())
-        }
         return try {
-            val project = getProjectByVersion(
-                projectId = target.projectId,
-                platform = target.platform,
-                printLog = false,
+            DiscoverProjectOutcome.Resolved(
+                readProject(target.projectId, target.platform).toDiscoverDependencyProject()
             )
-            projectCache[target.key] = project
-            DiscoverProjectOutcome.Resolved(project.toDiscoverDependencyProject())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1329,18 +1538,28 @@ private class OxideDiscoverViewModel : ViewModel() {
         plan: DiscoverInstallPlan,
     ) {
         sheet = null
+        val submitted = ArrayList<Task>(1 + plan.dependencyKeys.size)
+
         submitFile(file, sheetContent.classes, sheetContent.item.data.platformId(), target)
+            ?.let { submitted += it }
 
         sheetContent.dependencies
             .filter { it.dependency.key in plan.dependencyKeys && it.request != null }
             .forEach { row ->
-                row.request?.let { request -> submitDependency(request, target, row.dependency.key) }
+                row.request?.let { request ->
+                    submitDependency(request, target, row.dependency.key)?.let { submitted += it }
+                }
             }
 
-        install = DiscoverInstall.Queued(file.platformDisplayName())
+        startQueue(file.platformDisplayName(), submitted)
     }
 
-    /** 详情抽屉里的"全部下载"：目标取当前实例，依赖逐条提交 */
+    /**
+     * 详情抽屉里的"全部下载"：目标取当前实例，依赖逐条提交
+     *
+     * 依赖列表与这里要装的文件来自**同一次** [dependencySourceOf] 判定，
+     * 因此抽屉里勾了什么、"全部下载"就装什么，两者不会再各答各的。
+     */
     fun downloadAllFromDetail() {
         val detail = detail ?: return
         val rows = (detail.dependencies as? DiscoverDependenciesState.Loaded)?.rows ?: return
@@ -1364,14 +1583,26 @@ private class OxideDiscoverViewModel : ViewModel() {
                 }
 
                 is DiscoverFilesResult.Ok -> {
-                    // 与确认层同一个目标：当前选中的实例，而不是搜索栏上的筛选条件
-                    val version = pickVersionFor(files.versions, installTarget)
-                        ?: files.versions.first()
-                    submitFile(version, detail.item.classes, detail.item.data.platformId(), target)
-                    rows.filter { it.selected && it.request != null }.forEach { row ->
-                        row.request?.let { request -> submitDependency(request, target, row.dependency.key) }
+                    val source = dependencySourceOf(files.versions, installTarget)
+                    val version = source.version
+                    if (version == null) {
+                        // 与确认层同一句理由：目标这一档没有兼容文件，而不是"没有依赖"
+                        install = DiscoverInstall.Failed(
+                            if (source.noFileForTarget) noFileMessage(installTarget) else androidText(
+                                R.string.oxide_dis_install_no_file_title
+                            )
+                        )
+                        return@launch
                     }
-                    install = DiscoverInstall.Queued(version.platformDisplayName())
+                    val submitted = ArrayList<Task>(1 + rows.size)
+                    submitFile(version, detail.item.classes, detail.item.data.platformId(), target)
+                        ?.let { submitted += it }
+                    rows.filter { it.selected && it.request != null }.forEach { row ->
+                        row.request?.let { request ->
+                            submitDependency(request, target, row.dependency.key)?.let { submitted += it }
+                        }
+                    }
+                    startQueue(version.platformDisplayName(), submitted)
                 }
             }
         }
@@ -1383,7 +1614,7 @@ private class OxideDiscoverViewModel : ViewModel() {
      * 每个依赖单独一次调用，因此每个依赖都是一个独立任务：
      * 失败通过 [submitError] 只落在它自己那一行，其余依赖照旧在跑。
      */
-    private fun submitDependency(request: DependencyRequest, target: Version, key: String) {
+    private fun submitDependency(request: DependencyRequest, target: Version, key: String): Task? =
         downloadDependenciesForVersions(
             requests = listOf(request),
             versions = listOf(target),
@@ -1392,7 +1623,6 @@ private class OxideDiscoverViewModel : ViewModel() {
                 markDependencyFailed(key, error.message)
             },
         )
-    }
 
     /** 只重试一个依赖的下载 */
     fun retryDependencyDownload(key: String) {
@@ -1430,24 +1660,140 @@ private class OxideDiscoverViewModel : ViewModel() {
         }
     }
 
-    /** 交给单文件安装器 */
+    /** 交给单文件安装器；返回交给任务系统的那个任务，好让提示条能看着它 */
     private fun submitFile(
         version: PlatformVersion,
         classes: PlatformClasses,
         projectId: String,
         target: Version? = VersionsManager.currentVersion.value,
-    ) {
+    ): Task? {
         if (target == null) {
             install = DiscoverInstall.NeedsInstance
-            return
+            return null
         }
-        downloadSingleForVersions(
+        val task = downloadSingleForVersions(
             version = version,
             versions = listOf(target),
             folder = classes.versionFolder.folderName,
-            submitError = { installError = it }
+            submitError = { installError = it },
+            onEnded = { taskId, failed -> onQueueTaskEnded(taskId, failed) },
         )
         Logger.info(TAG, "Queued ${version.platformDisplayName()} of $projectId for ${target.getVersionName()}")
+        return task
+    }
+
+    // ---- 下载提示条 -------------------------------------------------------
+
+    /**
+     * 开始跟踪这一次提交，并把提示条挂上
+     *
+     * [tasks] 是这一次真正交给任务系统的任务：主文件一个，勾上的依赖每个一个。
+     * 一个都没有时提示条不出现——那说明根本没开始下载（例如目标实例已经不存在），
+     * 挂一条永远不收的"Queued for download"才是原来那个缺陷。
+     */
+    private fun startQueue(fileName: String, tasks: List<Task>) {
+        stopQueue()
+        if (tasks.isEmpty()) {
+            install = DiscoverInstall.Idle
+            return
+        }
+        val row = discoverQueueRow(
+            previous = null,
+            fileName = fileName,
+            tasks = tasks.size,
+            stage = DiscoverQueueStage.Queued,
+        ) ?: return
+        install = DiscoverInstall.Queued(row)
+        tasks.forEach { queueTasks += it }
+        queueMessage = null
+
+        // 提示条只跟着**主文件**那个任务的比例走：那是用户点的那个文件。
+        // 依赖是附带的，它们的进度混进来会让那根细线说谎。
+        val primary = tasks.first()
+        queueJob = viewModelScope.launch {
+            combine(primary.stage, primary.progress, primary.message) { stage, progress, message ->
+                Triple(stage, progress, message)
+            }.collect { (stage, progress, message) ->
+                queueMessage = message
+                onQueueProgress(discoverQueueStageOf(stage, progress), progress)
+            }
+        }
+
+        // 任务系统收尾时会把监听器一起摘掉，所以在它跑完**之前**挂上的监听器才收得到。
+        // 万一提交与这一次挂载之间任务就已经结束（很小的窗口），按任务自己报的阶段补一次，
+        // 提示条才不会永远挂着——"任务结束"这一条信息本身就是可靠的。
+        tasks.forEach { task ->
+            if (discoverTaskEnded(task)) onQueueTaskEnded(task.id, task.stage.value != TaskStage.COMPLETED)
+        }
+    }
+
+    /**
+     * 这个任务是不是已经不在跑了
+     *
+     * 阶段是 COMPLETED 一定意味着它跑完了；仍在任务列表里就说明还在跑。
+     * 两者都不是（阶段不是 COMPLETED，且已经不在列表里）就是已经收尾了——
+     * 失败与取消都停在这个状态，因为 `TaskSystem` 只在没抛错时才把阶段置成 COMPLETED。
+     */
+    private fun discoverTaskEnded(task: Task): Boolean =
+        task.stage.value == TaskStage.COMPLETED || !TaskSystem.containsTask(task.id)
+
+    /** 收到主文件任务的真实进度 */
+    private fun onQueueProgress(stage: DiscoverQueueStage, progress: Float) {
+        // Complete/Failed 不在这里算：那条路带着真实的成败信息，而且已经在
+        // [onQueueTaskEnded] 里计过一次。同一个任务在这里再减一次就少算一个。
+        if (stage == DiscoverQueueStage.Complete || stage == DiscoverQueueStage.Failed) return
+        val queued = install as? DiscoverInstall.Queued ?: return
+        val next = discoverQueueRow(
+            previous = queued.queue,
+            fileName = queued.queue.fileName,
+            stage = stage,
+            progress = progress,
+        ) ?: return
+        // 进度没变就不重发一次状态：Compose 状态每次写都会让读它的界面重组
+        if (next == queued.queue) return
+        install = DiscoverInstall.Queued(next)
+    }
+
+    /**
+     * 某一个任务收尾了（成功、失败、取消都会走到）
+     *
+     * [failed] 是任务自己报的：`TaskSystem` 只在跑完没抛错时把阶段置成
+     * [TaskStage.COMPLETED]，其余情况阶段停在 RUNNING/PREPARING，所以阶段本身就是
+     * 真实的成败信号，不需要任务系统额外开口子。
+     *
+     * 收尾只是把计数减一；真正收掉提示条的是最后一个任务走完之后。
+     * 一条依赖失败因此不会把其余仍在下载的东西一起判死。
+     *
+     * 同一个任务只算一次：[startQueue] 会为"提交与挂载之间就已经结束"的那几个补一次，
+     * 而它们的监听器也可能刚好在这中间触发。这里按任务 id 去重，两条路撞上也不会多减。
+     */
+    private fun onQueueTaskEnded(taskId: String, failed: Boolean) {
+        // 回调发生在任务系统自己的线程上，状态必须回到主线程写
+        viewModelScope.launch {
+            if (cleared) return@launch
+            if (taskId !in queueTasks) return@launch
+            if (!queueEnded.add(taskId)) return@launch
+            val queued = install as? DiscoverInstall.Queued ?: return@launch
+            val next = discoverQueueRow(
+                previous = queued.queue,
+                fileName = queued.queue.fileName,
+                stage = if (failed) DiscoverQueueStage.Failed else DiscoverQueueStage.Complete,
+                failed = failed,
+            )
+            // null = 全部收尾：提示条该带着出场动画离场了
+            install = next?.let { DiscoverInstall.Queued(it) } ?: DiscoverInstall.Idle
+            if (next == null) stopQueue()
+        }
+    }
+
+    /** 收掉进度订阅与还没结束的任务引用；手点叉号与状态层收尾都走它 */
+    private fun stopQueue() {
+        queueJob?.cancel()
+        queueJob = null
+        queueMessage = null
+        queueTasks.forEach { TaskSystem.removeTaskEndedListener(it.id) }
+        queueTasks.clear()
+        queueEnded.clear()
     }
 
     // ---- 整合包安装 -------------------------------------------------------
@@ -1510,10 +1856,16 @@ private class OxideDiscoverViewModel : ViewModel() {
 
     // ---- 项目详情 --------------------------------------------------------
 
+    /**
+     * 打开项目详情
+     *
+     * 项目元数据与文件列表各发一次请求，而**依赖列表不再单独去取**：
+     * 依赖是某一个文件版本自己标注的，因此它必须等那份列表回来——此前它是自己去取了一遍，
+     * 于是打开一个抽屉要发两套完全相同的分页 + `initAll` 请求。
+     */
     fun openDetail(item: DiscoverItem) {
         projectJob?.cancel()
         filesJob?.cancel()
-        dependenciesJob?.cancel()
         detail = DiscoverDetail(
             item = item,
             project = DiscoverProjectState.Loading,
@@ -1521,14 +1873,12 @@ private class OxideDiscoverViewModel : ViewModel() {
             dependencies = DiscoverDependenciesState.Loading
         )
         loadProject(item)
-        loadFiles(item)
-        loadDependencies(item)
+        loadFilesAndDependencies(item)
     }
 
     fun closeDetail() {
         projectJob?.cancel()
         filesJob?.cancel()
-        dependenciesJob?.cancel()
         detail = null
     }
 
@@ -1537,9 +1887,7 @@ private class OxideDiscoverViewModel : ViewModel() {
         val target = item.data.platform()
         projectJob = viewModelScope.launch {
             val state = try {
-                DiscoverProjectState.Loaded(
-                    getProjectByVersion(projectId = projectId, platform = target)
-                )
+                DiscoverProjectState.Loaded(readProject(projectId, target))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1551,59 +1899,87 @@ private class OxideDiscoverViewModel : ViewModel() {
         }
     }
 
-    private fun loadFiles(item: DiscoverItem) {
-        val projectId = item.data.platformId()
-        val target = item.data.platform()
+    /**
+     * 读一次项目元数据，命中会话缓存就不再发请求
+     *
+     * 与依赖解析读项目走的是同一个缓存：同一个项目在一次会话里经常既出现在
+     * 详情抽屉的头部、又出现在某条依赖的卡上，此前那是两次请求。
+     *
+     * 成功的结果写回缓存（它就是 [readDependencyProject] 用的那份），
+     * 失败的不写——否则点"重试"拿到的还是上一次那个错。
+     */
+    private suspend fun readProject(projectId: String, platform: Platform): PlatformProject {
+        val key = discoverProjectKey(platform, projectId)
+        projectCache[key]?.let { return it }
+        val project = getProjectByVersion(projectId = projectId, platform = platform)
+        projectCache[key] = project
+        return project
+    }
+
+    /**
+     * 文件列表与依赖列表只取一次
+     *
+     * 文件列表一回来就先把文件那一页填上（它不再等依赖解析），依赖列表随后用**同一份**
+     * 列表判定——既省掉一次整套请求，也保证抽屉里列出来的依赖与"全部下载"会装的完全一致。
+     */
+    private fun loadFilesAndDependencies(item: DiscoverItem) {
         filesJob = viewModelScope.launch {
             val state = try {
-                val versions = getVersions(projectID = projectId, platform = target).initAll(projectId)
-                if (versions.isEmpty()) DiscoverFilesState.Empty else DiscoverFilesState.Loaded(versions)
+                readAllVersions(item)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.warning(TAG, "Failed to load the files of $projectId", e)
-                DiscoverFilesState.Failed(mapExceptionToMessage(e))
+                Logger.warning(TAG, "Failed to load the files of ${item.key}", e)
+                DiscoverFilesResult.Failed(mapExceptionToMessage(e))
             }
             if (detail?.item?.key != item.key) return@launch
-            detail = detail?.copy(files = state)
-        }
-    }
+            detail = detail?.copy(files = state.toFilesState())
 
-    private fun loadDependencies(item: DiscoverItem) {
-        val projectId = item.data.platformId()
-        val target = item.data.platform()
-        val classes = item.classes
-        dependenciesJob = viewModelScope.launch {
-            val state = try {
-                when (val files = readAllVersions(item)) {
-                    is DiscoverFilesResult.Failed -> DiscoverDependenciesState.Failed(files.message)
+            val classes = item.classes
+            val dependencies = try {
+                when (state) {
+                    is DiscoverFilesResult.Failed -> DiscoverDependenciesState.Failed(state.message)
                     is DiscoverFilesResult.Empty -> DiscoverDependenciesState.Empty
                     is DiscoverFilesResult.Ok -> {
-                        // 详情抽屉列出的依赖就是"全部下载"会装的那一份，
-                        // 所以这里按同一个目标（当前选中的实例）挑文件，而不是按搜索筛选条件
+                        // 抽屉列出的依赖就是"全部下载"会装的那一份，
+                        // 所以这里按同一个目标（当前选中的实例）判定，而不是按搜索筛选条件
                         val target = playableTarget()
-                        val version = pickVersionFor(files.versions, target)
-                            ?: files.versions.first()
-                        val dependencies = discoverDependenciesCapped(version)
-                        DiscoverDependenciesState.Loaded(
-                            buildDependencyRows(
-                                dependencies = dependencies,
-                                classes = classes,
-                                target = target,
-                                defaultSelected = discoverDefaultSelection(dependencies),
+                        val source = dependencySourceOf(state.versions, target)
+                        when {
+                            source.noFiles -> DiscoverDependenciesState.Empty
+                            // 目标这一档没有兼容文件：说这一句，而不是"这个文件没有依赖"
+                            source.noFileForTarget -> DiscoverDependenciesState.NoFileForTarget(
+                                noFileMessage(target)
                             )
-                        )
+
+                            source.genuinelyEmpty -> DiscoverDependenciesState.Empty
+                            else -> DiscoverDependenciesState.Loaded(
+                                buildDependencyRows(
+                                    dependencies = source.dependencies,
+                                    classes = classes,
+                                    target = target,
+                                    defaultSelected = discoverDefaultSelection(source.dependencies),
+                                )
+                            )
+                        }
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.warning(TAG, "Failed to load the dependencies of $projectId", e)
+                Logger.warning(TAG, "Failed to load the dependencies of ${item.key}", e)
                 DiscoverDependenciesState.Failed(mapExceptionToMessage(e))
             }
             if (detail?.item?.key != item.key) return@launch
-            detail = detail?.copy(dependencies = state)
+            detail = detail?.copy(dependencies = dependencies)
         }
+    }
+
+    /** 文件列表的读取结果 → 抽屉里文件那一页的状态 */
+    private fun DiscoverFilesResult.toFilesState(): DiscoverFilesState = when (this) {
+        is DiscoverFilesResult.Ok -> DiscoverFilesState.Loaded(versions)
+        is DiscoverFilesResult.Empty -> DiscoverFilesState.Empty
+        is DiscoverFilesResult.Failed -> DiscoverFilesState.Failed(message)
     }
 
     /** 详情抽屉里勾选一个依赖 */
@@ -1618,7 +1994,15 @@ private class OxideDiscoverViewModel : ViewModel() {
         )
     }
 
+    /**
+     * 手点叉号：把提示条连同它的进度订阅一起收掉
+     *
+     * 幂等：收完之后任务结束回调仍在路上，而 [onQueueTaskEnded] 先看状态是不是 Queued，
+     * 不是就直接返回，因此再点一次叉号、或者下载随后结束，都不会把提示条变回来。
+     * 下载本身不受影响——叉号收的只是这一屏。
+     */
     fun dismissInstallState() {
+        stopQueue()
         install = DiscoverInstall.Idle
     }
 
@@ -1627,12 +2011,16 @@ private class OxideDiscoverViewModel : ViewModel() {
     }
 
     override fun onCleared() {
+        cleared = true
+        stopQueue()
         searchJob?.cancel()
         resolveJob?.cancel()
         sheetJob?.cancel()
         projectJob?.cancel()
         filesJob?.cancel()
-        dependenciesJob?.cancel()
+        // 收尾不是挂起函数，因此这里不走 withLock：ViewModel 已经被清掉，
+        // 没有任何协程还会再来拿这张表，直接清空即可
+        inFlightFiles.clear()
         installer?.cancelInstall()
         mobileDataContinuation = null
     }
@@ -1663,9 +2051,24 @@ private fun DiscoverInstallSheet.plan(): DiscoverInstallPlan = discoverBuildPlan
     instanceName = instanceName,
 )
 
+/**
+ * 确认层里依赖那一块该显示什么
+ *
+ * [DiscoverInstallSheet.noFileMessage] 非空就是"目标这一档没有兼容文件"，
+ * 此时依赖列表必须说同一件事，而不是退成一句 "This file has no dependencies."——
+ * 依赖是那个文件自己标注的，没有文件就没有依赖可列，而这两者的区别正是本轮要修的东西。
+ */
+private fun DiscoverInstallSheet.dependencyState(): DiscoverDependenciesState = when {
+    dependencies.isNotEmpty() -> DiscoverDependenciesState.Loaded(dependencies)
+    noFileMessage != null -> DiscoverDependenciesState.NoFileForTarget(noFileMessage)
+    else -> DiscoverDependenciesState.Empty
+}
+
 /** 安装进行中时不允许重复触发 */
 private fun DiscoverInstall.busy(): Boolean = when (this) {
-    is DiscoverInstall.Resolving, is DiscoverInstall.Queued -> true
+    // 只有"还在向平台查询"才是忙。已经交给任务系统的下载不再挡着下一次安装：
+    // 之前 Queued 永远不收，于是下载早就结束了按钮却还是灰的。
+    is DiscoverInstall.Resolving -> true
     else -> false
 }
 
@@ -1688,12 +2091,18 @@ private fun pickVersionFor(
     versions = versions,
     minecraftVersion = target.minecraftVersion,
     targetLoaders = target.loaders,
-) { version ->
-    DiscoverFileFacts(
-        gameVersions = version.platformGameVersion().toList(),
-        loaders = version.platformLoaders().map { it.getDisplayName() },
-    )
-}
+    factsOf = ::fileFactsOf,
+)
+
+/** 一个文件版本自己声明的 Minecraft 版本与加载器 */
+private fun fileFactsOf(version: PlatformVersion): DiscoverFileFacts = DiscoverFileFacts(
+    gameVersions = version.platformGameVersion().toList(),
+    loaders = version.platformLoaders().map { it.getDisplayName() },
+)
+
+/** 一个文件版本自己标注的依赖，去重并截断 */
+private fun dependenciesOf(version: PlatformVersion): List<DiscoverDependency> =
+    discoverDependenciesCapped(version)
 
 /**
  * 实例名 → 它真实的 Minecraft 版本名
@@ -1844,6 +2253,15 @@ private fun PlatformDependencyType.typeLabelRes(): Int = when (this) {
 fun OxideDiscoverPage(
     metrics: OxideMetrics,
     onNavigate: (OxidePage) -> Unit,
+    /**
+     * 外壳转过来的"打开某个项目"请求
+     *
+     * 页面自己不知道谁在导航它，因此这一条只描述意图：切到内容类别对应的那一栏，
+     * 然后打开那个项目，或者退成一次普通搜索。消费掉之后回调一次，宿主把请求清掉，
+     * 于是下一次换请求不会被上一次的重放顶掉。
+     */
+    hostRequest: OxideDiscoverRequest? = null,
+    onHostRequestConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val viewModel: OxideDiscoverViewModel = viewModel(key = "OxideDiscoverPage") {
@@ -1862,6 +2280,14 @@ fun OxideDiscoverPage(
     // 收藏只有在进入发现页时装载一次：否则第一次点星号时还会被当成未收藏
     LaunchedEffect(Unit) {
         viewModel.ensureFavoritesLoaded()
+    }
+
+    // 外壳转过来的打开请求：消费一次就清掉，重组不会重复触发
+    LaunchedEffect(hostRequest) {
+        hostRequest?.let {
+            viewModel.openFromRequest(it)
+            onHostRequestConsumed()
+        }
     }
 
     // 条目标题要走 mcmod 译名，翻译表只有界面这一侧才有，所以把函数递进状态层
@@ -2069,11 +2495,29 @@ fun OxideDiscoverPage(
 
     DiscoverInstallNotice(
         metrics = metrics,
-        install = viewModel.install,
-        error = viewModel.installError,
-        onGoInstances = { onNavigate(OxidePage.Instances) },
-        onDismiss = viewModel::dismissInstallState,
-        onDismissError = viewModel::dismissInstallError
+        notice = discoverNoticeRow(
+            install = viewModel.install,
+            error = viewModel.installError,
+            taskMessage = viewModel.queueMessage,
+        ),
+        action = if (viewModel.install is DiscoverInstall.NeedsInstance) {
+            {
+                OxideButton(
+                    text = stringResource(R.string.oxide_dis_install_go_instances),
+                    onClick = { onNavigate(OxidePage.Instances) },
+                    tone = OxideButtonTone.Primary
+                )
+            }
+        } else {
+            null
+        },
+        onDismiss = {
+            if (viewModel.installError != null) {
+                viewModel.dismissInstallError()
+            } else {
+                viewModel.dismissInstallState()
+            }
+        },
     )
 }
 
@@ -3102,7 +3546,7 @@ private fun DiscoverFileRow(
  * 其余条目照旧可用——一个失败不会静默吃掉整张列表。
  */
 @Composable
-private fun DiscoverDependencySection(
+internal fun DiscoverDependencySection(
     state: DiscoverDependenciesState,
     showDownloadAll: Boolean,
     busy: Boolean,
@@ -3122,6 +3566,16 @@ private fun DiscoverDependencySection(
 
             is DiscoverDependenciesState.Empty -> {
                 OxideEmptyState(title = stringResource(R.string.oxide_dis_deps_empty))
+            }
+
+            // 目标这一档没有兼容文件：标题复用"没有兼容文件"，细节是这一句既有文案。
+            // 不能退回上面那个 Empty——"这个文件没有依赖"与"你选的这一档没有文件"
+            // 会让用户往完全错误的方向去找原因。
+            is DiscoverDependenciesState.NoFileForTarget -> {
+                OxideEmptyState(
+                    title = stringResource(R.string.oxide_dis_install_no_file_title),
+                    detail = state.message.toAndroidString(context)
+                )
             }
 
             is DiscoverDependenciesState.Failed -> {
@@ -3614,11 +4068,8 @@ private fun DiscoverInstallSheetBody(
 
         Spacer(Modifier.height(metrics.sectionGap))
         DiscoverDependencySection(
-            state = if (sheet.dependencies.isEmpty()) {
-                DiscoverDependenciesState.Empty
-            } else {
-                DiscoverDependenciesState.Loaded(sheet.dependencies)
-            },
+            // 与详情抽屉同一套判定：目标这一档没有兼容文件时说那一句，不说"没有依赖"
+            state = sheet.dependencyState(),
             showDownloadAll = false,
             busy = busy,
             onToggle = onToggleDependency,
@@ -3811,113 +4262,154 @@ private fun DiscoverDialogActions(
     }
 }
 
-/** 右下角的安装提示：只展示真实的安装状态与安装器回报的错误 */
+/**
+ * 安装状态 → 提示条上要画的那一行
+ *
+ * 文案取自既有字符串，一个新的都不加：下载期间那行说明直接用任务自己写的
+ * `download_assets_install_progress_downloading` / `..._installing`——
+ * 那是链路上本来就在更新、而且已经本地化的那一句，写的是真实的文件名与字节数。
+ */
 @Composable
-private fun DiscoverInstallNotice(
+private fun discoverNoticeRow(
     install: DiscoverInstall,
     error: ErrorViewModel.ThrowableMessage?,
-    onGoInstances: () -> Unit,
-    onDismiss: () -> Unit,
-    onDismissError: () -> Unit,
-    metrics: OxideMetrics
-) {
-    val notice: DiscoverNotice? = when {
-        error != null -> DiscoverNotice(
-            title = stringResource(R.string.oxide_dis_install_failed_title),
-            detail = error.message
+    taskMessage: AndroidStringText?,
+): DiscoverNoticeRow? = when {
+    error != null -> DiscoverNoticeRow(
+        title = stringResource(R.string.oxide_dis_install_failed_title),
+        detail = error.message,
+        progress = null,
+    )
+
+    else -> when (install) {
+        is DiscoverInstall.Idle -> null
+
+        is DiscoverInstall.Resolving -> DiscoverNoticeRow(
+            title = stringResource(R.string.oxide_dis_install_resolving),
+            detail = null,
+            progress = null,
         )
 
-        else -> when (install) {
-            is DiscoverInstall.Idle -> null
-            is DiscoverInstall.Resolving -> DiscoverNotice(
-                title = stringResource(R.string.oxide_dis_install_resolving),
-                detail = null
-            )
+        is DiscoverInstall.NeedsInstance -> DiscoverNoticeRow(
+            title = stringResource(R.string.oxide_dis_install_needs_instance_title),
+            detail = androidText(R.string.oxide_dis_install_needs_instance_detail),
+            progress = null,
+        )
 
-            is DiscoverInstall.NeedsInstance -> DiscoverNotice(
-                title = stringResource(R.string.oxide_dis_install_needs_instance_title),
-                detail = androidText(R.string.oxide_dis_install_needs_instance_detail),
-                action = {
-                    OxideButton(
-                        text = stringResource(R.string.oxide_dis_install_go_instances),
-                        onClick = onGoInstances,
-                        tone = OxideButtonTone.Primary
-                    )
-                }
-            )
+        is DiscoverInstall.NoFile -> DiscoverNoticeRow(
+            title = stringResource(R.string.oxide_dis_install_no_file_title),
+            detail = androidText(R.string.oxide_dis_install_no_file_detail),
+            progress = null,
+        )
 
-            is DiscoverInstall.NoFile -> DiscoverNotice(
-                title = stringResource(R.string.oxide_dis_install_no_file_title),
-                detail = androidText(R.string.oxide_dis_install_no_file_detail)
-            )
+        is DiscoverInstall.Queued -> DiscoverNoticeRow(
+            title = stringResource(R.string.oxide_dis_install_queued_title),
+            // 任务自己写的那句说明（真实的文件名与字节数），没有就退回既有那句
+            detail = taskMessage ?: androidText(R.string.oxide_dis_install_queued_detail),
+            // fraction 是 null 时画成空槽：任务说"不确定"，这里就不给一个假数字
+            progress = install.queue.fraction ?: 0f,
+        )
 
-            is DiscoverInstall.Queued -> DiscoverNotice(
-                title = stringResource(R.string.oxide_dis_install_queued_title),
-                detail = androidText(R.string.oxide_dis_install_queued_detail)
-            )
+        is DiscoverInstall.Created -> DiscoverNoticeRow(
+            title = stringResource(R.string.oxide_dis_install_created_title),
+            detail = androidText(R.string.oxide_dis_install_created_detail, install.instanceName),
+            progress = null,
+        )
 
-            is DiscoverInstall.Created -> DiscoverNotice(
-                title = stringResource(R.string.oxide_dis_install_created_title),
-                detail = androidText(R.string.oxide_dis_install_created_detail, install.instanceName)
-            )
+        is DiscoverInstall.Failed -> DiscoverNoticeRow(
+            title = stringResource(R.string.oxide_dis_install_failed_title),
+            detail = install.message,
+            progress = null,
+        )
 
-            is DiscoverInstall.Failed -> DiscoverNotice(
-                title = stringResource(R.string.oxide_dis_install_failed_title),
-                detail = install.message
-            )
-
-            is DiscoverInstall.Cancelled -> DiscoverNotice(
-                title = stringResource(R.string.oxide_dis_install_cancelled_title),
-                detail = androidText(R.string.oxide_dis_install_cancelled_detail)
-            )
-        }
+        is DiscoverInstall.Cancelled -> DiscoverNoticeRow(
+            title = stringResource(R.string.oxide_dis_install_cancelled_title),
+            detail = androidText(R.string.oxide_dis_install_cancelled_detail),
+            progress = null,
+        )
     }
+}
 
-    if (notice == null) return
+/**
+ * 右下角的安装提示
+ *
+ * 只展示真实的安装状态与安装器回报的错误。下载期间那一条极细的进度线画的是
+ * `Task.progress` 的**原值**：-1f 就是不确定，于是画成一条空槽而不是随便填一个数字。
+ *
+ * 进出都从右边滑：用户报的现象正是"下载完了它不走"，所以真正收掉提示条的是任务结束
+ * 那一刻（`OxideDiscoverViewModel.onQueueTaskEnded`），而这一层只负责把离场演掉。
+ *
+ * 签名收的是 [DiscoverNoticeRow]（普通字段）而不是整个状态层：
+ * 这一屏画的东西只有标题、说明、进度条与一枚叉号，
+ * 让测试能直接构造这三样东西，就不必为了画一张金标准图去伪造平台模型
+ * （`DiscoverInstallSheetHost` 至今仍然做不到，正是因为它的状态带着 `PlatformVersion`，
+ * 见 `OxideDiscoverSnapshotTest` 顶部的说明）。
+ */
+@Composable
+internal fun DiscoverInstallNotice(
+    notice: DiscoverNoticeRow?,
+    action: (@Composable () -> Unit)?,
+    onDismiss: () -> Unit,
+    metrics: OxideMetrics
+) {
+    // 离场动画期间内容仍然要留着，因此把最后一次非空的那一行记住
+    var shown by remember { mutableStateOf(notice) }
+    LaunchedEffect(notice) { if (notice != null) shown = notice }
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
-        OxideSurface(
-            modifier = Modifier
-                .padding(end = metrics.pagePaddingH, bottom = metrics.pagePaddingH)
-                .widthIn(max = metrics.drawerWidth),
-            shape = Oxide.RadiusBlock,
-            contentPadding = PaddingValues(
-                start = metrics.cardGap,
-                end = metrics.controlPadding,
-                top = metrics.cardGap * 0.8f,
-                bottom = metrics.cardGap * 0.8f
-            )
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = notice.title,
-                        color = Oxide.Fg,
-                        fontSize = Oxide.Type.Body.fontSize,
-                        lineHeight = Oxide.Type.Body.lineHeight,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    notice.detail?.let {
-                        Spacer(Modifier.height(2.dp))
-                        AndroidStringText(
-                            text = it,
-                            style = Oxide.Type.MicroLabel.copy(color = Oxide.FgFaint),
-                            maxLines = 3,
+    AnimatedVisibility(
+        visible = notice != null,
+        enter = slideInHorizontally(tween(Oxide.Motion.PopoverMs)) { it } +
+                fadeIn(tween(Oxide.Motion.PopoverFadeMs)),
+        exit = slideOutHorizontally(tween(Oxide.Motion.PopoverMs)) { it } +
+                fadeOut(tween(Oxide.Motion.PopoverFadeMs)),
+    ) {
+        val row = shown ?: return@AnimatedVisibility
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
+            OxideSurface(
+                modifier = Modifier
+                    .padding(end = metrics.pagePaddingH, bottom = metrics.pagePaddingH)
+                    .widthIn(max = metrics.drawerWidth),
+                shape = Oxide.RadiusBlock,
+                contentPadding = PaddingValues(
+                    start = metrics.cardGap,
+                    end = metrics.controlPadding,
+                    top = metrics.cardGap * 0.8f,
+                    bottom = metrics.cardGap * 0.8f
+                )
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = row.title,
+                            color = Oxide.Fg,
+                            fontSize = Oxide.Type.Body.fontSize,
+                            lineHeight = Oxide.Type.Body.lineHeight,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        row.detail?.let {
+                            Spacer(Modifier.height(2.dp))
+                            AndroidStringText(
+                                text = it,
+                                style = Oxide.Type.MicroLabel.copy(color = Oxide.FgFaint),
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        // 用户要的那一条极细的线，就在这行下面
+                        if (row.showsProgress) {
+                            Spacer(Modifier.height(metrics.cardGap * 0.6f))
+                            OxideProgressBar(progress = row.progress ?: 0f)
+                        }
                     }
-                }
-                notice.action?.let {
+                    action?.let {
+                        Spacer(Modifier.width(metrics.controlPadding))
+                        it()
+                    }
                     Spacer(Modifier.width(metrics.controlPadding))
-                    it()
+                    DiscoverCloseButton(metrics = metrics, onClick = onDismiss)
                 }
-                Spacer(Modifier.width(metrics.controlPadding))
-                DiscoverCloseButton(
-                    metrics = metrics,
-                    onClick = if (error != null) onDismissError else onDismiss
-                )
             }
         }
     }

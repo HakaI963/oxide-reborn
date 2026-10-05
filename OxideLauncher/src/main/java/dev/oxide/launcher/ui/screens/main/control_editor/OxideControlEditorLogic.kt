@@ -21,6 +21,9 @@ package dev.oxide.launcher.ui.screens.main.control_editor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -241,6 +244,76 @@ fun editorNudge(
         else -> 0
     }
     return (stored + amount).coerceIn(low, high)
+}
+
+// ---------------------------------------------------------------------------
+// 悬浮球的安全区
+// ---------------------------------------------------------------------------
+
+/**
+ * 安全边界，四条边各自的像素值
+ *
+ * 用 `WindowInsets.safeDrawing` 的像素值填：圆角、刘海与系统栏都算在里面。
+ * 四条边各自独立，因此只在左边有切口的折叠屏展开时也排得对。
+ */
+@Immutable
+data class EditorBallInsets(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+) {
+    companion object {
+        /** 没有安全边界（截图，或分屏里已经没有系统栏的那种） */
+        val None: EditorBallInsets = EditorBallInsets(0f, 0f, 0f, 0f)
+    }
+}
+
+/**
+ * 悬浮球可以停留的矩形
+ *
+ * 算出来的是一个**合法**的矩形：右边不小于左边、下边不小于上边，四条边也都落在
+ * 容器以内。因此后面每一次 `coerceIn` 拿到的都是一对有序的界，不会抛异常。
+ */
+fun editorBallSafeBounds(
+    available: Size,
+    ball: Float,
+    insets: EditorBallInsets = EditorBallInsets.None,
+): Rect {
+    val left = insets.left.coerceAtLeast(0f)
+    val top = insets.top.coerceAtLeast(0f)
+    // 边界比容器还大时（例如转屏那一瞬 inset 先于尺寸更新），
+    // 上界要压回下界而不是留在容器外——退化成一条缝时球停在缝的起点上
+    val right = (available.width - insets.right.coerceAtLeast(0f)).coerceAtLeast(left)
+    val bottom = (available.height - insets.bottom.coerceAtLeast(0f)).coerceAtLeast(top)
+    return Rect(left = left, top = top, right = right, bottom = bottom)
+}
+
+/**
+ * 还没落位时球默认摆在哪
+ *
+ * 横向居中、贴着安全区的顶边。v1.7.0 里球被宿主摆在左上角（宿主没有对齐，
+ * `TopStart`），正好压在现代 Android 的圆角上；那也正是设备截图里那颗卡在
+ * 左上角、且拖不动的按钮。
+ */
+fun editorBallDefaultPosition(bounds: Rect, ball: Float): Offset = Offset(
+    x = bounds.left + (bounds.width - ball) / 2f,
+    y = bounds.top,
+)
+
+/**
+ * 把一个位置夹进安全区
+ *
+ * 容器比球还小时上下界会重合而不是反过来，于是结果落在安全区的起点上，
+ * 不会抛异常。拖动的每一帧都走这里。
+ */
+fun editorBallClamp(bounds: Rect, ball: Float, position: Offset): Offset {
+    val maxX = (bounds.right - ball).coerceAtLeast(bounds.left)
+    val maxY = (bounds.bottom - ball).coerceAtLeast(bounds.top)
+    return Offset(
+        x = position.x.coerceIn(bounds.left, maxX),
+        y = position.y.coerceIn(bounds.top, maxY),
+    )
 }
 
 // ---------------------------------------------------------------------------

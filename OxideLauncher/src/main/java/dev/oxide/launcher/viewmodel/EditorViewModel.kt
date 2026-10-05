@@ -87,8 +87,17 @@ class EditorViewModel : ViewModel() {
      */
     var editorMenu by mutableStateOf(MenuState.HIDE)
 
-    /** 编辑器菜单悬浮球当前的位置 */
-    var editorBallPosition by mutableStateOf(Offset.Zero)
+    /**
+     * 编辑器菜单悬浮球当前的位置，单位是像素
+     *
+     * null 表示**还没落位**，由 [dev.oxide.launcher.ui.screens.main.control_editor.EditorBall]
+     * 摆到安全区里横向居中、贴顶的那一处。以前这里拿 [Offset.Zero] 同时表示"没摆过"
+     * 和"摆在左上角"这两件事，于是球第一次出现就在左上角（压在圆角上），
+     * 而且 `Offset.Zero` 与合法的落位无法区分。
+     *
+     * 只存在内存里：转屏、折叠屏展开与转屏之外的重开都会重新落位。
+     */
+    var editorBallPosition by mutableStateOf<Offset?>(null)
 
     /**
      * 编辑器各种操作项
