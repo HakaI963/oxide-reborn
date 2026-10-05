@@ -9,8 +9,8 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
@@ -18,13 +18,13 @@
 
 package dev.oxide.layercontroller.event
 
-import dev.oxide.layercontroller.data.clampClickEventDelayMs
 import dev.oxide.layercontroller.data.clampMacroIntervalMs
 import dev.oxide.layercontroller.observable.ObservableControlLayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.IdentityHashMap
@@ -204,9 +204,9 @@ class EventHandler(
     internal fun onKeyPressed(
         clickEvents: List<ClickEvent>,
         isPressed: Boolean,
-        handle: (ClickEvent) -> Boolean = { true },
         owner: Any? = null,
-        macroIntervalMs: Long = 0L
+        macroIntervalMs: Long = 0L,
+        handle: (ClickEvent) -> Boolean = { true }
     ) {
         val key = owner ?: clickEvents
         val pipeline = pipelineOf(key)

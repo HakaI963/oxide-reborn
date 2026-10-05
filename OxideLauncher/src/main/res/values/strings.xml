@@ -557,6 +557,7 @@
     <string name="account_microsoft_fetch_device_code">Get Device Code</string>
     <string name="account_microsoft_coped_device_code">Device code copied: %s. Please complete verification in your browser shortly.</string>
     <string name="account_microsoft_get_token">Polling in progress, attempting to obtain token; device code: %s</string>
+    <string name="account_microsoft_not_configured">This build has no Microsoft application (client) id, so sign-in cannot start. It is supplied at build time: register the OAUTH_CLIENT_ID repository secret and rebuild. Nothing is wrong with your account.</string>
     <string name="account_microsoft_getting_access_token">Requesting access token</string>
     <string name="account_microsoft_getting_xbl_token">Requesting XBL token</string>
     <string name="account_microsoft_getting_xsts_token">Requesting XSTS token</string>
