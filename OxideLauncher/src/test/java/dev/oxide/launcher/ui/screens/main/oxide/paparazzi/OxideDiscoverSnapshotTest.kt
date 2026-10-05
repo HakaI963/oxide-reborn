@@ -108,7 +108,6 @@ class OxideDiscoverSnapshotTest {
         onlyInstalled: Boolean = false,
         scanningInstalled: Boolean = false,
     ) {
-        val metrics = metrics
         OxidePageColumn(metrics = metrics) {
             Column(modifier = Modifier.fillMaxSize()) {
                 DiscoverResultsHeader(
@@ -227,7 +226,7 @@ class OxideDiscoverSnapshotTest {
     fun Discover_LoadingMore() {
         val device = OxidePaparazzi.STANDARD
         paparazzi.shot("Discover_LoadingMore", device) { metrics ->
-            Results(device, ready.copy(phase = DiscoverFeedPhase.PagingNext, index = 20, pages = 1))
+            Results(metrics, ready.copy(phase = DiscoverFeedPhase.PagingNext, index = 20, pages = 1))
         }
     }
 
