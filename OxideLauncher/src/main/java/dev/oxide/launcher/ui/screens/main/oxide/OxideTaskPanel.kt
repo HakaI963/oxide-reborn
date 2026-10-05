@@ -87,6 +87,9 @@ internal fun OxideTaskDrawer(
         onDismiss = onDismiss,
         modifier = modifier,
         title = stringResource(R.string.oxide_tasks_title),
+        // 列表自己就是 LazyColumn，所以抽屉不能再套一层纵向滚动：
+        // 那样会把它的最大高度变成无穷大，测量期直接抛异常。
+        scrollable = false,
     ) {
         if (tasks.isEmpty()) {
             OxideEmptyState(

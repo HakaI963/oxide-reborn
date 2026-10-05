@@ -109,6 +109,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # Same reason as in ci.yml: the JUnit XML is the only place the assertion message and
+      # the full stack trace exist. The Paparazzi report shows rendered images, not causes.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            OxideLauncher/build/test-results/**
+            OxideLauncher/build/reports/tests/**
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload Paparazzi report
         if: always()
         uses: actions/upload-artifact@v7
@@ -169,6 +182,19 @@ jobs:
 
       # On failure Paparazzi writes the rendered image, the golden and a delta into this
       # variant's failures directory. Without this the log only says "1 of 43 tests failed".
+      # Same reason as in ci.yml: the JUnit XML is the only place the assertion message and
+      # the full stack trace exist. The Paparazzi report shows rendered images, not causes.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            OxideLauncher/build/test-results/**
+            OxideLauncher/build/reports/tests/**
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload Paparazzi report
         if: always()
         uses: actions/upload-artifact@v7

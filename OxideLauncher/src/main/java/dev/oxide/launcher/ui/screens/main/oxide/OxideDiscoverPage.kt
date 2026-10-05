@@ -2564,6 +2564,9 @@ internal fun DiscoverResultsGrid(
         }
 
         DiscoverFeedView.List, DiscoverFeedView.ListWithError, DiscoverFeedView.LoadingNext -> {
+            // 收藏仓库的装载状态读在 remember 之外：它是 mutableState，读取即订阅，
+            // 于是装载完成本身就能把卡片刷成真实收藏态，不必等下一次翻页或切换。
+            val favoritesLoaded = FavoriteProjectsRepository.initialized
             BoxWithConstraints(modifier = modifier) {
                 val columns = discoverResultColumns(metrics, maxWidth)
                 LazyVerticalGrid(
@@ -2583,8 +2586,11 @@ internal fun DiscoverResultsGrid(
                             busy = busy,
                             // 收藏态读一次快照：切换会推一次 favoritesTick，
                             // 下一次刷新回读真实值，因此不会回读到一个被缓存的旧值
-                            favorite = remember(item.key, favoritesTick) {
-                                FavoriteProjectsRepository.isFavorite(
+                            favorite = remember(item.key, favoritesTick, favoritesLoaded) {
+                                // 未装载时不问仓库：isFavorite 会顺带触发一次装载，而装载
+                                // 要读 MMKV —— 在一张截图里既没有意义也没有 MMKV 可读。
+                                // 未装载本来就没有收藏可言，false 就是答案。
+                                favoritesLoaded && FavoriteProjectsRepository.isFavorite(
                                     platform = item.data.platform(),
                                     projectId = item.data.platformId(),
                                 )

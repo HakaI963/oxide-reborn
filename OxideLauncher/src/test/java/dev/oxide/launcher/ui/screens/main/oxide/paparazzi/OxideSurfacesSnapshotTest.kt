@@ -233,6 +233,7 @@ class OxideSurfacesSnapshotTest {
             OxideLogSourceList(
                 modifier = Modifier.fillMaxWidth(),
                 metrics = metrics,
+                folderPath = "/data/dev.oxide.launcher/logs",
                 sources = listOf(
                     OxideLogSource("/games/1.20.1-forge/logs/latest.log", "Game log", "1.4 MB"),
                     OxideLogSource("/games/1.20.1-forge/crash-reports", "Crash report", "84 KB"),

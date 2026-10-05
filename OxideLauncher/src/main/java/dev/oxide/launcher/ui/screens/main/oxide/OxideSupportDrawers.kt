@@ -812,12 +812,16 @@ fun OxideJavaDrawer(
 
             OxideSecDivider()
 
-            OxideActionRow(
-                label = stringResource(R.string.oxide_cap_java_import),
-                hint = stringResource(R.string.oxide_cap_java_import_detail),
-                enabled = !scanning,
-                onClick = importRuntime,
-            )
+            // 扫描运行时的那几秒里这一行整行消失，而不是灰着。灰着的可点行读起来是
+            // "可以点，只是现在不行"，而这里的理由是"正在扫描，扫完下面那份清单本身
+            // 就是答案" —— 与上面那个选择器的处理保持一致。
+            if (!scanning) {
+                OxideActionRow(
+                    label = stringResource(R.string.oxide_cap_java_import),
+                    hint = stringResource(R.string.oxide_cap_java_import_detail),
+                    onClick = importRuntime,
+                )
+            }
             // 跑 jar 要先定运行时：点这一行先挑一档，挑完立刻打开文件选择器。
             // 挑完文件再问用哪个 Java 是更差的做法——用户已经选好了文件。
             runJar?.let { launchJar ->

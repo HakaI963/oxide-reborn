@@ -475,6 +475,16 @@ fun OxideDrawerHost(
     /** 抽屉里顶部的标签页 */
     title: String,
     onClose: () -> Unit = onDismiss,
+    /**
+     * 内容超出时是否由抽屉自己纵向滚动
+     *
+     * 默认 true，所以绝大多数抽屉一行都不用改。传 false 的场合只有一个：内容自带滚动
+     * 容器（`LazyColumn` 之类）。`verticalScroll` 会把子内容的最大高度变成无穷大，
+     * 而 `LazyColumn` 拿到无穷大的最大高度会在测量期抛
+     * `IllegalStateException: Vertically scrollable component was measured with an infinity
+     * maximum height constraints` —— 与 v1.6.0 修掉的 Home 环境卡片同一个成因。
+     */
+    scrollable: Boolean = true,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     if (!visible) return
@@ -555,7 +565,15 @@ fun OxideDrawerHost(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
+                        // scrollable = false 时纵向空间原样交给内容：内容里的
+                        // LazyColumn 自己滚动，而且它需要的是一个**有限**的最大高度。
+                        .then(
+                            if (scrollable) {
+                                Modifier.verticalScroll(rememberScrollState())
+                            } else {
+                                Modifier
+                            }
+                        )
                         .padding(horizontal = 12.dp, vertical = 12.dp),
                     content = content,
                 )

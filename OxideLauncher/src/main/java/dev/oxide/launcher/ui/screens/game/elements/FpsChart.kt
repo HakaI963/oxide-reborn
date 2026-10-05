@@ -228,7 +228,7 @@ private fun DrawScope.drawFpsChart(
     // 复用的两块缓冲：这张图挂在运行中的游戏上，动画期间是每帧重画。
     // 这里不新建列表也不新建 Path
     val coordinates = fpsChartBuffer
-    val path = fpsChartPath
+    val path = fpsChartPath.get()
     val count = history.size.coerceAtMost(coordinates.size / 2)
     for (index in 0 until count) {
         val x = if (history.size == 1) {
@@ -305,5 +305,15 @@ private fun DrawScope.drawFpsChart(
  */
 private val fpsChartBuffer = FloatArray(32)
 
-/** 复用的曲线路径；`reset()` 之后可以立刻重新 `moveTo` */
-private val fpsChartPath = Path()
+/**
+ * 用 `ThreadLocal` 而不是文件级单例，有两个原因：
+ *
+ *  - **线程安全**。这张图挂在运行中的游戏上，绘制发生在渲染线程上，一个共享的可变
+ *    `Path` 在两帧交错时会把上一段的控制点带进下一段。
+ *  - **类初始化时机**。Android 上的 `Path()` 是 JNI 调用；写成文件级 `val` 就会让它
+ *    发生在 `FpsChartKt` 的静态初始化里，于是任何**碰一下**本文件任意顶层函数的
+ *    JVM 单元测试都会以 `UnsatisfiedLinkError` 失败，哪怕它只想做一次算术。
+ *    `ThreadLocal.withInitial` 把这个构造推迟到真正绘制的那一刻。
+ */
+// 复用的曲线路径；`reset()` 之后可以立刻重新 `moveTo` */
+private val fpsChartPath: ThreadLocal<Path> = ThreadLocal.withInitial { Path() }

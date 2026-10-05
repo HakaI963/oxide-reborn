@@ -99,6 +99,22 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleRelease -Darch=arm64
 
+      # Gradle only puts the exception class and the line into the console; the assertion
+      # message lives in the JUnit XML. Without this step a failure reads as
+      # "java.lang.AssertionError at Foo.kt:110" and nothing else.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            OxideLauncher/build/test-results/**
+            OxideLauncher/build/reports/tests/**
+            CardGrid/build/test-results/**
+            Guide/build/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v7

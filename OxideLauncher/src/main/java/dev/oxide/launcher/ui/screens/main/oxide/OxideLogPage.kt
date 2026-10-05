@@ -167,6 +167,7 @@ fun OxideLogPage(
                         OxideLogSourceList(
                             metrics = metrics,
                             sources = sources,
+                            folderPath = PathManager.DIR_LAUNCHER_LOGS.absolutePath,
                             activePath = activePath,
                             modifier = Modifier
                                 .width(layout.listWidth)
@@ -199,6 +200,7 @@ fun OxideLogPage(
                         OxideLogSourceList(
                             metrics = metrics,
                             sources = sources,
+                            folderPath = PathManager.DIR_LAUNCHER_LOGS.absolutePath,
                             activePath = activePath,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -292,13 +294,21 @@ private fun rememberLogSources(gameLog: File?): List<OxideLogSource> {
 internal fun OxideLogSourceList(
     metrics: OxideMetrics,
     sources: List<OxideLogSource>,
+    /**
+     * "打开日志目录"那一行指向的目录
+     *
+     * 由调用方给，而不是这一层去读 [PathManager]：它的字段是 `lateinit`，只有
+     * `OxideApplication.onCreate` 填过。目录行自己的说明文字也从这份值生成，
+     * 所以它只有一处来源。
+     */
+    folderPath: String,
     activePath: String?,
     onSelect: (String) -> Unit,
     onShare: (OxideLogSource) -> Unit,
     onOpenFolder: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val files = sources.filter { it.path != PathManager.DIR_LAUNCHER_LOGS.absolutePath }
+    val files = sources.filter { it.path != folderPath }
 
     OxideContentSurface(
         modifier = modifier,
@@ -356,7 +366,7 @@ internal fun OxideLogSourceList(
         // 而这一行做的是打开目录，两件事对不上
         OxideSettingRow(
             label = stringResource(R.string.oxide_set_action_open_logs_folder),
-            hint = PathManager.DIR_LAUNCHER_LOGS.absolutePath,
+            hint = folderPath,
             onClick = onOpenFolder,
         )
     }
