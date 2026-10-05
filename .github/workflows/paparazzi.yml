@@ -74,6 +74,10 @@ jobs:
           {
             echo "ANDROID_HOME=$SDK_ROOT"
             echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+            # The NDK step is a separate `run`, so it does not inherit this shell. Without
+            # this line $SDKMANAGER is empty there and the step dies with
+            # "line 1: : command not found" before Gradle ever runs.
+            echo "SDKMANAGER=$SDKMANAGER"
           } >> "$GITHUB_ENV"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
 
@@ -143,6 +147,10 @@ jobs:
           {
             echo "ANDROID_HOME=$SDK_ROOT"
             echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+            # The NDK step is a separate `run`, so it does not inherit this shell. Without
+            # this line $SDKMANAGER is empty there and the step dies with
+            # "line 1: : command not found" before Gradle ever runs.
+            echo "SDKMANAGER=$SDKMANAGER"
           } >> "$GITHUB_ENV"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
 
