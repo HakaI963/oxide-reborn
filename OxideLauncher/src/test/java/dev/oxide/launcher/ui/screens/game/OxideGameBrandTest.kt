@@ -52,6 +52,7 @@ class OxideGameBrandTest {
     // 不剥字符串：设置键本身就是字面量，剥掉就再也断言不到它
     private val allSettings = readSource("setting/AllSettings.kt")
     private val settingsPage = code(readSource("ui/screens/main/oxide/OxideSettingsPage.kt"))
+    private val safeInsets = code(readSource("ui/components/_SafeInsets.kt"))
     private val strings = readSource("res/values/strings.xml")
 
     // -------------------------------------------------------------------------
@@ -227,16 +228,25 @@ class OxideGameBrandTest {
     @Test
     fun theBrandAppliesTheExistingSafeAreaInsets() {
         // 系统栏与刘海：全屏时是 0，分屏与显示切口模式下非 0。
-        // 标识读的就是控制布局编辑器停靠球读的那一份 safeDrawing，
+        // 标识与控制布局编辑器停靠球读的是同一个 rememberSafeScreenInsets()，
         // 不另开一个 inset 来源，也不退回硬编码的边距。
         assertTrue(
-            "the brand must inset itself by the safe drawing area",
-            brand.contains("WindowInsets.safeDrawing"),
+            "the brand must inset itself by the shared safe area",
+            brand.contains("rememberSafeScreenInsets()"),
         )
         assertTrue(
-            "the safe area must reach both the trailing and the bottom edge",
-            brand.contains("safeDrawing.getRight(density)") &&
-                brand.contains("safeDrawing.getBottom(density)"),
+            "the shared helper must cover system bars and the display cutout",
+            safeInsets.contains("WindowInsetsCompat.Type.systemBars()") &&
+                safeInsets.contains("WindowInsetsCompat.Type.displayCutout()"),
+        )
+        assertTrue(
+            "the trailing and the bottom edge must both be inset",
+            brand.contains("safeInsets.right.toDp()") &&
+                brand.contains("safeInsets.bottom.toDp()"),
+        )
+        assertTrue(
+            "absolutePadding takes physical left/right, not start/end",
+            brand.contains("absolutePadding(") && !brand.contains("end = "),
         )
     }
 

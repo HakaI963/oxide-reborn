@@ -172,15 +172,17 @@ internal fun oxideCrashCauseLabel(chain: List<Throwable>): String {
  * 堆栈行数
  *
  * 只有统计，没有任何一处拿它去裁剪正文。末行没有换行符时也算一行，所以
- * `"a\nb\nc"` 是 3 而不是 2；空串是 0 行。
+ * `"a\nb\nc"` 是 3 而不是 2；而 `printStackTrace()` 的输出一定带一个结尾换行，
+ * 那个换行是**终止符**，不是新起一行，因此 `"a\nb\nc\n"` 同样是 3。空串是 0 行。
  *
  * 纯函数，可直接单测。
  */
 internal fun oxideCrashTraceLineCount(trace: String): Int {
     if (trace.isEmpty()) return 0
     var lines = 1
-    for (char in trace) {
-        if (char == '\n') lines++
+    for (index in trace.indices) {
+        // 结尾那个换行不另算一行
+        if (trace[index] == '\n' && index != trace.lastIndex) lines++
     }
     return lines
 }
