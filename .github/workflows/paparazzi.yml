@@ -220,7 +220,7 @@ jobs:
   # Until the goldens are in git this is the only way verify can compare against anything.
   commit-goldens:
     name: Commit goldens to main
-    if: github.event_name == 'workflow_dispatch' && inputs.commit_goldens == 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.commit_goldens
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
