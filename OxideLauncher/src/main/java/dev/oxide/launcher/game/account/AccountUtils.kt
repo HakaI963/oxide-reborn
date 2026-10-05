@@ -33,6 +33,7 @@ import dev.oxide.launcher.game.account.auth_server.data.AuthServer
 import dev.oxide.launcher.game.account.auth_server.getAuthServeInfo
 import dev.oxide.launcher.game.account.microsoft.AsyncStatus
 import dev.oxide.launcher.game.account.microsoft.AuthType
+import dev.oxide.launcher.game.account.microsoft.MicrosoftAuthNotConfiguredException
 import dev.oxide.launcher.game.account.microsoft.MinecraftProfileException
 import dev.oxide.launcher.game.account.microsoft.NotPurchasedMinecraftException
 import dev.oxide.launcher.game.account.microsoft.XboxLoginException
@@ -187,6 +188,7 @@ fun microsoftLogin(
             }
             when (th) {
                 is HttpRequestTimeoutException -> androidText(R.string.account_logging_time_out)
+                is MicrosoftAuthNotConfiguredException -> th.toLocal()
                 is NotPurchasedMinecraftException -> toLocal()
                 is MinecraftProfileException -> th.toLocal()
                 is XboxLoginException -> th.toLocal()

@@ -88,6 +88,32 @@ private const val TENANT = "/consumers"
  */
 private const val MAX_CONSECUTIVE_POLL_FAILURES = 5
 
+/**
+ * 本次构建里的微软应用（客户端）id
+ *
+ * 三处请求都用它，而不是直接读 `BuildKeys.OAUTH_CLIENT_ID`：空值在这里必须变成
+ * 一个说得清的异常。若放任空值发出去，令牌端点只会回一句 `invalid_client`，
+ * 用户看着无从下手——那不是他们能在手机上修好的东西。
+ *
+ * id 本身是公开标识符，不是密钥；它仍然只从构建期注入（仓库不落盘、日志不打印）。
+ */
+internal fun microsoftAuthClientIdOrNull(resolved: String): String? =
+    resolved.takeIf { it.isNotBlank() }
+
+internal fun microsoftAuthClientId(): String {
+    val clientId = microsoftAuthClientIdOrNull(BuildKeys.OAUTH_CLIENT_ID)
+    if (clientId == null) {
+        Logger.error(
+            TAG,
+            "BuildKeys.OAUTH_CLIENT_ID is blank: this build cannot start a Microsoft sign-in. " +
+                "Register the OAUTH_CLIENT_ID repository secret (or provide .oauth_client_id.txt) " +
+                "and rebuild."
+        )
+        throw MicrosoftAuthNotConfiguredException()
+    }
+    return clientId
+}
+
 const val MICROSOFT_AUTH_URL = "https://login.microsoftonline.com"
 const val LIVE_AUTH_URL = "https://login.live.com"
 const val XBL_AUTH_URL = "https://user.auth.xboxlive.com"
@@ -103,7 +129,7 @@ suspend fun fetchDeviceCodeResponse(context: CoroutineContext): DeviceCodeRespon
         submitForm(
             url = "$MICROSOFT_AUTH_URL$TENANT/oauth2/v2.0/devicecode",
             parameters = Parameters.build {
-                append("client_id", BuildKeys.OAUTH_CLIENT_ID)
+                append("client_id", microsoftAuthClientId())
                 append("scope", SCOPES.joinToString(" "))
             },
             context = context
@@ -143,8 +169,7 @@ suspend fun getTokenResponse(
                 parameters = Parameters.build {
                     append("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
                     append("device_code", codeResponse.deviceCode)
-                    append("client_id", BuildKeys.OAUTH_CLIENT_ID)
-                    append("tenant", TENANT)
+                    append("client_id", microsoftAuthClientId())
                 },
                 context = context
             )
@@ -275,11 +300,19 @@ private suspend fun refreshAccessToken(
     return withRetry {
         try {
             val response = submitForm<JsonObject>(
-                url = "$LIVE_AUTH_URL/oauth20_token.srf",
+                // 刷新必须回到发放这个 refresh token 的那个端点。
+                // 设备码流程发下来的是 v2.0（consumers）令牌，而
+                // login.live.com/oauth20_token.srf 属于另一套 Live Connect 令牌
+                // （它的配套授权端点是 oauth20_connect.srf，不是 v2.0 的 devicecode）。
+                // 拿 v2.0 的 refresh token 去那里换，只会得到 invalid_grant：
+                // 于是令牌一过期，这个账号就被当成"凭据失效"踢下线，实际上它好好的。
+                url = "$MICROSOFT_AUTH_URL$TENANT/oauth2/v2.0/token",
                 parameters = Parameters.build {
-                    append("client_id", BuildKeys.OAUTH_CLIENT_ID)
-                    append("refresh_token", refreshToken)
                     append("grant_type", "refresh_token")
+                    append("client_id", microsoftAuthClientId())
+                    append("refresh_token", refreshToken)
+                    // v2.0 要求刷新时带上与授权时一致的 scope，否则视为另一次请求
+                    append("scope", SCOPES.joinToString(" "))
                 },
                 context = context
             )
@@ -326,13 +359,18 @@ private suspend fun authenticateXBL(accessToken: String, update: (AsyncStatus) -
 
     return withRetry {
         try {
-            requestXblToken("d=$accessToken")
+            // 本启动器只从 v2.0（consumers）端点取令牌，这类令牌原样提交即可。
+            // "d=" 前缀属于 login.live.com 的 Live Connect 令牌（wl.* scope），
+            // 加在 v2.0 令牌上 Xbox 会回 400。
+            requestXblToken(accessToken)
         } catch (e: ClientRequestException) {
-            // 参考 Wiki：RpsTicket 如遇 400 Bad Request，可尝试去掉 "d=" 前缀重新请求
+            // 仍然保留另一种前缀的退路：老布局/老登录路径若真的送来 Live Connect
+            // 令牌，这里还能救回来，而不是直接失败。
+            // 参考 Wiki：RpsTicket 如遇 400 Bad Request，可尝试换另一种前缀重新请求
             // https://zh.minecraft.wiki/w/Tutorial:%E7%BC%96%E5%86%99%E5%90%AF%E5%8A%A8%E5%99%A8#Xbox_Live%E8%BA%AB%E4%BB%BD%E9%AA%8C%E8%AF%81
             if (e.response.status.value == 400) {
-                Logger.warning(TAG, "XBL authentication rejected the d= prefixed RpsTicket, retrying without the prefix")
-                requestXblToken(accessToken)
+                Logger.warning(TAG, "XBL authentication rejected the bare RpsTicket, retrying with the d= prefix")
+                requestXblToken("d=$accessToken")
             } else throw e
         }
     }
