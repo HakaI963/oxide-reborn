@@ -427,7 +427,7 @@ class OAuthClientIdWiringTest {
 
         /** 只读活跃的属性赋值，注释掉的行返回 null */
         fun propertyValue(properties: String, name: String): String? =
-            properties.readText().lineSequence()
+            properties.lineSequence()
                 .map { it.trim() }
                 .firstOrNull { Regex("""^$name\s*=(.*)$""").matches(it) }
                 ?.let { Regex("""^$name\s*=(.*)$""").matchEntire(it)!!.groupValues[1].trim() }
