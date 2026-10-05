@@ -25,9 +25,6 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import dev.oxide.launcher.R
@@ -42,8 +39,6 @@ import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.base.BaseAppCompatActivity
 import dev.oxide.launcher.ui.screens.splash.SplashScreen
 import dev.oxide.launcher.ui.theme.OxideTheme
-import dev.oxide.launcher.ui.theme.backgroundColor
-import dev.oxide.launcher.ui.theme.onBackgroundColor
 import dev.oxide.launcher.utils.logging.Logger
 import dev.oxide.launcher.viewmodel.SplashBackStackViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -85,17 +80,13 @@ class SplashActivity : BaseAppCompatActivity() {
 
         setContent {
             OxideTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = backgroundColor(),
-                    contentColor = onBackgroundColor()
-                ) {
-                    SplashScreen(
-                        startAllTask = { startAllTask() },
-                        unpackItems = unpackItems,
-                        screenViewModel = backStackViewModel
-                    )
-                }
+                // 这一屏自己铺底色。外层再套一个 Material Surface 会把旧配色的
+                // backgroundColor 盖在 Oxide 之上，冷启动的第一眼就回到旧配色。
+                SplashScreen(
+                    startAllTask = { startAllTask() },
+                    unpackItems = unpackItems,
+                    screenViewModel = backStackViewModel
+                )
             }
         }
     }
