@@ -218,6 +218,14 @@ private fun BasicIdentifier(
 
 /**
  * 资源封面网络图标
+ *
+ * 没有图标链接时**直接画兜底图**，不先去建一个空的 Coil 画笔。
+ *
+ * 之前这条路靠"没有请求 -> 画笔报 error -> 画 ic_unknown_icon"绕回来，
+ * 而画笔停在 Empty 还是 Error 取决于生命周期走到哪一步，于是同一个空白方块
+ * 在不同截图里时而是占位图、时而什么都没有——同一份数据、同一段代码，两张图
+ * 对不上。缺图标本来就是一个确定的答案（占位图），不该取决于时序。
+ *
  * @param iconUrl 图标链接
  */
 @Composable
@@ -257,6 +265,21 @@ fun AssetsIcon(
 
     val state by painter.state.collectAsStateWithLifecycle()
     val sizeModifier = modifier.size(size)
+
+    // 压根没有请求可等：这就是"这个资源没有图标"的确定答案，直接画兜底图。
+    // 放在这里而不是靠画笔走到 error，是因为没有请求时画笔停在 Empty，
+    // 而 Empty 之前画的是一个空盒子。
+    if (imageRequest == null) {
+        Image(
+            painter = painterResource(R.drawable.ic_unknown_icon),
+            contentDescription = null,
+            alignment = Alignment.Center,
+            contentScale = ContentScale.Fit,
+            modifier = sizeModifier,
+            colorFilter = colorFilter
+        )
+        return
+    }
 
     when (state) {
         AsyncImagePainter.State.Empty -> {
