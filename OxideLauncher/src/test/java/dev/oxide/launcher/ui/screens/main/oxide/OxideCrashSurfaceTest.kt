@@ -98,7 +98,11 @@ class OxideCrashSurfaceTest {
 
         val report = report(throwable = top)
 
-        assertEquals("IllegalStateException: surface is closed", report.cause)
+        // 根因的类型与消息原样带出，后面再缀上链条长度
+        assertTrue(
+            "the cause line must name the deepest throwable: ${report.cause}",
+            report.cause.startsWith("IllegalStateException: surface is closed"),
+        )
         assertFalse(
             "the wrapper must not be what the cause line names",
             report.cause.contains("bad launch token"),
