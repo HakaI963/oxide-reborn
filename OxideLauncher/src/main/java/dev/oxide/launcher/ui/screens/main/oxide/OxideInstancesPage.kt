@@ -298,11 +298,12 @@ fun OxideInstancesPage(
 
             InstanceAction.SetPinned -> setPinned(version, true, submitError)
             InstanceAction.ClearPinned -> setPinned(version, false, submitError)
-            InstanceAction.OpenFolder -> eventViewModel.sendEvent(
-                EventViewModel.Event.OpenFileManager(
-                    rootPath = version.getVersionPath().absolutePath
-                )
-            )
+            // 走 host 的 openFiles，而不是发 OpenFileManager 事件：那个事件启动的是旧的
+            // FileManagerActivity，也就是旧的那套 Material 文件浏览器。实例抽屉与实例
+            // 设置页早就改成了 host.openFiles，只有实例列表这一处漏了，于是从齿轮菜单
+            // 的"打开文件夹"进去还能看到旧界面。
+            InstanceAction.OpenFolder ->
+                hostActions.openFiles(version.getVersionPath().absolutePath)
 
             InstanceAction.Delete -> operation = VersionsOperation.Delete(version)
         }
