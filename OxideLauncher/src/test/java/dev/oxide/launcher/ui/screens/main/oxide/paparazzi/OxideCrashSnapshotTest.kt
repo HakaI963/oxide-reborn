@@ -22,11 +22,13 @@ import dev.oxide.launcher.ui.activities.CrashType
 import dev.oxide.launcher.ui.screens.main.OxideCrashPanelHost
 import dev.oxide.launcher.ui.screens.main.OxideCrashReport
 import dev.oxide.launcher.ui.screens.main.oxide.OxideMetrics
-import dev.oxide.launcher.ui.screens.main.oxide.oxideCrashReport
-import dev.oxide.launcher.ui.screens.main.oxide.oxideCrashTraceLineCount
-import dev.oxide.launcher.ui.screens.main.oxide.oxideCrashTypeName
+import dev.oxide.launcher.ui.screens.main.oxideCrashReport
+import dev.oxide.launcher.ui.screens.main.oxideCrashTraceLineCount
+import dev.oxide.launcher.ui.screens.main.oxideCrashTypeName
 import dev.oxide.launcher.ui.screens.main.oxide.paparazzi.OxidePaparazzi.shot
+import dev.oxide.launcher.ui.screens.main.oxide.paparazzi.paparazziFor
 import dev.oxide.launcher.ui.screens.main.oxide.paparazzi.oxideInstantAnimations
+import androidx.compose.runtime.Composable
 import app.cash.paparazzi.InstantAnimationsRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -105,6 +107,7 @@ class OxideCrashSnapshotTest {
     // Helpers
     // -----------------------------------------------------------------------
 
+    @Composable
     private fun host(report: OxideCrashReport, metrics: OxideMetrics) {
         OxideCrashPanelHost(
             report = report,
@@ -153,14 +156,14 @@ class OxideCrashSnapshotTest {
         append("dev.oxide.launcher.keepalive.TaskKeepAliveService c:dev.oxide.launcher.debug}\n")
         append("\tat android.app.ActivityThread.generateForegroundServiceDidNotStartInTimeException(ActivityThread.java:2649)\n")
         append("\tat android.app.ActivityThread.throwRemoteServiceException(ActivityThread.java:2617)\n")
-        append("\tat android.app.ActivityThread.-$Nest$mthrowRemoteServiceException(Unknown Source:0)\n")
-        append("\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:3003)\n")
+        append("\tat android.app.ActivityThread.-\$Nest\$mthrowRemoteServiceException(Unknown Source:0)\n")
+        append("\tat android.app.ActivityThread\$H.handleMessage(ActivityThread.java:3003)\n")
         append("\tat android.os.Handler.dispatchMessage(Handler.java:110)\n")
         append("\tat android.os.Looper.loopOnce(Looper.java:265)\n")
         append("\tat android.os.Looper.loop(Looper.java:358)\n")
         append("\tat android.app.ActivityThread.main(ActivityThread.java:10049)\n")
         append("\tat java.lang.reflect.Method.invoke(Native Method)\n")
-        append("\tat com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:616)\n")
+        append("\tat com.android.internal.os.RuntimeInit\$MethodAndArgsCaller.run(RuntimeInit.java:616)\n")
         append("\tat com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1115)\n")
         append("Caused by: java.lang.IllegalStateException: surface is closed\n")
         append("\tat dev.oxide.launcher.keepalive.TaskKeepAliveService.onStartCommand(TaskKeepAliveService.kt:88)\n")

@@ -203,7 +203,7 @@ class ControlEditorBallBoundsTest {
     }
 
     @Test
-    fun `EditorBallInsets.None 就是四边都不收`() {
+    fun `None 就是四边都不收`() {
         assertEquals(
             editorBallSafeBounds(available = screen, ball = ball, insets = EditorBallInsets.None),
             editorBallSafeBounds(available = screen, ball = ball),

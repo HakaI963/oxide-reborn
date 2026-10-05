@@ -19,6 +19,7 @@
 package dev.oxide.launcher.ui.screens.main.oxide
 
 import dev.oxide.launcher.ui.activities.CrashType
+import dev.oxide.launcher.ui.screens.main.OXIDE_CRASH_CAUSE_LIMIT
 import dev.oxide.launcher.ui.screens.main.OxideCrashReport
 import dev.oxide.launcher.ui.screens.main.oxideCrashCauseChain
 import dev.oxide.launcher.ui.screens.main.oxideCrashCauseLabel
