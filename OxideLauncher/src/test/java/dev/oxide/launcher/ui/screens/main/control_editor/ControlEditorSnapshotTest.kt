@@ -151,9 +151,11 @@ class ControlEditorSnapshotTest {
                 heightDp = device.screenHeight,
                 guiScalePercent = 100,
             )
-            val layout = editorTestLayout(device.screenHeight)
-            val layer = layout.layers.value.first()
-            val widget = layer.allWidgets().first()
+            // 取值放在组合之外：StateFlow 的 .value 不能在组合里读
+            val fixture = editorFixture(device.screenHeight)
+            val layout = fixture.layout
+            val layer = fixture.selectedLayer
+            val widget = fixture.widgetsInLayer.first()
 
             ProvideEditorMetrics(metrics) {
                 EditorBackdrop {
@@ -250,10 +252,11 @@ class ControlEditorSnapshotTest {
             heightDp = deviceHeightDp,
             guiScalePercent = 100,
         )
-        val layout = editorTestLayout(deviceHeightDp)
-        val layers = layout.layers.value
-        val selectedLayer = layers.first()
-        val widgetsInLayer = selectedLayer.allWidgets()
+        // 同上：StateFlow 的 .value 不能在组合里读
+        val fixture = editorFixture(deviceHeightDp)
+        val layout = fixture.layout
+        val selectedLayer = fixture.selectedLayer
+        val widgetsInLayer = fixture.widgetsInLayer
 
         ProvideEditorMetrics(metrics) {
             EditorBackdrop {
@@ -343,6 +346,30 @@ class ControlEditorSnapshotTest {
      * uuid 是字面量而不是 `createWidgetWithUUID`：它里面是 `UUID.randomUUID()`，
      * 而 golden 必须逐位可复现。
      */
+    /** 一次构造里要用的三样东西；取自 StateFlow，因此只能在组合之外读 */
+    private data class EditorFixture(
+        val layout: ObservableControlLayout,
+        val selectedLayer: ObservableControlLayer,
+        val widgetsInLayer: List<ObservableWidget>,
+    )
+
+    /**
+     * 建好夹具并把它要用的那几样一次取出来
+     *
+     * `ObservableControlLayout.layers` 是 StateFlow，在组合里读它的 `.value` 会被
+     * lint 判为 `StateFlowValueCalledInComposition`：那样写等于把一次快照当响应式
+     * 状态用。夹具本来就不该在组合过程中变化，所以在纯函数里取一次即可。
+     */
+    private fun editorFixture(screenHeightDp: Int): EditorFixture {
+        val layout = editorTestLayout(screenHeightDp)
+        val selectedLayer = layout.layers.value.first()
+        return EditorFixture(
+            layout = layout,
+            selectedLayer = selectedLayer,
+            widgetsInLayer = selectedLayer.allWidgets(),
+        )
+    }
+
     private fun editorTestLayout(screenHeightDp: Int): ObservableControlLayout {
         val buttonSize = createAdaptiveButtonSize(
             referenceLength = screenHeightDp,
