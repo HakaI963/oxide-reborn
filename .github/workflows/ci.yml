@@ -68,6 +68,15 @@ jobs:
 
       # An unqualified task name runs in every module that declares it, so this covers
       # :OxideLauncher plus the :CardGrid and :Guide unit test suites.
+      # Cheap lexer-level gate before Gradle. A KDoc containing `*/*` closes its
+      # own block comment, the rest of the file is parsed as top-level
+      # declarations, and the compiler reports the cascade dozens of lines away
+      # from the cause. This finds the cause in about a second.
+      - name: Kotlin source sanity scan
+        run: |
+          python3 tools/kotlin-sanity-selftest.py
+          python3 tools/kotlin-sanity.py OxideLauncher/src
+
       - name: Unit tests
         run: |
           chmod +x ./gradlew
