@@ -1,8 +1,9 @@
 name: Paparazzi
 
-# Screenshot tests for the Oxide GUI. Two jobs:
-#   record  - renders every golden and publishes them as an artifact to commit back
-#   verify  - renders against the committed goldens and fails on any drift
+# Screenshot tests for the Oxide GUI. Three jobs:
+#   record          - renders every golden and publishes them as an artifact to commit back
+#   verify          - renders against the committed goldens and fails on any drift
+#   commit-goldens  - records and pushes the goldens to main, on an explicit dispatch only
 #
 # They are separate jobs on purpose. Recording and verifying in one job would always pass,
 # because recordPaparazzi* writes the goldens and verifyPaparazzi* then compares against what
@@ -23,6 +24,11 @@ on:
         options:
           - debug
           - release
+      commit_goldens:
+        description: Push the recorded goldens back to main (review them first)
+        required: false
+        default: false
+        type: boolean
   pull_request:
     paths:
       - 'OxideLauncher/src/main/java/dev/oxide/launcher/ui/**'
@@ -205,3 +211,68 @@ jobs:
             OxideLauncher/build/paparazzi/failures
           if-no-files-found: ignore
           retention-days: 14
+
+  # Recording has to be committed by a workflow rather than copied out of an artifact by hand:
+  # the goldens are PNGs, and a commit that cannot represent a PNG is not a commit.
+  #
+  # Gated behind an explicit dispatch input, so "re-record and push" is always a decision
+  # somebody made after looking at what changed - never a side effect of an ordinary run.
+  # Until the goldens are in git this is the only way verify can compare against anything.
+  commit-goldens:
+    name: Commit goldens to main
+    if: github.event_name == 'workflow_dispatch' && inputs.commit_goldens == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Locate the Android SDK
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(ls -d "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::cmdline-tools (sdkmanager) not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          {
+            echo "ANDROID_HOME=$SDK_ROOT"
+            echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+            echo "SDKMANAGER=$SDKMANAGER"
+          } >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+
+      - name: Install NDK ${{ env.ANDROID_NDK_VERSION }}
+        run: '"$SDKMANAGER" "ndk;${{ env.ANDROID_NDK_VERSION }}"'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Record
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon recordPaparazzi${{ inputs.variant || 'debug' }}
+
+      # Nothing to commit is the normal case and must not fail the run: it means the goldens
+      # are already what the next verify compares against.
+      - name: Commit the goldens
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/OxideLauncher"
+          git add -A src/test/snapshots
+          if git diff --cached --quiet -- src/test/snapshots; then
+            echo "Goldens already match; nothing to commit."
+            exit 0
+          fi
+          git -c user.name="oxide-ci" -c user.email="oxide-ci@users.noreply.github.com" \
+            commit -m "Record the Paparazzi goldens"
+          git push origin HEAD:${{ github.event.repository.default_branch }}
