@@ -34,7 +34,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import app.cash.paparazzi.InstantAnimationsRule
 import dev.oxide.layercontroller.ControlEditorLayer
 import dev.oxide.layercontroller.data.CenterPosition
@@ -108,6 +107,9 @@ class ControlEditorSnapshotTest {
      * [ControlEditorLayer] 的 `interactive = false` 就是生产上那一位
      * （`viewModel.editorMenu == MenuState.SHOW` 时传下来的），它让画布只画不收手势。
      * 这里仍然把它摆上画布：面板的不透明度正是"底下那些控件看不见"这件事。
+     *
+     * 这一份夹具刻意不摆停靠球，理由见下面 [EditorBall] 那处注释——它会读平台 View，
+     * 而 layoutlib 里那张 View 是所有截图共用的。
      */
     @Test
     fun ControlEditor_DockOpen() {
@@ -243,7 +245,7 @@ class ControlEditorSnapshotTest {
 
     /**
      * 面板开着的那一屏。用的全是生产控件：[ControlEditorLayer] 是画布本身，
-     * [EditorDock] 是整个面板，[EditorBall] 是那颗悬浮球。
+     * [EditorDock] 是整个面板。停靠球那一颗不摆——见下面那处注释。
      */
     @Composable
     private fun EditorDockOpenScreen(deviceWidthDp: Int, deviceHeightDp: Int) {
@@ -305,16 +307,12 @@ class ControlEditorSnapshotTest {
                     saveAndExit = {},
                     onExit = {},
                 )
-                EditorBall(
-                    // null = 还没落位，于是走 editorBallDefaultPosition：
-                    // 横向居中、贴顶。这正是要钉的那一位
-                    position = null,
-                    onPositionChanged = {},
-                    opened = true,
-                    onClick = {},
-                    containerWidth = deviceWidthDp.dp,
-                    containerHeight = deviceHeightDp.dp,
-                )
+                // 这里**不**摆 [EditorBall]：它为了躲开圆角与刘海会去读平台 View 的
+                // root insets（[rememberSafeScreenInsets]）。在 layoutlib 里同一个 View
+                // 是所有截图共用的，摆一次之后后面几张 Discover 截图的图标就没了——
+                // 那是这一份夹具漏出去的状态，不是被测代码变了。
+                // 停靠球的落位由 [ControlEditorBallBoundsTest] 用纯函数钉住，
+                // 那份测试不碰平台 View。
             }
         }
     }
