@@ -79,7 +79,7 @@ internal const val CONTROL_LAYOUT_MIME_TYPE = "application/json"
  * 编辑器版本再往上加也依然合法，而写更小的值反而会平白触发一次 11 -> 12 迁移。
  * 这**不是** assets 里默认布局的副本，两者互不覆盖、互为补充。
  */
-internal const val EMBEDDED_FALLBACK_CONTROL_LAYOUT = """
+internal val EMBEDDED_FALLBACK_CONTROL_LAYOUT = """
 {
     "info": {
         "name": {

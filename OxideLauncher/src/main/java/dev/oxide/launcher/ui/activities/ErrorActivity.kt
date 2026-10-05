@@ -115,7 +115,6 @@ class ErrorActivity : BaseAppCompatActivity() {
                 val throwable = extras.getSerializableSafely(BUNDLE_THROWABLE, Throwable::class.java) ?: return runFinish()
                 ErrorMessage(
                     message = getString(R.string.crash_launcher_message),
-                    message = message,
                     // 完整堆栈逐字符保留：页面那边一行都不会截断
                     messageBody = throwableToString(throwable),
                     crashType = CrashType.LAUNCHER_CRASH,

@@ -1131,6 +1131,9 @@ internal enum class DiscoverQueueStage {
     /** 这一次提交已经收尾 */
     Complete,
 
+    /** 这一次提交里的某个任务失败了 */
+    Failed,
+
     /** 用户手动收掉 */
     Dismissed,
 }
