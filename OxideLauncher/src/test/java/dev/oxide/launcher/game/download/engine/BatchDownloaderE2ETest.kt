@@ -157,17 +157,24 @@ class BatchDownloaderE2ETest {
                 }
             })
             val dir = newWorkDir()
-            val requests = (0 until 10).map { i ->
+            // 文件数取 200 而不是 10：熔断阈值是连续 5 次失败，而连接数只有 2，
+            // 于是"提前收工"这件事与调度时序之间留出了足够大的余量。
+            // 10 个文件时，剩下那几个作业到底是先拿到许可还是先被取消，取决于
+            // 机器有多快——这条用例曾因此时好时坏。
+            val requests = (0 until 200).map { i ->
                 DownloadRequest(listOf(server.url("/f$i").toString()), File(dir, "f$i.bin"))
             }
             val batch = BatchDownloader(requests, maxConnections = 2, retryRounds = 0)
 
             val failure = runCatching { batch.run() }.exceptionOrNull()
 
-            //10 个文件里只有少数被真正尝试，剩余的随熔断取消，不再空转
+            //200 个文件里只有少数被真正尝试，剩余的随熔断取消，不再空转
             assertTrue(failure is BatchDownloadException)
             assertTrue(failure!!.message!!.contains("aborted"))
-            assertTrue(requestsSeen.get() < 10)
+            assertTrue(
+                "the batch must stop long before it has tried every file, saw ${requestsSeen.get()}",
+                requestsSeen.get() < requests.size / 2,
+            )
             assertTrue(batch.lastRunFailures.isNotEmpty())
             assertTrue(dir.listFiles().isEmpty())
         }
