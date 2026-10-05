@@ -217,11 +217,11 @@ class OxideDownloadQueueStateTest {
             pending = 0,
             failures = 0,
         )
-        val late = requireNotNull(
+        // 迟到的进度更新不会把提示条变回来：已收尾的那一行再收到任何事件都返回
+        // null，也就是"离场"，而不是把一个收尾状态重新挂回状态层
+        assertNull(
             discoverQueueRow(finished, finished.fileName, stage = DiscoverQueueStage.Downloading, progress = 0.5f)
         )
-        // 迟到的进度更新不会把提示条变回来
-        assertTrue(late.resolved)
         assertEquals(0, late.pending)
         assertEquals(DiscoverQueueStage.Complete, late.stage)
     }
