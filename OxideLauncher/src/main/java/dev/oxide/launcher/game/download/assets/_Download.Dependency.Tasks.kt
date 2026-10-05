@@ -469,14 +469,41 @@ private fun PlatformVersion.isCompatibleWith(
 ): Boolean {
     val info = target.getVersionInfo() ?: return true
     if (info.minecraftVersion !in platformGameVersion()) return false
+    return platformLoadersCompatible(
+        classes = classes,
+        targetLoaders = info.loaderInfos.mapNotNull { it.loader.toPlatformLoader(platform()) }.toSet(),
+        fileLoaders = platformLoaders().toSet(),
+    )
+}
 
-    // 仅模组依赖需要校验模组加载器
+/**
+ * 目标实例的加载器要求，与某个文件自己标注的加载器是否相容
+ *
+ * 拆成纯函数，是因为这一条决定"只支持别的加载器的文件会不会被装进来"，是整条依赖
+ * 安装链里最容易悄悄放行的一处，而它原来是 [PlatformVersion.isCompatibleWith] 里
+ * 一个就地写死的私有分支，没有办法直接钉死。
+ *
+ * 三条规则：
+ *
+ *  - **不是模组就不看加载器。** 资源包、光影、存档与加载器无关。
+ *  - **目标没有可识别的加载器要求时一律放行。** 纯原版实例如此，版本信息读不出加载器
+ *    时也如此。这种情况下我们并不知道目标要什么，替它猜反而会拒掉本来装得上的文件。
+ *  - **否则文件必须标注其中之一，且不能一个都识别不出来。** 最后这半句是重点：加载器
+ *    列表为空不等于"没有要求"，它等于"没看懂"。平台写了一个本构建没有枚举项的加载器名
+ *    时 [ModLoader.toPlatformLoader] 会把它丢掉，于是列表变空——原来的
+ *    "versionLoaders.isEmpty() || ..." 于是把一个只支持别的加载器的文件判成兼容，
+ *    装进实例之后它必然加载失败。识别不出来就当不相容。
+ *
+ * 多加载器组合时任一匹配即可。
+ */
+internal fun platformLoadersCompatible(
+    classes: PlatformClasses,
+    targetLoaders: Set<PlatformDisplayLabel>,
+    fileLoaders: Set<PlatformDisplayLabel>,
+): Boolean {
     if (classes != PlatformClasses.MOD) return true
-    // 多加载器组合时任一加载器匹配平台要求即可
-    val targetLoaders = info.loaderInfos.mapNotNull { it.loader.toPlatformLoader(platform()) }
     if (targetLoaders.isEmpty()) return true
-    val versionLoaders = platformLoaders()
-    return versionLoaders.isEmpty() || targetLoaders.any { it in versionLoaders }
+    return fileLoaders.isNotEmpty() && targetLoaders.any { it in fileLoaders }
 }
 
 /**

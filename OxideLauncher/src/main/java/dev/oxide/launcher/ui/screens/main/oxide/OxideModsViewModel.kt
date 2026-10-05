@@ -71,6 +71,13 @@ private const val MODS_REMOTE_CONCURRENCY = 8
 data class OxideModDependency(
     val projectId: String,
     val title: String,
+    /**
+     * [title] 是不是真的从平台上取到了项目名
+     *
+     * 取不到时 [title] 是空的，界面会把项目 id 降到副标题。数字 id 当主标题是读不懂的：
+     * 用户没法据此判断装的是不是自己要的那个。
+     */
+    val resolved: Boolean,
     val type: String,
     /** 这条依赖是不是已经在本实例的 mods 目录里（按平台项目 id 判断） */
     val installed: Boolean,
@@ -532,9 +539,11 @@ internal class OxideModsViewModel(
             val declared = platformVersion.platformDependencies()
                 .mapNotNull { dep -> dep.projectId?.let { id -> id to dep.type } }
             declared.map { (id, type) ->
+                val title = depTitle(id, platform)
                 OxideModDependency(
                     projectId = id,
-                    title = depTitle(id, platform),
+                    title = title.orEmpty(),
+                    resolved = title != null,
                     type = type.name.lowercase(),
                     installed = id in installed,
                 )
@@ -545,11 +554,17 @@ internal class OxideModsViewModel(
         }.getOrNull()
     }
 
-    private suspend fun depTitle(projectId: String, platform: Platform): String =
+    /**
+     * 平台上的项目名；取不到就是 null
+     *
+     * 原来这里失败时回落到 projectId，于是那条数字 id 直接成了依赖行的主标题。查不到
+     * 名字是一个事实，界面要拿它说"平台没给名字"，而不是假装那就是名字。
+     */
+    private suspend fun depTitle(projectId: String, platform: Platform): String? =
         runCatching {
             getProjectByVersion(projectId = projectId, platform = platform, printLog = false)
                 .platformTitle()
-        }.getOrDefault(projectId)
+        }.getOrNull()?.takeIf { it.isNotBlank() }
 
     /**
      * 本实例 mods 目录里已经装着的平台项目 id

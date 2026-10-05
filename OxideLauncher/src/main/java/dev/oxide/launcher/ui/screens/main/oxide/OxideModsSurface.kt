@@ -781,9 +781,23 @@ private fun OxideModDetailsDialog(
                     )
 
                     else -> details.dependencies.forEach { dep ->
+                        val type = stringResource(R.string.oxide_mod_dependency_type, dep.type)
                         OxideSettingRow(
-                            label = dep.title,
-                            hint = stringResource(R.string.oxide_mod_dependency_type, dep.type),
+                            // 取不到项目名时，主标题是一句"平台没给名字"，数字 id 降到副标题：
+                            // 它仍然有用（同一个项目的多条依赖靠它对上），但它不是名字。
+                            label = if (dep.resolved) {
+                                dep.title
+                            } else {
+                                stringResource(
+                                    R.string.download_assets_dependency_project_unavailable
+                                )
+                            },
+                            hint = if (dep.resolved) {
+                                type
+                            } else {
+                                stringResource(R.string.oxide_dis_dep_project_id, dep.projectId) +
+                                        " · " + type
+                            },
                             value = if (dep.installed) {
                                 stringResource(R.string.oxide_mod_dependency_installed)
                             } else {
