@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,7 +81,12 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * - 原来是 `Color.Black.copy(0.5f)` 加 `Color.White`。半透明的黑压在任何一帧
  *   游戏画面上都会让日志时隐时现——雪地场景下白字直接看不见。
- *   现在是 [Oxide.PopoverBg]（98% 不透明）配中性前景色。
+ *   现在是 [Oxide.PopoverBg]（98% 不透明）配中性前景色 [Oxide.Fg]。
+ *   注意这两者是一对，且都必须真的传进去：底幕与前景都跟着主题翻面，
+ *   写死任何一个都会让另一边翻车。正文这次之前**根本没有传颜色**，
+ *   `Text` 就落回 Compose 的默认 [androidx.compose.ui.graphics.Color.Black]，
+ *   在深色底幕上是 1.1:1——也就是用户截图里那一片看不清的字。
+ *   [Oxide.Fg] 现在同时喂给正文和 `LogHighlighter` 的兜底色。
  * - 右边那列按钮原来是 Material 的 `IconButton`，四个图标的
  *   `contentDescription` **全是 null**：读屏软件只会念出"按钮"，用户不知道
  *   哪一个是关闭、哪一个是清空。现在每一个都有一句朗读文本，自动滚动那一枚
@@ -102,7 +108,14 @@ fun LogBox(
     val buffer = remember { Collections.synchronizedList(mutableListOf<AnnotatedString>()) }
     val scrollChannel = remember { mutableStateOf<Channel<Unit>?>(null) }
 
-    val logHighlighter = remember { LogHighlighter() }
+    // 正文底幕上的前景色。组合阶段读 [Oxide.Fg] 就是订阅它，深浅色一改，
+    // 下面两处（着色器的兜底色与正文）跟着一起换色
+    val foreground = Oxide.Fg
+
+    val logHighlighter = remember(foreground) { LogHighlighter(defaultColor = foreground) }
+    // 着色器会被换掉，但监听回调是 [LaunchedEffect] 装一次就不再动的：
+    // 不读最新值的话，换主题之后新日志还会用旧配色着色，直到开关一次日志
+    val currentHighlighter by rememberUpdatedState(logHighlighter)
     var autoScrollDown by remember { mutableStateOf(true) }
 
     val config = remember {
@@ -118,7 +131,7 @@ fun LogBox(
 
             LoggerBridge.setListener { log ->
                 synchronized(buffer) {
-                    val string = logHighlighter.highlight(log)
+                    val string = currentHighlighter.highlight(log)
                     buffer.add(string)
                 }
             }
@@ -208,6 +221,9 @@ fun LogBox(
                             modifier = Modifier
                                 .fillParentMaxWidth()
                                 .padding(horizontal = 6.dp, vertical = 1.dp),
+                            // 正文颜色必须显式给：不给就落回 Color.Black，
+                            // 在 0xFA0D0D0D 的底幕上是 1.1:1（见文件头）
+                            color = foreground,
                             fontSize = fontSize,
                             lineHeight = lineHeight
                         )

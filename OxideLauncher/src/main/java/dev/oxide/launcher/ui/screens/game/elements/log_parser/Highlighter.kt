@@ -24,8 +24,20 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 
+/**
+ * 日志着色器
+ *
+ * [defaultColor] 是**必须由调用方给**的，没有默认值：它只在两条兜底路径上出现
+ * （解析抛异常时整行铺一遍，以及等级规则查不到时），而这两条路径都落在
+ * [dev.oxide.launcher.ui.theme.Oxide.PopoverBg] 那种跟着主题翻面的底幕上。
+ * 写死 `Color.White` 等于替浅色主题做了决定（白底白字，1.0:1），
+ * 所以这里不给默认，让编译器逼调用方把底幕上的前景色解析出来传进来。
+ *
+ * 其余五个颜色是语法着色（时间 / 字符串 / 数字 / 包名 / 链接），与主题无关，
+ * 一直是固定调色板，不动它们。
+ */
 class LogHighlighter(
-    val defaultColor: Color = Color.White,
+    val defaultColor: Color,
     val timeColor: Color = Color(0xFF6E7C83),
     val stringColor: Color = Color(0xFF6AAB73),
     val numberColor: Color = Color(0xFFC67CBA),
@@ -36,7 +48,7 @@ class LogHighlighter(
         return runCatching {
             highlightInternal(logText)
         }.getOrElse {
-            //一旦出现错误，需要使用默认颜色
+            //一旦出现错误，需要使用调用方给的底幕前景色
             AnnotatedString(
                 text = logText,
                 spanStyles = listOf(

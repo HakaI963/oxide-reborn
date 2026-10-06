@@ -27,9 +27,12 @@ object FreedrenoRenderer : RendererInterface {
 
     override fun getRendererName(): String = "Freedreno (Adreno)"
 
-    override fun getMaxMCVersion(): String = "26.3-snapshot-3"
+    // 这里必须写正式版号，不能写快照号：GameVersionNumber 里快照（SNAPSHOT）排在正式版（GA）之前，
+    // 写成 "26.3-snapshot-3" 会让 26.3 被判定为“比上限更大”，于是该渲染器在 26.3 上被禁用。
+    override fun getMaxMCVersion(): String = "26.3"
 
-    override fun getDisplayMaxMCVersion(): String = "26.2"
+    // 展示版本号默认继承 getMaxMCVersion()，这里曾经钉死在 "26.2"，于是设置页会显示
+    // "<= 26.2" 而闸门其实放行 26.3——两处必须同源。
 
     override fun getRendererEnv(): Lazy<Map<String, String>> = lazy { emptyMap() }
 
