@@ -1,9 +1,11 @@
 package dev.oxide.launcher.ui.screens.main.control_editor.edit_widget
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,14 +15,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,10 +28,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import dev.oxide.layercontroller.data.JoystickDirection
 import dev.oxide.layercontroller.event.ClickEvent
 import dev.oxide.layercontroller.observable.ObservableClickEventsProvider
@@ -42,14 +40,13 @@ import dev.oxide.layercontroller.observable.ObservableJoystickData
 import dev.oxide.layercontroller.observable.joystickDirectionEventsProvider
 import dev.oxide.layercontroller.observable.joystickLockEventsProvider
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.components.MarqueeText
-import dev.oxide.launcher.ui.components.rememberDialogMaxHeight
 import dev.oxide.launcher.ui.components.verticalScrollWithBar
 import dev.oxide.launcher.ui.screens.content.settings.layouts.CardPosition
 import dev.oxide.launcher.ui.screens.content.settings.layouts.rememberSettingsCardShape
+import dev.oxide.launcher.ui.screens.main.control_editor.EditorDialogTabRow
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutTextItem
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.onCardColor
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogShell
+import dev.oxide.launcher.ui.theme.Oxide
 
 private enum class JoystickArea {
     North, NorthEast,
@@ -139,8 +136,9 @@ fun EditJoystickEvents(
                 ) {
                     Text(
                         text = stringResource(R.string.control_editor_edit_joystick_select_area),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        color = Oxide.FgFaint,
+                        fontSize = Oxide.Type.Body.fontSize,
+                        lineHeight = Oxide.Type.Body.lineHeight,
                         modifier = Modifier.padding(start = 6.dp, end = 12.dp)
                     )
                 }
@@ -315,33 +313,44 @@ private fun AreaButton(
         }
     )
 
-    Surface(
-        modifier = modifier,
-        color = containerColor,
-        contentColor = contentColor,
-        onClick = onClick,
-        shape = rememberSettingsCardShape(position)
+    Box(
+        modifier = modifier
+            .clip(rememberSettingsCardShape(position))
+            .background(
+                if (isSelected) Oxide.BgTabActive else Color.Transparent
+            )
+            .border(
+                BorderStroke(1.dp, if (isSelected) Oxide.Line2 else Oxide.Line),
+                rememberSettingsCardShape(position),
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
+        Text(
             modifier = if (position == CardPosition.Single) {
                 Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
             } else {
                 Modifier.padding(all = 8.dp)
             },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                textAlign = TextAlign.Center
-            )
-        }
+            text = text,
+            color = if (isSelected) Oxide.Fg else Oxide.FgMuted,
+            fontSize = Oxide.Type.Body.fontSize,
+            lineHeight = Oxide.Type.Body.lineHeight,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
     }
 }
 
 
 /**
- * 启动器事件编辑
+ * 摇杆某一方向（或锁定）的启动器事件
+ *
+ * 旧实现是 `Dialog` + Material `Surface` 卡片 + `SecondaryTabRow`/`Tab`。现在面板由
+ * [OxideDialogShell] 承载，标签栏换成 [EditorDialogTabRow]。
+ *
+ * 两页的内容、顺序与回调一字未改：基本页那三行仍然是切层可见性 / 强制显示 / 强制
+ * 隐藏，第二页仍然是 `LauncherEventsEdit` 加一个"发送文本"的出口。
  */
 @Composable
 private fun JoystickLauncherEventDialog(
@@ -352,50 +361,42 @@ private fun JoystickLauncherEventDialog(
     sendText: (ObservableClickEventsProvider) -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(
-        onDismissRequest = onDismiss
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = cardColor(false),
-            contentColor = onCardColor(),
-            tonalElevation = 3.dp
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                val tabs = remember {
-                    listOf(
-                        R.string.control_editor_edit_event_basic,
-                        R.string.control_editor_edit_event_launcher
-                    )
-                }
+    val tabs = remember {
+        listOf(
+            R.string.control_editor_edit_event_basic,
+            R.string.control_editor_edit_event_launcher
+        )
+    }
 
-                val pagerState = rememberPagerState(pageCount = { tabs.size })
-                var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
 
-                LaunchedEffect(selectedTabIndex) {
-                    pagerState.animateScrollToPage(selectedTabIndex)
-                }
+    LaunchedEffect(selectedTabIndex) {
+        pagerState.animateScrollToPage(selectedTabIndex)
+    }
 
-                SecondaryTabRow(
-                    selectedTabIndex = selectedTabIndex,
-                    containerColor = cardColor(false)
-                ) {
-                    tabs.forEachIndexed { index, titleRes ->
-                        Tab(
-                            selected = index == selectedTabIndex,
-                            onClick = { selectedTabIndex = index },
-                            text = {
-                                MarqueeText(text = stringResource(titleRes))
-                            }
-                        )
-                    }
-                }
+    OxideDialogShell(
+        title = stringResource(R.string.control_editor_edit_event_launcher),
+        onDismissRequest = onDismiss,
+        body = { contentMaxHeight ->
+            Column(
+                modifier = Modifier
+                    .heightIn(max = contentMaxHeight)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                EditorDialogTabRow(
+                    tabs = tabs.map { stringResource(it) },
+                    selectedIndex = selectedTabIndex,
+                    onSelect = { selectedTabIndex = it },
+                )
 
                 HorizontalPager(
                     state = pagerState,
                     userScrollEnabled = false,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
                 ) { page ->
                     when (page) {
                         0 -> JoystickBasicEventPage(
@@ -428,8 +429,8 @@ private fun JoystickLauncherEventDialog(
                     }
                 }
             }
-        }
-    }
+        },
+    )
 }
 
 @Composable
@@ -471,6 +472,13 @@ private fun JoystickBasicEventPage(
 /**
  * 按键事件编辑
  */
+/**
+ * 摇杆某一方向（或锁定）的按键事件
+ *
+ * 旧实现是 `Dialog` + `BoxWithConstraints` + Material `Surface` 卡片；现在由
+ * [OxideDialogShell] 承载。内容仍然是同一份 [KeyEventEdit]，因此"最多
+ * `MAX_KEY_COMBO_EVENTS` 个组合键"那条上限仍然是它自己在管。
+ */
 @Composable
 private fun JoystickKeyEventDialog(
     data: ObservableJoystickData,
@@ -478,49 +486,20 @@ private fun JoystickKeyEventDialog(
     isLock: Boolean,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .heightIn(max = rememberDialogMaxHeight())
-                .fillMaxHeight(),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
+    OxideDialogShell(
+        title = stringResource(R.string.control_editor_edit_event_key),
+        onDismissRequest = onDismiss,
+        body = { contentMaxHeight ->
+            KeyEventEdit(
                 modifier = Modifier
-                    .padding(all = 3.dp)
-                    .heightIn(max = (maxHeight - 6.dp).coerceAtMost(rememberDialogMaxHeight()))
-                    .wrapContentHeight(),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = cardColor(false),
-                contentColor = onCardColor(),
-                shadowElevation = 3.dp
-            ) {
-                Column(
-                    modifier = Modifier.wrapContentHeight(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .padding(top = 16.dp),
-                        text = stringResource(R.string.control_editor_edit_event_key),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-
-                    KeyEventEdit(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = false)
-                            .padding(horizontal = 12.dp),
-                        provider = if (isLock) {
-                            joystickLockEventsProvider(data)
-                        } else {
-                            joystickDirectionEventsProvider(data, direction)
-                        },
-                    )
-                }
-            }
-        }
-    }
+                    .heightIn(max = contentMaxHeight)
+                    .fillMaxWidth(),
+                provider = if (isLock) {
+                    joystickLockEventsProvider(data)
+                } else {
+                    joystickDirectionEventsProvider(data, direction)
+                },
+            )
+        },
+    )
 }

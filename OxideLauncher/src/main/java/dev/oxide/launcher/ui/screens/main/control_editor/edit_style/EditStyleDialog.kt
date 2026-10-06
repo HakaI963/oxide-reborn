@@ -21,6 +21,8 @@ package dev.oxide.launcher.ui.screens.main.control_editor.edit_style
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -39,12 +41,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
@@ -71,17 +70,16 @@ import dev.oxide.layercontroller.layout.RendererStyleBox
 import dev.oxide.layercontroller.observable.ObservableButtonStyle
 import dev.oxide.layercontroller.observable.ObservableStyleConfig
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.components.MarqueeText
 import dev.oxide.launcher.ui.components.OwnOutlinedTextField
 import dev.oxide.launcher.ui.components.SingleLineTextCheck
+import dev.oxide.launcher.ui.screens.main.control_editor.EditorDialogTabRow
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutColorItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSliderItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSwitchItem
+import dev.oxide.launcher.ui.screens.main.control_editor.editorPanelBackground
+import dev.oxide.launcher.ui.screens.main.oxide.OxideSecDivider
 import dev.oxide.launcher.ui.screens.rememberSwapTween
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.itemColor
-import dev.oxide.launcher.ui.theme.onCardColor
-import dev.oxide.launcher.ui.theme.onItemColor
+import dev.oxide.launcher.ui.theme.Oxide
 
 private data class TabItem(val titleRes: Int)
 
@@ -150,24 +148,27 @@ fun EditButtonStyleDialog(
                         }
                     )
 
-                    Surface(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .constrainAs(config) {
-                                start.linkTo(preview.end)
-                                end.linkTo(parent.end)
+                    // 这一块过去是 Material 的 Surface 卡片（cardColor + extraLarge 圆角 +
+                        // shadowElevation）。它与 EditWidgetDialog 一样不是 Dialog 窗口，
+                        // 所以换成 Oxide 面板的不透明底色、圆角与 1px 描边，而不是套一层
+                        // OxideDialogShell
+                        Column(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .constrainAs(config) {
+                                    start.linkTo(preview.end)
+                                    end.linkTo(parent.end)
 
-                                top.linkTo(parent.top)
-                                bottom.linkTo(parent.bottom)
+                                    top.linkTo(parent.top)
+                                    bottom.linkTo(parent.bottom)
 
-                                width = Dimension.percent(0.8f)
-                                height = Dimension.fillToConstraints
-                            },
-                        shadowElevation = 3.dp,
-                        color = cardColor(false),
-                        contentColor = onCardColor(),
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
+                                    width = Dimension.percent(0.8f)
+                                    height = Dimension.fillToConstraints
+                                }
+                                .clip(Oxide.RadiusDrawer)
+                                .editorPanelBackground()
+                                .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusDrawer),
+                        ) {
                         Row(
                             modifier = Modifier.fillMaxHeight()
                         ) {
@@ -195,7 +196,7 @@ fun EditButtonStyleDialog(
                                     label = {
                                         Text(text = stringResource(R.string.control_editor_edit_style_config_name))
                                     },
-                                    shape = MaterialTheme.shapes.large
+                                    shape = RoundedCornerShape(16.dp)
                                 )
                                 //启用动画过渡
                                 InfoLayoutSwitchItem(
@@ -226,22 +227,12 @@ fun EditButtonStyleDialog(
                                     )
                                 } else {
                                     //顶贴标签栏
-                                    SecondaryTabRow(
-                                        selectedTabIndex = selectedTabIndex,
-                                        containerColor = cardColor(false)
-                                    ) {
-                                        tabs.forEachIndexed { index, item ->
-                                            Tab(
-                                                selected = index == selectedTabIndex,
-                                                onClick = {
-                                                    selectedTabIndex = index
-                                                },
-                                                text = {
-                                                    MarqueeText(text = stringResource(item.titleRes))
-                                                }
-                                            )
-                                        }
-                                    }
+                                    EditorDialogTabRow(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        tabs = tabs.map { stringResource(it.titleRes) },
+                                        selectedIndex = selectedTabIndex,
+                                        onSelect = { selectedTabIndex = it },
+                                    )
 
                                     HorizontalPager(
                                         state = pagerState,
@@ -282,52 +273,54 @@ fun EditButtonStyleDialog(
 
 /**
  * 渲染样式在不同状态下的外观
+ *
+ * 这一块过去是 Material 的 `Surface`，底色来自 `itemColor(false)`（跟着 Material 的
+ * `surfaceVariant` 走）、描边是 `colorScheme.primary`。现在换成 Oxide 的记号：
+ * 不透明的 `BgElevated` 面 + `FgMuted` 的 4px 描边，`shadowElevation` 去掉——阴影在
+ * 这一套语言里不是块与块之间的分隔。里面那两枚 [RendererStyleBox] 画的是**用户自己
+ * 那个外观**的真实样子，一个字都没改，因此预览的结论不变，改的只是预览外面那圈框。
  */
 @Composable
 private fun RendererBox(
     style: ObservableButtonStyle,
     isDarkTheme: Boolean,
     modifier: Modifier = Modifier,
-    color: Color = itemColor(false),
-    contentColor: Color = onItemColor(),
-    borderColor: Color = MaterialTheme.colorScheme.primary,
-    shape: Shape = MaterialTheme.shapes.large
+    color: Color = Oxide.BgElevated,
+    contentColor: Color = Oxide.Fg,
+    borderColor: Color = Oxide.FgMuted,
+    shape: Shape = RoundedCornerShape(16.dp)
 ) {
-    Surface(
-        modifier = modifier.border(
-            width = 4.dp,
-            color = borderColor,
-            shape = shape
-        ),
-        color = color,
-        contentColor = contentColor,
-        shape = shape,
-        shadowElevation = 6.dp
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(color)
+            .border(
+                width = 4.dp,
+                color = borderColor,
+                shape = shape
+            )
+            .padding(22.dp),
+        verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(22.dp)
-        ) {
-            val boxModifier = Modifier.size(50.dp)
+        val boxModifier = Modifier.size(50.dp)
 
-            //普通状态
-            RendererStyleBox(
-                style = style,
-                isDark = isDarkTheme,
-                isPressed = false,
-                text = "abc",
-                modifier = boxModifier
-            )
+        //普通状态
+        RendererStyleBox(
+            style = style,
+            isDark = isDarkTheme,
+            isPressed = false,
+            text = "abc",
+            modifier = boxModifier
+        )
 
-            //按下状态
-            RendererStyleBox(
-                style = style,
-                isDark = isDarkTheme,
-                isPressed = true,
-                text = "abc",
-                modifier = boxModifier
-            )
-        }
+        //按下状态
+        RendererStyleBox(
+            style = style,
+            isDark = isDarkTheme,
+            isPressed = true,
+            text = "abc",
+            modifier = boxModifier
+        )
     }
 }
 
@@ -373,11 +366,10 @@ private fun StyleConfigEditor(
         )
 
         item(key = "divider") {
-            HorizontalDivider(
+            OxideSecDivider(
                 modifier = Modifier
                     .padding(end = 12.dp)
                     .padding(vertical = 6.dp)
-                    .fillMaxWidth()
             )
         }
 

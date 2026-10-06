@@ -27,17 +27,12 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import dev.oxide.guide.GuideHost
 import dev.oxide.layercontroller.layout.ControlLayout
 import dev.oxide.layercontroller.layout.loadLayoutFromFile
 import dev.oxide.launcher.R
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.base.BaseAppCompatActivity
-import dev.oxide.launcher.ui.guide.GuideKeys
-import dev.oxide.launcher.ui.guide.NextTipLabel
-import dev.oxide.launcher.ui.guide.rememberAppGuides
 import dev.oxide.launcher.ui.screens.content.elements.Background
 import dev.oxide.launcher.ui.screens.main.control_editor.ControlEditor
 import dev.oxide.launcher.ui.theme.OxideTheme
@@ -96,47 +91,48 @@ class ControlEditorActivity : BaseAppCompatActivity() {
                 // 界面根上还需要再包一层，见 dev.oxide.launcher.ui.theme.ProvideOxideChrome。
                 // 没有它编辑器读到的是调色板的默认值而不是用户当前选的那一套
                 ProvideOxideChrome {
-                    val guides = rememberAppGuides()
-                    GuideHost(
-                        guides.editorScreen,
-                        nextTip = { NextTipLabel(it) }
+                    // 这里**不**再挂 GuideHost。
+                    //
+                    // 过去第一次打开编辑器会自动播一遍 Zalith 时代的那条引导流
+                    // （`guides.startOnce(GuideKeys.Editor)`）：先一句欢迎，再逐个高亮悬浮球、
+                    // 控件层列表、新建层、新建控件、外观列表、预览、保存。其中悬浮球那一步就是
+                    // 用户报的那张图（`controltutorial.jpg`），它讲的是旧编辑器里那个悬浮球的用法，
+                    // 与 Oxide 停靠面板的实际操作对不上，也把新面板盖住了。
+                    //
+                    // 引导进度存在 MMKV 的 `started_Editor` 上，因此**已经看过**的那一批安装
+                    // 不会再看到它；而这一版起没有任何调用点会去播它，新装与升级装同样不会看到。
+                    // 主界面那条引导仍由 MainActivity 自己的 GuideHost 承载，没有受影响。
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = backgroundColor(),
+                        contentColor = onBackgroundColor()
                     ) {
-                        LaunchedEffect(Unit) {
-                            guides.startOnce(GuideKeys.Editor)
-                        }
-
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = backgroundColor(),
-                            contentColor = onBackgroundColor()
+                        BoxWithConstraints(
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            BoxWithConstraints(
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Background(
-                                    modifier = Modifier.fillMaxSize(),
-                                    viewModel = backgroundViewModel,
-                                    allowVideo = false
-                                )
+                            Background(
+                                modifier = Modifier.fillMaxSize(),
+                                viewModel = backgroundViewModel,
+                                allowVideo = false
+                            )
 
-                                ControlEditor(
-                                    viewModel = editorViewModel,
-                                    targetFile = controlFile,
-                                    exit = {
-                                        //已保存控制布局后进行的退出
-                                        finish()
-                                    },
-                                    menuExit = {
-                                        //菜单要求的直接退出，使用对话框让用户确认
-                                        editorViewModel.showExitEditorDialog(
-                                            context = this@ControlEditorActivity,
-                                            onExit = {
-                                                this@ControlEditorActivity.finish()
-                                            }
-                                        )
-                                    }
-                                )
-                            }
+                            ControlEditor(
+                                viewModel = editorViewModel,
+                                targetFile = controlFile,
+                                exit = {
+                                    //已保存控制布局后进行的退出
+                                    finish()
+                                },
+                                menuExit = {
+                                    //菜单要求的直接退出，使用对话框让用户确认
+                                    editorViewModel.showExitEditorDialog(
+                                        context = this@ControlEditorActivity,
+                                        onExit = {
+                                            this@ControlEditorActivity.finish()
+                                        }
+                                    )
+                                }
+                            )
                         }
                     }
                 }

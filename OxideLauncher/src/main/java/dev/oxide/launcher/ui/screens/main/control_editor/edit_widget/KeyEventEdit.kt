@@ -30,9 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.nonInteractiveScrollbar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,8 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.oxide.inputmap.keycodes.ControlEventKeyName
 import dev.oxide.layercontroller.event.ClickEvent
@@ -52,23 +50,27 @@ import dev.oxide.layercontroller.event.MAX_KEY_COMBO_EVENTS
 import dev.oxide.layercontroller.event.clampClickEventDelayMs
 import dev.oxide.layercontroller.observable.ObservableClickEventsProvider
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.components.MarqueeText
 import dev.oxide.launcher.ui.control.Keyboard
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSliderItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutTextItem
-import dev.oxide.launcher.ui.theme.itemColor
-import dev.oxide.launcher.ui.theme.onItemColor
+import dev.oxide.launcher.ui.screens.main.oxide.OxideIconButton
+import dev.oxide.launcher.ui.theme.Oxide
 
 /**
  * 按键事件编辑
+ *
+ * [containerColor] / [contentColor] 保留在签名里是为了让现有调用点一行都不用改，
+ * 但**不再参与渲染**：`InfoLayoutItem` 这一族现在只由 `Oxide` 的记号决定颜色，
+ * 原来的默认值又来自 `itemColor(false)`——也就是 Material 的 `surfaceVariant`，那正是
+ * 这一轮要清掉的旧卡片底色。
  */
 @Composable
 fun KeyEventEdit(
     provider: ObservableClickEventsProvider,
     modifier: Modifier = Modifier,
-    containerColor: Color = itemColor(false),
-    contentColor: Color = onItemColor(),
+    @Suppress("UNUSED_PARAMETER") containerColor: Color = Oxide.BgElevated,
+    @Suppress("UNUSED_PARAMETER") contentColor: Color = Oxide.Fg,
 ) {
     var showKeyboard by remember { mutableStateOf(false) }
     val scrollState = rememberLazyListState()
@@ -97,8 +99,6 @@ fun KeyEventEdit(
                     if (canAddKey) showKeyboard = true
                 },
                 enabled = canAddKey,
-                color = containerColor,
-                contentColor = contentColor,
                 showArrow = false
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -118,8 +118,6 @@ fun KeyEventEdit(
                     onDelete = {
                         provider.onRemoveEvent(event)
                     },
-                    color = containerColor,
-                    contentColor = contentColor,
                 )
             }
         }
@@ -158,16 +156,12 @@ private fun EditKeyItem(
     keyEvent: ClickEvent,
     onDelayChange: (Int) -> Unit,
     onDelete: () -> Unit,
-    color: Color = itemColor(false),
-    contentColor: Color = onItemColor(),
 ) {
     val name = remember(keyEvent.key) { ControlEventKeyName.getNameByKey(keyEvent.key) }
 
     InfoLayoutItem(
         modifier = modifier,
-        onClick = {},
-        color = color,
-        contentColor = contentColor
+        onClick = {}
     ) {
         Row(
             modifier = Modifier
@@ -175,19 +169,23 @@ private fun EditKeyItem(
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            MarqueeText(
+            Text(
+                modifier = Modifier.weight(1f),
                 text = stringResource(R.string.control_editor_edit_event_key_value, name ?: keyEvent.key),
-                style = MaterialTheme.typography.bodyMedium
+                color = Oxide.Fg,
+                fontSize = Oxide.Type.Body.fontSize,
+                lineHeight = Oxide.Type.Body.lineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(
-            onClick = onDelete
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_delete_outlined),
-                contentDescription = stringResource(R.string.generic_delete)
-            )
-        }
+        // 旧版是一枚 Material 的 IconButton；换成 Oxide 那一族的图标按钮，
+        // contentDescription 仍然是同一条 generic_delete
+        OxideIconButton(
+            onClick = onDelete,
+            glyph = "✕",
+            contentDescription = stringResource(R.string.generic_delete),
+        )
     }
 
     // 单位跟在数值后面（EditorSliderItem 的 suffix），范围就是派发时真正接受的那一段。

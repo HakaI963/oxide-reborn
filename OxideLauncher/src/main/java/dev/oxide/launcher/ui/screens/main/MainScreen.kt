@@ -162,6 +162,17 @@ fun MainScreen(
         AllSettings.launcherTaskMenuExpanded.save(!isTaskMenuExpanded)
     }
 
+    /**
+     * 把任务面板打开（不是切换）
+     *
+     * 顶栏按钮写的是 `!isTaskMenuExpanded`，而页面（发现页那条安装提示）没有面板
+     * 状态可读——它只能"打开"。两者写同一个设置，所以这里必须和
+     * [changeTasksExpandedState] 用同一个 key，否则会出现两个抽屉。
+     */
+    fun openTaskPanel() {
+        AllSettings.launcherTaskMenuExpanded.save(true)
+    }
+
     /** 回到主页面通用函数 */
     val toMainScreen: () -> Unit = {
         screenBackStackModel.mainScreen.clearWith(NormalNavKey.LauncherMain)
@@ -265,6 +276,7 @@ fun MainScreen(
                     tasks = tasks,
                     tasksExpanded = isTaskMenuExpanded,
                     onToggleTasks = ::changeTasksExpandedState,
+                    onOpenTasks = ::openTaskPanel,
                     onOpenLicence = { raw -> oxideLicenceRaw = raw },
                 )
 
@@ -701,8 +713,9 @@ private fun NavigationUI(
                             tasksExpanded = tasksExpanded,
                             onToggleTasks = onToggleTasks,
                             // 页面（发现页那条安装提示）没有面板状态可读，因此给它的是
-                            // "打开"而不是"切换"：两者写的是同一个设置
-                            onOpenTasks = { AllSettings.launcherTaskMenuExpanded.save(true) },
+                            // "打开"而不是"切换"：两者写的是同一个设置，
+                            // 所以这里原样转交宿主传进来的那个 lambda，不另写一份
+                            onOpenTasks = onOpenTasks,
                         )
 
                         // 面板盖在整块外壳之上，所以它自带底色与调色板：

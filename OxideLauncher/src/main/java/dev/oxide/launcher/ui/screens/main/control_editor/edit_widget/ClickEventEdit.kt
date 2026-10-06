@@ -28,8 +28,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,12 +43,11 @@ import dev.oxide.layercontroller.observable.ObservableNormalData
 import dev.oxide.layercontroller.observable.clickEventsProvider
 import dev.oxide.launcher.R
 import dev.oxide.launcher.ui.base.BaseScreen
-import dev.oxide.launcher.ui.components.MarqueeText
 import dev.oxide.launcher.ui.components.verticalScrollWithBar
 import dev.oxide.launcher.ui.screens.TitledNavKey
+import dev.oxide.launcher.ui.screens.main.control_editor.EditorDialogTabRow
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSwitchItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutTextItem
-import dev.oxide.launcher.ui.theme.cardColor
 
 private data class TabItem(val title: Int)
 
@@ -87,22 +84,12 @@ fun EditWidgetClickEvent(
             }
 
             //顶贴标签栏
-            SecondaryTabRow(
-                selectedTabIndex = selectedTabIndex,
-                containerColor = cardColor(false)
-            ) {
-                tabs.forEachIndexed { index, item ->
-                    Tab(
-                        selected = index == selectedTabIndex,
-                        onClick = {
-                            selectedTabIndex = index
-                        },
-                        text = {
-                            MarqueeText(text = stringResource(item.title))
-                        }
-                    )
-                }
-            }
+            EditorDialogTabRow(
+                modifier = Modifier.padding(vertical = 6.dp),
+                tabs = tabs.map { stringResource(it.title) },
+                selectedIndex = selectedTabIndex,
+                onSelect = { selectedTabIndex = it },
+            )
 
             HorizontalPager(
                 state = pagerState,
