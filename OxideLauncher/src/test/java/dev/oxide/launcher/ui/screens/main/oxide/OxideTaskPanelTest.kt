@@ -217,20 +217,30 @@ class OxideTaskPanelTest {
      */
     @Test
     fun historyProgressIsAbsentForOutcomesThatNeverMeasuredAnything() {
-        // 断言的是 `oxideTaskHistoryProgress` 本身给不给得出进度，不是把 null 兜底成
-        // 某个数之后再读一遍——后者会把 null 变成 0 或 -1，断言于是永远不成立，
-        // 也永远测不出"这里本该没有进度条"。
+        // 两层要分开看，混在一起断言会永远不成立：
+        //
+        // - `oxideTaskHistoryProgress` 对 Succeeded/Failed 是**原样返回** record.progress，
+        //   所以"从没报过进度"的那条给的是 -1f，不是 null；
+        // - 把 -1f 变成"不画进度条"的是 `oxideTaskProgressPercent`（它判 < 0f）。
+        //
+        // 因此下面三条都断言到 `oxideTaskProgressPercent` 这一层，那才是"画不画"的判定。
         assertNull(
             "a succeeded record that never reported progress must not draw a bar",
-            oxideTaskHistoryProgress(settledRecord("s", TaskOutcome.Succeeded, progress = -1f)),
+            oxideTaskProgressPercent(
+                oxideTaskHistoryProgress(settledRecord("s", TaskOutcome.Succeeded, progress = -1f)) ?: -1f,
+            ),
         )
         assertNull(
             "a cancelled record has nothing to measure, so it must not draw a bar",
-            oxideTaskHistoryProgress(settledRecord("c", TaskOutcome.Cancelled)),
+            oxideTaskProgressPercent(
+                oxideTaskHistoryProgress(settledRecord("c", TaskOutcome.Cancelled)) ?: -1f,
+            ),
         )
         assertNull(
             "a queued record is not running yet",
-            oxideTaskHistoryProgress(settledRecord("q", TaskOutcome.Queued)),
+            oxideTaskProgressPercent(
+                oxideTaskHistoryProgress(settledRecord("q", TaskOutcome.Queued)) ?: -1f,
+            ),
         )
         assertEquals(
             100,
@@ -265,7 +275,7 @@ class OxideTaskPanelTest {
         )
         assertTrue(
             "the drawer must feed the same classification with live tasks and settled records",
-            panel.contains("tasks.map(Task::toTaskEntry) + history.map(TaskHistory::toTaskEntry)"),
+            panel.contains("tasks.map { it.toTaskEntry() } + history.map { it.toTaskEntry() }"),
         )
     }
 
