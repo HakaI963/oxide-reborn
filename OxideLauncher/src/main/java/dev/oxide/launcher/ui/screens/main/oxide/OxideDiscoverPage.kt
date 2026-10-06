@@ -449,6 +449,28 @@ private class OxideDiscoverViewModel : ViewModel() {
         private set
 
     /**
+     * 「已安装」限定在哪个实例上；null 表示跟着当前选中的实例
+     *
+     * 用户要的是"按版本名/实例指定已安装的模组"，而本地那份已安装集合**每次只覆盖一个实例**
+     * （`DownloadModViewModel.scan` 扫的是被点名那个实例的 mods 目录）。所以这条筛选不是把
+     * 同一份数据切两半，而是**换掉扫描目标**：选一个实例名，下面那条 [installedIds] 就按那个
+     * 实例重扫一遍。
+     *
+     * 换成实例名而不是 Minecraft 版本名，是因为本地记录（[InstalledMod]）根本不带版本信息——
+     * 见 `OxideTaskSectionsLogic` 之外那条同样的说明。实例名在启动器里就是版本名，
+     * 所以"按实例"与"按版本名"在这里是同一个选择器。
+     */
+    var installedScope by mutableStateOf<String?>(null)
+        private set
+
+    /** 换掉「已安装」的扫描目标；传 null 表示回到当前选中的实例 */
+    fun selectInstalledScope(value: String?) {
+        val name = value?.trim()?.takeIf { it.isNotEmpty() }
+        if (installedScope == name) return
+        installedScope = name
+    }
+
+    /**
      * 看收藏而不是看搜索结果
      *
      * 与 [onlyInstalled] 互斥：两者都是“不看网上那些”的另一种视角，
@@ -559,7 +581,7 @@ private class OxideDiscoverViewModel : ViewModel() {
     /** 当前是否有筛选条件生效 */
     val hasFilters: Boolean
         get() = query.isNotBlank() || gameVersion.isNotBlank() || modloader != null ||
-                sortField != PlatformSortField.RELEVANCE
+                sortField != PlatformSortField.RELEVANCE || installedScope != null
 
     fun provideTitleResolver(resolver: (PlatformSearchData, ModTranslations.McMod?) -> String) {
         titleResolver = resolver
@@ -579,6 +601,8 @@ private class OxideDiscoverViewModel : ViewModel() {
         if (category == value) return
         category = value
         onlyInstalled = false
+        // 换类别时「已安装」的范围也回到默认：上一栏选中的实例对这一栏没有意义
+        installedScope = null
         // 切类别时来源平台回到该类别自己的设置值；只有一个平台的类别固定为 CurseForge
         platform = value.initialPlatform()
         // 该类别不支持加载器过滤时，旧的加载器过滤不再有意义
@@ -704,6 +728,8 @@ private class OxideDiscoverViewModel : ViewModel() {
         gameVersion = ""
         modloader = null
         sortField = PlatformSortField.RELEVANCE
+        // 「已安装」的范围也是一条筛选条件：清掉之后回到跟随当前选中的实例
+        installedScope = null
     }
 
     // ---- 从别处跳进来 -----------------------------------------------------
@@ -2271,6 +2297,7 @@ fun OxideDiscoverPage(
     val installed: DownloadModViewModel = viewModel(key = "OxideDiscoverInstalled") {
         DownloadModViewModel()
     }
+    val hostActions = LocalOxideHostActions.current
 
     val context = LocalContext.current
     val currentVersion by VersionsManager.currentVersion.collectAsStateWithLifecycle()
@@ -2311,9 +2338,29 @@ fun OxideDiscoverPage(
     LaunchedEffect(viewModel.platform) {
         installed.onPlatformChanged(viewModel.platform)
     }
-    LaunchedEffect(currentVersion?.getVersionName()) {
-        installed.scan(currentVersion)
+    // 「已安装」的范围是一个筛选条件，因此它换目标时也要重扫一次 mods 目录。
+    // 目标是真的换掉而不是把同一份数据切两半：本地那份记录一次只覆盖一个实例
+    // （DownloadModViewModel.scan 扫的是被点名那个实例的 mods 目录）。
+    val installedScope = viewModel.installedScope
+    val installedScanTargetName = installedScope ?: currentVersion?.getVersionName()
+
+    LaunchedEffect(currentVersion?.getVersionName(), installedScope) {
+        val target = installedScope
+            ?.let { name -> localVersions.firstOrNull { it.getVersionName() == name } }
+            ?: currentVersion
+        installed.scan(target)
         viewModel.onCurrentInstanceChanged(currentVersion?.getVersionName())
+    }
+
+    // 手上那份记录**属于哪个实例**，只有发起扫描的那一层知道：换实例与换筛选范围都会让
+    // 旧记录过期一帧到几帧（扫描是挂起的）。所以范围一换就先记成 null，等这次扫描真的
+    // 落定再记回来——卡片上那个「Installed」标记宁可晚一帧出现，也不要挂在错误的实例名下。
+    var scannedScope by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(installedScanTargetName) {
+        scannedScope = null
+    }
+    LaunchedEffect(installedScanTargetName, installed.matching) {
+        if (!installed.matching) scannedScope = installedScanTargetName
     }
     LaunchedEffect(localVersions.size) {
         viewModel.refreshInstalledVersions()
@@ -2331,8 +2378,33 @@ fun OxideDiscoverPage(
         viewModel.search()
     }
 
-    val installedIds = remember(installedMods, viewModel.platform) {
-        installedMods.filterValues { it.platform == viewModel.platform }.keys
+    // 「已安装」的判定：一个纯函数，输入是本地记录 + 它被扫到的那一个实例。
+    //
+    // `InstalledMod` 自己**不带** Minecraft 版本也不带实例 id（见 InstalledMod.kt 的字段），
+    // 实例这一维只能由扫描目标补上——因此下面是"扫描目标 + 记录"两份数据合成的一次判定，
+    // 而不是从记录里读出来的。`scannedScope` 为 null（扫描没落定）时一份都不算数。
+    val installedRecords = remember(installedMods, viewModel.platform, scannedScope) {
+        if (scannedScope == null) {
+            emptyList()
+        } else {
+            installedMods.values
+                .filter { it.platform == viewModel.platform }
+                .map {
+                    DiscoverInstalledRecord(
+                        platform = it.platform,
+                        projectId = it.projectId,
+                        versionName = it.versionName,
+                        instanceName = scannedScope,
+                    )
+                }
+        }
+    }
+    val installedIds = remember(installedRecords, viewModel.platform, viewModel.installedScope) {
+        discoverInstalledProjectIds(
+            records = installedRecords,
+            platform = viewModel.platform,
+            scopeInstanceName = viewModel.installedScope,
+        )
     }
 
     val visibleItems = remember(viewModel.feed, viewModel.onlyInstalled, installedIds) {
@@ -2413,7 +2485,8 @@ fun OxideDiscoverPage(
                     modifier = Modifier.fillMaxWidth(),
                     metrics = metrics,
                     viewModel = viewModel,
-                    minecraftVersions = minecraftVersions
+                    minecraftVersions = minecraftVersions,
+                    installedVersionNames = localVersions.map { it.getVersionName() },
                 )
 
                 Spacer(Modifier.height(metrics.cardGap))
@@ -2519,6 +2592,8 @@ fun OxideDiscoverPage(
                 viewModel.dismissInstallState()
             }
         },
+        // 整块可点：把任务面板打开。外壳递进来的动作，收掉提示条仍然只由叉号负责
+        openTasks = hostActions.openTaskPanel,
     )
 }
 
@@ -2709,11 +2784,31 @@ internal fun DiscoverResultsHeader(
 private fun DiscoverFilterBar(
     viewModel: OxideDiscoverViewModel,
     minecraftVersions: List<MinecraftVersion>,
+    installedVersionNames: List<String>,
     metrics: OxideMetrics,
     modifier: Modifier = Modifier
 ) {
     val anyVersion = stringResource(R.string.oxide_dis_filter_any_version)
     val anyLoader = stringResource(R.string.oxide_dis_filter_any_loader)
+
+    // 「已安装」的范围：下标 0 是"跟着当前选中的实例"，之后与本地实例一一对应，
+    // 所以 scopeOptions[i] 对应的实例名就是 installedVersionNames[i - 1]。
+    // 直接按下标取，不用名字反查：实例名可以重复（改名之后两个实例可能同名），
+    // 按名字找回去会命中错误的那一条，控件就会显示一个其实并没有被选中的实例。
+    //
+    // 文案复用既有的两个键：一个都不新增——标签就是左栏那一项的「Installed」，
+    // 第 0 项就是「All」。想要更贴切的措辞（"Installed in" / "Any instance"）需要
+    // 新增 `oxide_dis_filter_installed_in` 与 `oxide_dis_filter_any_instance`。
+    val anyInstance = stringResource(R.string.generic_all)
+    val scopeOptions = remember(installedVersionNames, anyInstance) {
+        buildList {
+            add(anyInstance)
+            installedVersionNames.forEach { add(it) }
+        }
+    }
+    val scopeIndex = viewModel.installedScope
+        ?.let { selected -> installedVersionNames.indexOf(selected).takeIf { it >= 0 }?.plus(1) }
+        ?: 0
 
     // CurseForge 只能按正式版过滤；版本表还没加载出来时先给出应用内置的热门版本
     val versionOptions = remember(
@@ -2817,6 +2912,19 @@ private fun DiscoverFilterBar(
             options = sortOptions,
             selectedIndex = sortIndex,
             onSelect = { index -> PlatformSortField.entries.getOrNull(index)?.let(viewModel::selectSort) }
+        )
+
+        // 「已安装」的范围。只在左栏那一项被选中时才有意义——否则"装在哪个实例"
+        // 根本不影响这一屏显示什么，所以其余时候它是关着的，而不是悄悄生效。
+        OxideDropdown(
+            modifier = Modifier.width(metrics.filterControlWidth),
+            label = stringResource(R.string.oxide_dis_tab_installed),
+            options = scopeOptions,
+            selectedIndex = scopeIndex,
+            enabled = viewModel.onlyInstalled,
+            onSelect = { index ->
+                viewModel.selectInstalledScope(if (index == 0) null else installedVersionNames.getOrNull(index - 1))
+            }
         )
 
         if (viewModel.hasFilters) {
@@ -4340,6 +4448,16 @@ private fun discoverNoticeRow(
  * 进出都从右边滑：用户报的现象正是"下载完了它不走"，所以真正收掉提示条的是任务结束
  * 那一刻（`OxideDiscoverViewModel.onQueueTaskEnded`），而这一层只负责把离场演掉。
  *
+ * **底色是不透明的**（`solid = true`）。这一条压在一整页结果网格上，而默认的
+ * [Oxide.SurfaceBase] 只有 9% 不透明度，于是底下那张卡（连同它的标题）整个透上来——
+ * 用户报的就是这件事。与 `OxideContentSurface`、`OxideSubWindow` 同一处理。
+ *
+ * **整块可点**（[openTasks] 非空时）。用户报的第二件事是"点它会穿透"：这一层原来一个
+ * 点击语义都没有，于是落在它上面的触摸继续往下走，命中底下那张结果卡并打开了项目详情。
+ * 现在它自己就是那一次点击的消费方：[openTasks] 把任务面板打开。
+ * 叉号仍然是"收掉这条提示"：[onDismiss] 不变，而且因为叉号自己是更深的可点节点，
+ * Compose 的指针分发把这一次点击交给它，外层那个 `clickable` 不会同时触发。
+ *
  * 签名收的是 [DiscoverNoticeRow]（普通字段）而不是整个状态层：
  * 这一屏画的东西只有标题、说明、进度条与一枚叉号，
  * 让测试能直接构造这三样东西，就不必为了画一张金标准图去伪造平台模型
@@ -4351,7 +4469,8 @@ internal fun DiscoverInstallNotice(
     notice: DiscoverNoticeRow?,
     action: (@Composable () -> Unit)?,
     onDismiss: () -> Unit,
-    metrics: OxideMetrics
+    metrics: OxideMetrics,
+    openTasks: (() -> Unit)? = null,
 ) {
     // 离场动画期间内容仍然要留着，因此把最后一次非空的那一行记住
     var shown by remember { mutableStateOf(notice) }
@@ -4365,12 +4484,17 @@ internal fun DiscoverInstallNotice(
                 fadeOut(tween(Oxide.Motion.PopoverFadeMs)),
     ) {
         val row = shown ?: return@AnimatedVisibility
+        // 这个 Box 只是为了把提示条摆到右下角：它本身不接收指针，
+        // 所以它既不会吞掉提示条自己的点击（那是缺陷二），也不会拦掉底下那层该收到的点击。
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
             OxideSurface(
                 modifier = Modifier
                     .padding(end = metrics.pagePaddingH, bottom = metrics.pagePaddingH)
                     .widthIn(max = metrics.drawerWidth),
                 shape = Oxide.RadiusBlock,
+                solid = true,
+                // 整块可点：原来是 null，于是点击穿透到背后的结果卡
+                onClick = openTasks,
                 contentPadding = PaddingValues(
                     start = metrics.cardGap,
                     end = metrics.controlPadding,

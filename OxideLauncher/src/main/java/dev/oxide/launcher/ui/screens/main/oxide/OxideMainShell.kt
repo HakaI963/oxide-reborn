@@ -20,6 +20,8 @@ package dev.oxide.launcher.ui.screens.main.oxide
 
 import androidx.compose.foundation.background
 import dev.oxide.launcher.coroutine.Task
+import dev.oxide.launcher.coroutine.TaskHistory
+import dev.oxide.launcher.coroutine.TaskSystem
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -89,6 +91,15 @@ class OxideHostActions(
     val openLog: (String?) -> Unit,
     /** 用 Oxide 自己的三步向导导出这个实例的整合包 */
     val openVersionExport: (Version) -> Unit,
+    /**
+     * 打开任务面板
+     *
+     * 这不是"切换"而是"打开"：调用方（发现页右下角那条安装提示）没有面板状态可读，
+     * 它要的只是把面板叫出来。真正的展开态仍然只有设置里那一个
+     * （`AllSettings.launcherTaskMenuExpanded`），因此这一条与顶栏按钮写的是同一个值，
+     * 不存在两处真相。
+     */
+    val openTaskPanel: () -> Unit,
 )
 
 /** 设置页里可以直接打开的深层分类 */
@@ -115,6 +126,7 @@ val LocalOxideHostActions = staticCompositionLocalOf {
         openFiles = {},
         openLog = {},
         openVersionExport = {},
+        openTaskPanel = {},
     )
 }
 
@@ -175,6 +187,14 @@ fun OxideMainShell(
     tasks: List<Task>,
     tasksExpanded: Boolean,
     onToggleTasks: () -> Unit,
+    /**
+     * 把任务面板打开（不是切换）
+     *
+     * 宿主把它递进来是为了让页面也能叫出面板——见 [OxideHostActions.openTaskPanel]。
+     * 它与顶栏按钮的关系是"同一件事的两个入口"：两者写的都是同一个设置，
+     * 所以按顶栏按钮关掉之后，页面再叫一次仍然是打开的。
+     */
+    onOpenTasks: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val nav = rememberOxideNavState()
@@ -219,6 +239,11 @@ fun OxideMainShell(
 
     // 换页同一帧就作废：世代对不上就是没打开，返回键优先级与动画可见性一起跟着回去
     val liveDestination = oxideTransientSurface(destination, destinationEpoch, nav.epoch)
+
+    // 任务历史住在任务系统这个进程级单例上，因此关掉抽屉、点掉发现页那条提示、
+    // 换页、旋转都不会让它消失。面板自己一份历史也不留：它一旦从组合里消失，
+    // 记在它内部的 remember 也就没了，所以这一份只能由这里读回来再喂给它。
+    val taskHistory: List<TaskHistory> by TaskSystem.historyFlow.collectAsStateWithLifecycle()
 
     // 实例相关的目的地按路径记住，而不是按 Version 对象：
     // 版本改名之后路径会变，下面的 LaunchedEffect 会顺手把那一块收掉
@@ -308,6 +333,7 @@ fun OxideMainShell(
                 )
             )
         },
+        openTaskPanel = onOpenTasks,
     )
 
     // ProvideOxideChrome 必须包在整棵 Oxide 树的根上：
@@ -476,6 +502,7 @@ fun OxideMainShell(
                     tasks = tasks,
                     metrics = metrics,
                     onDismiss = onToggleTasks,
+                    history = taskHistory,
                 )
             }
         }

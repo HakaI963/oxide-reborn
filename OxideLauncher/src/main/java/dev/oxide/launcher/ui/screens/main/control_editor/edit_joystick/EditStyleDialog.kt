@@ -21,6 +21,9 @@ package dev.oxide.launcher.ui.screens.main.control_editor.edit_joystick
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -37,10 +40,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
@@ -62,16 +62,14 @@ import dev.oxide.layercontroller.observable.ObservableJoystickStyle
 import dev.oxide.layercontroller.observable.ObservableJoystickStyleConfig
 import dev.oxide.launcher.R
 import dev.oxide.launcher.setting.unit.toFloatRange
-import dev.oxide.launcher.ui.components.MarqueeText
 import dev.oxide.launcher.ui.components.SingleLineTextCheck
+import dev.oxide.launcher.ui.screens.main.control_editor.EditorDialogTabRow
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutColorItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSliderItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSwitchItem
+import dev.oxide.launcher.ui.screens.main.control_editor.editorPanelBackground
 import dev.oxide.launcher.ui.screens.rememberSwapTween
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.itemColor
-import dev.oxide.launcher.ui.theme.onCardColor
-import dev.oxide.launcher.ui.theme.onItemColor
+import dev.oxide.launcher.ui.theme.Oxide
 
 private data class TabItem(val titleRes: Int)
 
@@ -126,15 +124,18 @@ fun EditJoystickStyleDialog(
             }
 
             if (style != null) {
-                Surface(
+                // 与 EditWidgetDialog 同一处理：这一块不是 Dialog 窗口（见上面的
+                // 覆盖层），因此不套 OxideDialogShell，而是把 Oxide 面板的
+                // 不透明底、圆角与 1px 描边直接画在这一层上
+                Column(
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
                         .fillMaxHeight()
-                        .padding(all = 16.dp),
-                    shadowElevation = 3.dp,
-                    color = cardColor(false),
-                    contentColor = onCardColor(),
-                    shape = MaterialTheme.shapes.extraLarge
+                        .padding(all = 16.dp)
+                        .clip(Oxide.RadiusDrawer)
+                        .editorPanelBackground()
+                        .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusDrawer),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Row(
                         modifier = Modifier.fillMaxHeight()
@@ -176,22 +177,13 @@ fun EditJoystickStyleDialog(
                                     config = style.lightStyle
                                 )
                             } else {
-                                SecondaryTabRow(
-                                    selectedTabIndex = selectedTabIndex,
-                                    containerColor = cardColor(false)
-                                ) {
-                                    tabs.forEachIndexed { index, item ->
-                                        Tab(
-                                            selected = index == selectedTabIndex,
-                                            onClick = {
-                                                selectedTabIndex = index
-                                            },
-                                            text = {
-                                                MarqueeText(text = stringResource(item.titleRes))
-                                            }
-                                        )
-                                    }
-                                }
+                                // 旧版是 Material 的 SecondaryTabRow + Tab
+                                EditorDialogTabRow(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    tabs = tabs.map { stringResource(it.titleRes) },
+                                    selectedIndex = selectedTabIndex,
+                                    onSelect = { selectedTabIndex = it },
+                                )
 
                                 HorizontalPager(
                                     state = pagerState,
@@ -400,33 +392,31 @@ private fun StyleConfigEditor(
 
 /**
  * 渲染摇杆样式预览
+ *
+ * 过去是一块 Material `Surface`，底色取自 `itemColor(false)`（跟着 Material 的
+ * `surfaceVariant` 走）、圆角是 `MaterialTheme.shapes.large`。现在换成 Oxide 的记号：
+ * 不透明的 `BgElevated` 面 + `RadiusDrawer` 圆角。里面那枚 [JoystickStyleWidget] 画的是
+ * **用户自己那个摇杆外观**的真实样子，一个字都没改，改的只是它外面那块底板。
  */
 @Composable
 private fun RenderBox(
     style: ObservableJoystickStyle,
     isDarkMode: Boolean,
     modifier: Modifier = Modifier,
-    color: Color = itemColor(false),
-    contentColor: Color = onItemColor(),
-    shape: Shape = MaterialTheme.shapes.large
+    color: Color = Oxide.BgElevated,
+    shape: Shape = Oxide.RadiusDrawer
 ) {
-    Surface(
-        modifier = modifier,
-        color = color,
-        contentColor = contentColor,
-        shape = shape
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(color)
+            .border(BorderStroke(1.dp, Oxide.Line2), shape),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(all = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            JoystickStyleWidget(
-                modifier = Modifier.size(120.dp),
-                style = style,
-                isDarkTheme = isDarkMode
-            )
-        }
+        JoystickStyleWidget(
+            modifier = Modifier.size(120.dp),
+            style = style,
+            isDarkTheme = isDarkMode
+        )
     }
 }

@@ -175,11 +175,12 @@ class OxideGameBrandTest {
 
     @Test
     fun theBrandStaysClearOfTheDefaultLayoutControls() {
-        // 默认控制布局（assets/default_layout.json）里离右下角最近的是"▢"：
-        // 位置 (8233, 7765)、边长为屏高的 10.15%。按钮位置是"上沿 = (屏高 − 按钮高) × y%"，
-        // 于是它的下沿落在 (1 − 0.1015) × 0.7765 + 0.1015 = 0.7992 屏高处，
-        // 屏幕最下面那 20.08% 是一条空带。标识必须待在那条带子里。
-        val expectedFreeBand = 1f - ((1f - 0.1015f) * 0.7765f + 0.1015f)
+        // 默认控制布局（assets/default_layout.json）里**压在标识地盘上**最靠下的是"〤"：
+        // 位置 (8725, 5859)、边长为屏高的 10.15%，右沿落在 0.8854，越过了
+        // GameBrandControlZoneStart（0.80）那条竖线。按钮位置是"上沿 = (屏高 − 按钮高) × y%"，
+        // 于是它的下沿落在 (1 − 0.1015) × 0.5859 + 0.1015 = 0.6279 屏高处，
+        // 屏幕最下面那 37.20% 是一条空带。标识必须待在那条带子里。
+        val expectedFreeBand = 1f - ((1f - 0.1015f) * 0.5859f + 0.1015f)
         assertEquals(
             "the free band below the default control comes from default_layout.json",
             expectedFreeBand.toDouble(),
@@ -194,6 +195,30 @@ class OxideGameBrandTest {
         assertFalse(gameBrandFitsIn(DpSize(GameBrandMinAvailableWidth, justTallEnough - 2.dp)))
         // 而一个真实的横屏手机（最短边约 360dp）远远够用——这条不许被收紧
         assertTrue(gameBrandFitsIn(DpSize(360.dp, 800.dp)))
+        assertTrue(gameBrandFitsIn(DpSize(800.dp, 360.dp)))
+    }
+
+    @Test
+    fun theFreeBandIgnoresControlsLeftOfTheBrandZone() {
+        // 这条是竖线存在的理由。布局里"⋐"比"〤"低得多：右沿 0.7274 < 0.80，
+        // 它落在竖线左边，压根不会压到右下角那 46dp。若按整条底边取最小值，
+        // 空带会掉到 3.55%，22dp 的标识在横屏（360dp）里就再也放不进去了。
+        val lowestOverall = 1f - ((1f - 0.1047f) * 0.9604f + 0.1047f)
+        assertEquals(
+            "the lowest control overall leaves only 3.55% below it",
+            0.0355f,
+            lowestOverall,
+            0.0001f,
+        )
+        assertTrue(
+            "that control must stay left of the brand zone, or the free band is wrong",
+            0.7274f < GameBrandControlZoneStart,
+        )
+        assertTrue(
+            "and the free band really does have to come from a control further right",
+            DefaultControlFreeBandRatio > lowestOverall,
+        )
+        // 横屏那一档因此仍然画得出来——这是"竖线算对了"的可观察后果
         assertTrue(gameBrandFitsIn(DpSize(800.dp, 360.dp)))
     }
 

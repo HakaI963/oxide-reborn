@@ -1294,6 +1294,15 @@
     <string name="oxide_tasks_title">Tasks</string>
     <string name="oxide_tasks_empty">Nothing running</string>
     <string name="oxide_tasks_empty_detail">Downloads, installs and exports show up here while they work.</string>
+    <string name="oxide_tasks_section_running">Running</string>
+    <string name="oxide_tasks_section_queued">Queued</string>
+    <string name="oxide_tasks_section_history">History</string>
+    <string name="oxide_tasks_history_empty">Nothing finished yet.</string>
+    <string name="oxide_tasks_version_install_title">Installing %1$s</string>
+    <string name="oxide_tasks_outcome_succeeded">Done</string>
+    <string name="oxide_tasks_outcome_failed">Failed</string>
+    <string name="oxide_tasks_outcome_cancelled">Cancelled</string>
+    <string name="oxide_dis_filter_installed_in">Installed in</string>
     <string name="oxide_task_stage_preparing">Preparing</string>
     <string name="oxide_task_stage_running">Running</string>
     <string name="oxide_task_stage_completed">Done</string>

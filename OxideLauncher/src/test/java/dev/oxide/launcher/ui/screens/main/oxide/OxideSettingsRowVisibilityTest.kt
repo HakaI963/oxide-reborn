@@ -162,6 +162,85 @@ class OxideSettingsRowVisibilityTest {
         )
     }
 
+    // ---- 外观：颜色主题与壁纸已移走，设置项本身都还在 ------------------------
+
+    @Test
+    fun theWallpaperClearRowAppearsOnlyWhenThereIsAWallpaperToClear() {
+        assertTrue(oxideWallpaperClearVisible(hasValidWallpaper = true))
+        assertFalse(
+            "no wallpaper is set, so the row must not be offered as a dead end",
+            oxideWallpaperClearVisible(hasValidWallpaper = false),
+        )
+    }
+
+    @Test
+    fun theAppearancePageNoLongerRendersTheColorThemeRow() {
+        val source = readSource("OxideSettingsPage.kt")
+        assertFalse(
+            "the colour theme row must be gone from the Appearance page",
+            source.contains("AllSettings.launcherColorTheme"),
+        )
+        assertFalse(
+            "the custom colour entry point must be gone from the Appearance page",
+            source.contains("AllSettings.launcherCustomColor"),
+        )
+        assertFalse(
+            "the palette style row must be gone from the Appearance page",
+            source.contains("AllSettings.launcherCustomPaletteStyle"),
+        )
+    }
+
+    @Test
+    fun theAppearancePageNoLongerRendersTheWallpaperBlock() {
+        val source = readSource("OxideSettingsPage.kt")
+        for (key in listOf(
+            "AllSettings.launcherBackgroundOpacity",
+            "AllSettings.videoBackgroundVolume",
+            "AllSettings.backgroundBlur",
+            "AllSettings.backgroundBlurType",
+        )) {
+            assertFalse(
+                "$key must no longer be rendered by the Appearance page",
+                source.contains(key),
+            )
+        }
+    }
+
+    @Test
+    fun theKeysTheRemovedRowsUsedAreStillDeclared() {
+        // 这是"随时能加回来"那半边：行可以删，设置项本身一个都不能少
+        val all = locate("setting/AllSettings.kt").readText()
+        for (key in listOf(
+            "val launcherColorTheme",
+            "val launcherCustomColor",
+            "val launcherCustomPaletteStyle",
+            "val launcherBackgroundOpacity",
+            "val videoBackgroundVolume",
+            "val backgroundBlur",
+            "val backgroundBlurType",
+            "val launcherGuiScale",
+        )) {
+            assertTrue("$key must stay declared in AllSettings", all.contains(key))
+        }
+    }
+
+    @Test
+    fun theInterfaceScaleRowAndTheWallpaperClearRowAreStillRendered() {
+        val source = readSource("OxideSettingsPage.kt")
+        assertTrue(
+            "the interface scale row was not named in the complaint; it must stay",
+            source.contains("AllSettings.launcherGuiScale.save(it)"),
+        )
+        assertTrue(
+            "a stored wallpaper must keep its only way back to none",
+            source.contains("oxideWallpaperClearVisible("),
+        )
+        assertTrue(
+            "the clear row must actually delete the stored background",
+            source.contains("backgroundViewModel?.delete()"),
+        )
+    }
+
     private fun readSource(name: String): String = locate(
         "ui/screens/main/oxide/$name"
     ).readText()

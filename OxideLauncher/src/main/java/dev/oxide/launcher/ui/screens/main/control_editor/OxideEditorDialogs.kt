@@ -63,9 +63,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.oxide.layercontroller.event.ClickEvent
 import dev.oxide.layercontroller.layout.createNewLayer
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.components.ProgressDialog
-import dev.oxide.launcher.ui.components.SimpleAlertDialog
-import dev.oxide.launcher.ui.components.SimpleEditDialog
 import dev.oxide.launcher.ui.components.rememberSafeScreenInsets
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_joystick.JoystickStyleListDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_layer.EditControlLayerDialog
@@ -73,21 +70,34 @@ import dev.oxide.launcher.ui.screens.main.control_editor.edit_layer.EditSwitchLa
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_style.StyleListDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_translatable.EditTranslatableTextDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_widget.SelectLayers
+import dev.oxide.launcher.ui.screens.main.oxide.OxideConfirmDialog
+import dev.oxide.launcher.ui.screens.main.oxide.OxideTaskDialog
+import dev.oxide.launcher.ui.screens.main.oxide.OxideTextEntryDialog
 import dev.oxide.launcher.utils.string.getMessageOrToString
 import dev.oxide.launcher.viewmodel.EditorViewModel
 import kotlin.math.roundToInt
 
 /**
- * 悬浮球，以及那些还留在旧分区对话框里的操作
+ * 悬浮球，以及编辑器里那一组模态操作
  *
- * 这一份里只有两件事：
+ * 这一份里有两件事：
  *
  * 1. **悬浮球**。过去用的是 `ui/components/Draggabble.kt` 的 `FloatingBall`，
  *    它画的是 Material 的 `Surface`。这里换成 Oxide 的一块描边方块，圆角与停靠
  *    面板一致；触摸行为不变（拖动移动、点击切换），仍然自己消费事件。
- * 2. **仍然是旧对话框的那些操作**：保存、保存失败、层的属性与删除、外观列表、
- *    复制到哪些层、编辑文本、发送文本、切换层可见性。停靠面板里只留了入口，
- *    内容仍由这些对话框承载（见报告里"没能重建"那一节）。
+ * 2. **模态操作**：保存、保存失败、层的属性与删除、外观列表、复制到哪些层、
+ *    编辑文本、发送文本、切换层可见性。
+ *
+ * 第 2 类过去走的是 `ui/components/Dialogs.kt` 里那五个 `Simple*Dialog` 与
+ * `ProgressDialog`——Material 的 `AlertDialog` 灰卡片加鲑鱼色按钮，与停靠面板
+ * 完全两套语言。现在它们全部换成 `ui/screens/main/oxide/OxideDialogs.kt` 里的
+ * 那一族：保存/保存失败与各条警告走 `OxideConfirmDialog`，两处"新建名称"与
+ * "发送文本"走 `OxideTextEntryDialog`，保存中走 `OxideTaskDialog`。外观列表与
+ * 层的属性仍由各自的文件承载，但那些文件也一并换成了同一块面板。
+ *
+ * 换的时候刻意保住了三件容易被"顺手改进"掉的东西，详见各处注释：新建名称与
+ * 发送文本都传了 `allowBlank = true`（旧的输入框不校验空值），按钮文案仍是原来
+ * 那些 key，保存中仍然不可被点掉。
  */
 
 // ---------------------------------------------------------------------------
@@ -224,7 +234,7 @@ internal fun EditorBall(
 }
 
 // ---------------------------------------------------------------------------
-// 仍然存在的那些对话框
+// 那些仍然独立成模态的操作
 // ---------------------------------------------------------------------------
 
 /** 保存、保存失败、层的属性与删除、外观列表的创建与删除 */
@@ -281,9 +291,12 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
 
         is EditorOperation.DeleteLayer -> {
             val layer = operation.layer
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.generic_delete),
-                text = stringResource(R.string.control_editor_layers_delete, layer.name),
+                message = stringResource(R.string.control_editor_layers_delete, layer.name),
+                // 旧的 SimpleAlertDialog 默认就是 generic_confirm / generic_cancel
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
                 onDismiss = {
                     viewModel.editorOperation = EditorOperation.None
                 },
@@ -321,12 +334,18 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
 
         is EditorOperation.CreateStyle -> {
             var name by remember { mutableStateOf("") }
-            SimpleEditDialog(
+            OxideTextEntryDialog(
                 title = stringResource(R.string.control_editor_edit_style_config_name),
+                label = stringResource(R.string.control_editor_edit_style_config_name),
                 value = name,
                 onValueChange = { name = it },
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
+                // 旧的 SimpleEditDialog 没有任何校验，空名字也能确认，因此这里必须
+                // allowBlank = true，否则"新建"按钮会在输入框还是空的时候灰掉
+                allowBlank = true,
                 singleLine = true,
-                onDismissRequest = {
+                onDismiss = {
                     viewModel.editorOperation = EditorOperation.None
                 },
                 onConfirm = {
@@ -338,9 +357,11 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
 
         is EditorOperation.DeleteButtonStyle -> {
             val style = operation.style
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.generic_delete),
-                text = stringResource(R.string.control_editor_edit_style_config_delete, style.name),
+                message = stringResource(R.string.control_editor_edit_style_config_delete, style.name),
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
                 onDismiss = {
                     viewModel.editorOperation = EditorOperation.None
                 },
@@ -353,10 +374,11 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
 
         is EditorOperation.DeleteJoystickStyle -> {
             val style = operation.style
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.control_editor_special_joystick_style_delete_title),
-                text = stringResource(R.string.control_editor_edit_joystick_style_list_delete, style.name),
+                message = stringResource(R.string.control_editor_edit_joystick_style_list_delete, style.name),
                 confirmText = stringResource(R.string.generic_delete),
+                cancelText = stringResource(R.string.generic_cancel),
                 onConfirm = {
                     viewModel.removeJoystickStyle(style)
                     viewModel.editorOperation = EditorOperation.None
@@ -390,12 +412,17 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
 
         is EditorOperation.CreateJoystickStyle -> {
             var name by remember { mutableStateOf("") }
-            SimpleEditDialog(
+            OxideTextEntryDialog(
                 title = stringResource(R.string.control_editor_edit_joystick_style_list_name),
+                label = stringResource(R.string.control_editor_edit_joystick_style_list_name),
                 value = name,
                 onValueChange = { name = it },
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
+                // 与新建控件外观同一条规则：旧的 SimpleEditDialog 不校验空值
+                allowBlank = true,
                 singleLine = true,
-                onDismissRequest = {
+                onDismiss = {
                     viewModel.editorOperation = EditorOperation.None
                 },
                 onConfirm = {
@@ -406,16 +433,30 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
         }
 
         is EditorOperation.Saving -> {
-            ProgressDialog(title = stringResource(R.string.control_manage_saving))
+            // 旧的是 ProgressDialog（Material 卡片 + LinearProgressIndicator）。
+            // Oxide 那一版在进度不可知时画一条空槽并写明"处理中"，同样不做循环动画
+            OxideTaskDialog(
+                title = stringResource(R.string.control_manage_saving),
+                progress = null,
+                onCancel = null,
+            )
         }
 
         is EditorOperation.SaveFailed -> {
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.control_manage_failed_to_save),
-                text = operation.error.getMessageOrToString()
-            ) {
-                viewModel.editorOperation = EditorOperation.None
-            }
+                message = operation.error.getMessageOrToString(),
+                // 只有一枚确认按钮：与旧的单按钮重载一致（cancelText 传空串即不画，
+                // confirmText 的默认值也是同一个 key，所以这里显式写出来）
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = "",
+                onConfirm = {
+                    viewModel.editorOperation = EditorOperation.None
+                },
+                onDismiss = {
+                    viewModel.editorOperation = EditorOperation.None
+                }
+            )
         }
     }
 }
@@ -448,9 +489,11 @@ internal fun EditorWidgetOperationDialogs(viewModel: EditorViewModel) {
         is EditorWidgetOperation.DeleteButton -> {
             val data = operation.data
             val layer = operation.layer
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.generic_delete),
-                text = stringResource(R.string.control_editor_edit_dialog_delete_widget),
+                message = stringResource(R.string.control_editor_edit_dialog_delete_widget),
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = stringResource(R.string.generic_cancel),
                 onDismiss = {
                     viewModel.editorWidgetOperation = EditorWidgetOperation.None
                 },
@@ -483,11 +526,23 @@ internal fun EditorWidgetOperationDialogs(viewModel: EditorViewModel) {
                         .orEmpty()
                 )
             }
-            SimpleEditDialog(
+            OxideTextEntryDialog(
                 title = stringResource(R.string.control_editor_edit_event_launcher_send_text),
+                label = stringResource(R.string.control_editor_edit_event_launcher_send_text),
                 value = value,
                 onValueChange = { new -> value = new },
+                confirmText = stringResource(R.string.generic_confirm),
+                // 旧的那一版只有一枚确认按钮，因此取消文案给空串即不画
+                cancelText = "",
+                // 同样是为了保住"清空输入即删除该事件"这条路：空值必须能确认
+                allowBlank = true,
                 singleLine = true,
+                // 旧版是 `Dialog(onDismissRequest = {})`：返回键与面板的 ✕ 都是死的，
+                // 除了确认之外没有别的出路。这里接到"放弃并关掉"上——不多丢一条数据，
+                // 只是把一个死按钮变成一条退路
+                onDismiss = {
+                    viewModel.editorWidgetOperation = EditorWidgetOperation.None
+                },
                 onConfirm = {
                     // 清除所有发送文本事件，如果文本不为空则再添加
                     data.onRemoveAllEvents(ClickEvent.Type.SendText)
@@ -521,21 +576,34 @@ internal fun EditorWarningOperationDialogs(viewModel: EditorViewModel) {
         is EditorWarningOperation.None -> {}
 
         is EditorWarningOperation.WarningNoLayers -> {
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.control_editor_menu_no_layers_title),
-                text = stringResource(R.string.control_editor_menu_no_layers_message)
-            ) {
-                viewModel.editorWarningOperation = EditorWarningOperation.None
-            }
+                message = stringResource(R.string.control_editor_menu_no_layers_message),
+                // 只有一枚确认按钮，与旧的单按钮重载一致
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = "",
+                onConfirm = {
+                    viewModel.editorWarningOperation = EditorWarningOperation.None
+                },
+                onDismiss = {
+                    viewModel.editorWarningOperation = EditorWarningOperation.None
+                }
+            )
         }
 
         is EditorWarningOperation.WarningNoSelectLayer -> {
-            SimpleAlertDialog(
+            OxideConfirmDialog(
                 title = stringResource(R.string.control_editor_menu_no_selected_layer_title),
-                text = stringResource(R.string.control_editor_menu_no_selected_layer_message)
-            ) {
-                viewModel.editorWarningOperation = EditorWarningOperation.None
-            }
+                message = stringResource(R.string.control_editor_menu_no_selected_layer_message),
+                confirmText = stringResource(R.string.generic_confirm),
+                cancelText = "",
+                onConfirm = {
+                    viewModel.editorWarningOperation = EditorWarningOperation.None
+                },
+                onDismiss = {
+                    viewModel.editorWarningOperation = EditorWarningOperation.None
+                }
+            )
         }
     }
 }

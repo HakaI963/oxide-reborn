@@ -93,20 +93,22 @@ class OxideSettingsControlTest {
     /**
      * 用户点名的那几个控件必须真的写在设置注册表里
      *
-     * 深色模式、颜色主题、配色风格与自定义色是 v1.4.0 里"看着能点、什么都不变"的四个，
+     * 深色模式、颜色主题、配色风格与自定义色是 v1.4.0 里“看着能点、什么都不变”的四个，
      * 逐条钉住它们，避免以后有人把 `.save(...)` 换成局部 remember。
+     *
+     * 后三个的控件已按 v1.8.0 的反馈从外观页移走（颜色主题行与整块壁纸），它们不再是
+     * “控件”，也就不再有“点了没反应”这回事；设置项本身全部留在 AllSettings 里，
+     * 主题实现（Theme.kt / NativeThemeUtils.kt）还在读，“键还在、随时能加回来”那半边
+     * 由 OxideSettingsRowVisibilityTest 钉住。这里只留深色模式——它仍然是页面上真实
+     * 存在、且必须真的写盘的控件。
      */
     @Test
     fun `the appearance controls the bug report named are wired to real settings`() {
-        // 深色模式、颜色主题、配色风格与自定义色是 v1.4.0 里"看着能点、什么都不变"的四个，
-        // 逐条钉住，避免以后有人把 `.save(...)` 换成局部 remember。
-        // 自定义色的初值读在取色对话框里，所以按两个文件一起判断。
+        // 深色模式仍是页面上真实存在的控件，逐条钉住它，避免以后有人把 `.save(...)`
+        // 换成局部 remember。自定义色的初值读在取色对话框里，所以按两个文件一起判断。
         val source = sources.values.joinToString("\n")
         for (key in listOf(
             "launcherDarkMode",
-            "launcherColorTheme",
-            "launcherCustomPaletteStyle",
-            "launcherCustomColor",
         )) {
             assertTrue("$key must be read through .state", source.contains("AllSettings.$key.state"))
             assertTrue("$key must be written through .save(...)", source.contains("AllSettings.$key.save("))

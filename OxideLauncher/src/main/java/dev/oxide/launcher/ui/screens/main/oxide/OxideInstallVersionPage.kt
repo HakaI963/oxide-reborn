@@ -79,8 +79,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.JsonSyntaxException
 import dev.oxide.launcher.R
+import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.coroutine.TaskLogOutput
+import dev.oxide.launcher.coroutine.TaskOutcome
 import dev.oxide.launcher.coroutine.TaskStage
+import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.coroutine.TitledTask
 import dev.oxide.launcher.game.addons.modloader.AddonVersion
 import dev.oxide.launcher.game.addons.modloader.ModLoader
@@ -148,6 +151,14 @@ import java.nio.channels.UnresolvedAddressException
 import java.util.concurrent.TimeoutException
 
 private const val INSTALL_TAG = "OxideInstallVersionPage"
+
+/**
+ * 版本安装在任务系统里登记时的 id 前缀
+ *
+ * 带上前缀而不是直接用版本名，是为了不和别的任务撞 id：`Task` 的相等与去重全都只看 id，
+ * 而下载那一类任务用的是平台文件名之类的 id。同一个版本名在两种任务里同时出现是可能的。
+ */
+private const val TASK_ID_PREFIX = "oxide-version-install:"
 
 // ---------------------------------------------------------------------------
 // 纯逻辑
@@ -750,6 +761,17 @@ private class OxideInstallViewModel : ViewModel() {
     var installer by mutableStateOf<GameInstaller?>(null)
         private set
 
+    /**
+     * 这一次安装在任务系统里登记到的 id
+     *
+     * 版本安装走的是 `GameInstaller` 自带的 `TaskFlowExecutor`，**不经过**
+     * `TaskSystem.submitTask`，因此它从来不出现在任务面板的"在跑"列表里——而用户要的是
+     * 任务面板里能看见"正在装 1.20.1"，而且是在**排队**那一节里先看见它。
+     * `GameInstaller.installGame` 的阶段要等网络往返之后才建得出来，所以 id 在真正开跑前
+     * 就要先占好：登记时是 Queued，`onStart` 推成 Running。
+     */
+    private var trackedTaskId: String? = null
+
     /** 版本名称存在性检查的刷新计数；安装结束后会变一次，用来重新探测 */
     var versionNameCheck by mutableIntStateOf(0)
         private set
@@ -762,6 +784,25 @@ private class OxideInstallViewModel : ViewModel() {
         operation = OxideInstallOperation.WarningForMobileData(info)
     }
 
+    /**
+     * 把这一次安装登记进任务系统，排在"排队"一节
+     *
+     * 用的是同一个 [Task] 类型、同一个列表、同一份历史，因此"装一个 Minecraft 版本"与
+     * "下载一个模组"在面板上是同一类东西的两条记录，而不是两套并行的账。
+     * 已经登记过同一个 id 时返回 null，重复点安装不会多出一条。
+     */
+    private fun trackInstall(info: GameDownloadInfo): String? =
+        TaskSystem.trackExternalTask(
+            Task.runTask(
+                id = TASK_ID_PREFIX + info.customVersionName,
+                // 这条任务不由任务系统执行（GameInstaller 走的是 TaskFlowExecutor），
+                // 所以这里只有一个空挂起函数；它永远不会被调用。
+                task = {},
+            ).apply {
+                updateTitle(androidText(R.string.oxide_tasks_version_install_title, info.customVersionName))
+            }
+        )
+
     fun install(
         context: Context,
         info: GameDownloadInfo,
@@ -769,10 +810,16 @@ private class OxideInstallViewModel : ViewModel() {
         onStop: () -> Unit = {},
     ) {
         operation = OxideInstallOperation.Installing
+        // 先排队再开跑：面板上先出现"排队"里的那一行，装真正开始后推成"运行"
+        val tracked = trackInstall(info)
+        trackedTaskId = tracked
         installer = GameInstaller(context, info, viewModelScope).also {
+            if (tracked != null) TaskSystem.startTrackedTask(tracked)
             it.installGame(
                 onInstalled = { version ->
                     installer = null
+                    TaskSystem.finishTrackedTask(tracked ?: trackedTaskId.orEmpty(), TaskOutcome.Succeeded)
+                    trackedTaskId = null
                     VersionsManager.refresh("[OxideInstall] GameInstaller.onInstalled", version)
                     operation = OxideInstallOperation.Succeeded
                     versionNameCheck++
@@ -780,12 +827,17 @@ private class OxideInstallViewModel : ViewModel() {
                 },
                 onError = { th ->
                     installer = null
+                    // 失败也要进历史，而不是凭空消失：用户事后要能回答"刚才那次成了没有"
+                    TaskSystem.finishTrackedTask(tracked ?: trackedTaskId.orEmpty(), TaskOutcome.Failed)
+                    trackedTaskId = null
                     operation = OxideInstallOperation.Failed(th)
                     versionNameCheck++
                     onStop()
                 },
                 onGameAlreadyInstalled = {
                     // 刚装完又点了一次安装：重置状态，否则下一次安装发不出去
+                    TaskSystem.finishTrackedTask(tracked ?: trackedTaskId.orEmpty(), TaskOutcome.Succeeded)
+                    trackedTaskId = null
                     operation = OxideInstallOperation.AlreadyInstalled
                     versionNameCheck++
                     onStop()
@@ -797,6 +849,9 @@ private class OxideInstallViewModel : ViewModel() {
 
     fun cancel() {
         installer?.cancelInstall()
+        // 取消同样要收尾：否则这一条会永远停在"运行"里，面板上再也看不到它
+        trackedTaskId?.let { TaskSystem.finishTrackedTask(it, TaskOutcome.Cancelled) }
+        trackedTaskId = null
         installer = null
         operation = OxideInstallOperation.None
         versionNameCheck++
@@ -950,6 +1005,76 @@ fun OxideInstallVersionPage(
     val stepStates = oxideInstallStepStates(flow)
     val nextStep = oxideInstallNextStep(flow)
 
+    // 提交安装的那**一个**按钮长在底部动作行上（见 [oxideInstallFooterAction]），
+    // 因此"此刻装不装得下去"必须在这一层就定下来，不能留在第三步的函数里算。
+    //
+    // 版本名是否非法是纯字符串判定，不碰磁盘；是否已被占用要读磁盘，放到 IO 上探测。
+    // 只在第三步探测：前两步还没打算装任何东西，不该替用户先扫一遍磁盘。
+    val nameFilenameError = isFilenameInvalid(nameValue)
+    val nameProbing = step == OxideInstallStep.Install
+    val nameExistsProbe by produceState<Boolean?>(
+        initialValue = null,
+        nameValue,
+        installViewModel.versionNameCheck,
+        nameProbing,
+    ) {
+        value = if (!nameProbing || nameValue.isEmpty()) {
+            false
+        } else {
+            withContext(Dispatchers.IO) { VersionsManager.isVersionExists(nameValue, true) }
+        }
+    }
+    val nameIsError = nameValue.isEmpty() || nameFilenameError != null || nameExistsProbe == true
+    val nameErrorMessage = when {
+        nameFilenameError != null -> nameFilenameError
+        nameExistsProbe == true -> stringResource(R.string.versions_manage_install_exists)
+        nameValue.isEmpty() -> stringResource(R.string.generic_cannot_empty)
+        else -> null
+    }
+    // 探测结果还没回来之前一律当作不可用（见 oxideInstallNameUsable）：
+    // 宁可按钮晚一会儿亮，也不要让用户先按下安装、再被告知这个名字已经被占了
+    val nameUsable = oxideInstallNameUsable(
+        name = nameValue,
+        filenameInvalid = nameFilenameError != null,
+        existsProbe = nameExistsProbe,
+    )
+
+    // 装配成安装请求、过那两道提醒、真正开跑：顺序与旧安装页一致，
+    // 重试走的也是这一条路，因此不会绕过任何一道提醒
+    val startInstall: (GameDownloadInfo) -> Unit = { info ->
+        installViewModel.install(
+            context = context,
+            info = info,
+            onStart = { eventViewModel.sendKeepScreen(true) },
+            onStop = { eventViewModel.sendKeepScreen(false) },
+        )
+    }
+
+    val requestInstall: () -> Unit = request@{
+        // 不是待安装状态就拒绝这次安装
+        if (installViewModel.operation !is OxideInstallOperation.None) return@request
+        // 版本或加载器列表都还没有时不组装请求：还没有可装的东西
+        val info = oxideGameDownloadInfo(
+            gameVersion = gameVersion ?: return@request,
+            customVersionName = nameValue,
+            supports = addonsViewModel.supports ?: return@request,
+            current = addonsViewModel.currentAddon,
+        )
+        if (!NotificationManager.checkNotificationEnabled(context)) {
+            installViewModel.warnForNotification(info)
+        } else if (isUsingMobileData(context)) {
+            installViewModel.warnForMobileData(info)
+        } else {
+            startInstall(info)
+        }
+    }
+
+    val footerAction = oxideInstallFooterAction(
+        step = step,
+        nextStep = nextStep,
+        canInstall = nameUsable && operation is OxideInstallOperation.None,
+    )
+
     // 面板按内容定大小、居中：宽度最多三列（和页面网格同一个尺度），
     // 高度最多"窗口减去四周空当"。清单与详情都在这块高度里滚动，
     // 因此既不会出现铺满内容区的那一大片空白，也不会在 640x360 上把底部动作挤出去。
@@ -1043,7 +1168,8 @@ fun OxideInstallVersionPage(
                             viewModel = addonsViewModel,
                             installViewModel = installViewModel,
                             nameValue = nameValue,
-                            nameErrorCheck = installViewModel.versionNameCheck,
+                            nameIsError = nameIsError,
+                            nameErrorMessage = nameErrorMessage,
                             listMaxHeight = listMaxHeight,
                             onNameChange = {
                                 nameValue = it
@@ -1052,6 +1178,8 @@ fun OxideInstallVersionPage(
                             onGoVersions = { step = OxideInstallStep.Version },
                             onGoLoaders = { step = OxideInstallStep.Loader },
                             onKeepScreen = eventViewModel::sendKeepScreen,
+                            startInstall = startInstall,
+                            requestInstall = requestInstall,
                             onInstalled = finishInstall,
                         )
                     }
@@ -1068,8 +1196,9 @@ fun OxideInstallVersionPage(
                         onDismiss = onDismiss,
                         onGoVersions = { step = OxideInstallStep.Version },
                         onGoLoaders = { step = OxideInstallStep.Loader },
-                        nextStep = nextStep,
+                        action = footerAction,
                         onGoNext = { nextStep?.let { step = it } },
+                        requestInstall = requestInstall,
                     )
                 }
             }
@@ -1081,9 +1210,14 @@ fun OxideInstallVersionPage(
  * 面板底部那一行动作
  *
  * 每一步都恰好有一组能走的前路：第一、二步是"上一步 / 下一步"，第三步没有下一步
- * （再往前就是安装本身，而不是第四步）。
- * 走不了的那一步保持画出来但禁用——"还没选版本所以到不了下一步"这件事必须看得见，
- * 而不是让按钮凭空消失。
+ * （再往前就是安装本身，而不是第四步），所以它右侧那个按钮**就是安装**。
+ *
+ * 这也是整块面板唯一的提交入口，而且它长在面板底部而不是内容区末尾——
+ * 因此最后一步不需要往下滚才看得见"安装"（v1.8.0 设备反馈里的那条）。
+ *
+ * 做什么、写什么字、亮不亮全部由 [oxideInstallFooterAction] 给出，界面只照着画。
+ * 走不了的那一步保持画出来但禁用——"还没选版本所以到不了下一步"、"版本名还不可用
+ * 所以装不了"这两件事必须看得见，而不是让按钮凭空消失。
  */
 @Composable
 private fun OxideInstallFooter(
@@ -1092,8 +1226,9 @@ private fun OxideInstallFooter(
     onDismiss: () -> Unit,
     onGoVersions: () -> Unit,
     onGoLoaders: () -> Unit,
-    nextStep: OxideInstallStep?,
+    action: OxideInstallFooterAction,
     onGoNext: () -> Unit,
+    requestInstall: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1110,12 +1245,14 @@ private fun OxideInstallFooter(
             tone = OxideButtonTone.Ghost,
         )
         Spacer(Modifier.weight(1f))
-        // 走不到下一步时它仍然画在那里，只是禁用：这一步为什么到头了要看得见
         OxideButton(
-            text = stringResource(R.string.oxide_inst_next),
-            onClick = onGoNext,
+            text = stringResource(action.labelRes),
+            onClick = when (action.kind) {
+                OxideInstallFooterKind.Next -> onGoNext
+                OxideInstallFooterKind.Install -> requestInstall
+            },
             tone = OxideButtonTone.Primary,
-            enabled = nextStep != null,
+            enabled = action.enabled,
         )
     }
 }
@@ -1954,7 +2091,13 @@ internal fun oxideAddonTitle(slot: OxideAddonSlot, version: AddonVersion): Strin
 }
 
 // ---------------------------------------------------------------------------
-// 第三步：命名、安装、进度与取消
+// 第三步：命名、确认、进度与取消
+//
+// 这一块**不画提交安装的按钮**：那个按钮是底部动作行上那一个（见
+// [oxideInstallFooterAction] 与 [OxideInstallFooter]）。此前这里另有一个同样的按钮，
+// 于是最后一步上屏幕里同时出现一个能用的「安装」和一个永远禁用的「下一步」，
+// 而那个能用的还压在可滚动内容区的末尾——用户必须先往下滚才看得见它。
+// 版本名的可用性也因此是在页面那一层算的（要读磁盘），从 [nameIsError] 传进来。
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -1966,61 +2109,34 @@ private fun OxideInstallConfirmStep(
     viewModel: OxideInstallAddonsViewModel,
     installViewModel: OxideInstallViewModel,
     nameValue: String,
-    nameErrorCheck: Int,
+    /** 版本名此刻是否不可用（空 / 非法 / 与已有版本重名 / 还没探测完） */
+    nameIsError: Boolean,
+    /** 与 [nameIsError] 对应的那一句解释；可用时为 null */
+    nameErrorMessage: String?,
     listMaxHeight: Dp,
     onNameChange: (String) -> Unit,
     onGoVersions: () -> Unit,
     onGoLoaders: () -> Unit,
     onKeepScreen: (Boolean) -> Unit,
+    startInstall: (GameDownloadInfo) -> Unit,
+    /** 失败之后那一条「重试」走的仍是同一条装配 + 提醒的路，而不是"直接再跑一遍" */
+    requestInstall: () -> Unit,
     onInstalled: () -> Unit,
 ) {
     val version = gameVersion ?: return OxideEmptyState(
         title = stringResource(R.string.oxide_inst_no_version),
         detail = stringResource(R.string.oxide_inst_no_version_detail),
     )
-    val support = supports ?: return OxideEmptyState(
+    // 加载器列表还没按这个版本拉到：如实说出来，而不是画一张空的摘要
+    if (supports == null) return OxideEmptyState(
         title = stringResource(R.string.oxide_inst_loading_loaders),
     )
-
-    // 文件名非法字符的检查是纯字符串判定，不碰磁盘，因此留在组合期没有代价
-    val filenameInvalidMessage = isFilenameInvalid(nameValue)
-
-    // 版本是否已存在要读磁盘，因此放到 IO 上探测，组合期只读结果
-    val existsProbe by produceState<Boolean?>(initialValue = null, nameValue, nameErrorCheck) {
-        value = if (nameValue.isEmpty()) {
-            false
-        } else {
-            withContext(Dispatchers.IO) { VersionsManager.isVersionExists(nameValue, true) }
-        }
-    }
-
-    val isError = nameValue.isEmpty() || filenameInvalidMessage != null || existsProbe == true
-    val errorMessage = when {
-        filenameInvalidMessage != null -> filenameInvalidMessage
-        existsProbe == true -> stringResource(R.string.versions_manage_install_exists)
-        nameValue.isEmpty() -> stringResource(R.string.generic_cannot_empty)
-        else -> null
-    }
-
-    // 探测结果还没回来之前一律当作不可用：宁可按钮晚一会儿亮，
-    // 也不要让用户先按下安装、再被告知这个名字已经被占了
-    val usable = !isError && existsProbe != null
 
     val operation = installViewModel.operation
     val installer = installViewModel.installer
     val taskFlow = installer?.tasksFlow
     val tasks: List<TitledTask> =
         if (taskFlow != null) taskFlow.collectAsStateWithLifecycle().value else emptyList()
-    val canInstall = usable && operation is OxideInstallOperation.None
-
-    val startInstall: (GameDownloadInfo) -> Unit = { info ->
-        installViewModel.install(
-            context = context,
-            info = info,
-            onStart = { onKeepScreen(true) },
-            onStop = { onKeepScreen(false) },
-        )
-    }
 
     // 通知权限：与旧安装页一致，授权或忽略都继续安装
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -2028,26 +2144,6 @@ private fun OxideInstallConfirmStep(
     ) {
         val pending = installViewModel.operation
         if (pending is OxideInstallOperation.WarningForNotification) startInstall(pending.info)
-    }
-
-    // 把当前选择组装成安装请求，并按与旧安装页相同的顺序过两道提醒
-    // （通知权限、流量）——重试走的是同一条路，因此不会绕过任何一道提醒
-    val requestInstall: () -> Unit = request@{
-        // 不是待安装状态就拒绝这次安装
-        if (installViewModel.operation !is OxideInstallOperation.None) return@request
-        val info = oxideGameDownloadInfo(
-            gameVersion = version,
-            customVersionName = nameValue,
-            supports = support,
-            current = viewModel.currentAddon,
-        )
-        if (!NotificationManager.checkNotificationEnabled(context)) {
-            installViewModel.warnForNotification(info)
-        } else if (isUsingMobileData(context)) {
-            installViewModel.warnForMobileData(info)
-        } else {
-            startInstall(info)
-        }
     }
 
     // 安装期间这一整块换成进度面板：确认表单、摘要与动作行都收起来，
@@ -2097,9 +2193,9 @@ private fun OxideInstallConfirmStep(
                     value = nameValue,
                     onValueChange = onNameChange,
                     placeholder = stringResource(R.string.download_game_version_name),
-                    isError = isError,
+                    isError = nameIsError,
                 )
-                errorMessage?.let {
+                nameErrorMessage?.let {
                     Text(
                         text = it,
                         color = Oxide.FgStrong,
@@ -2191,20 +2287,6 @@ private fun OxideInstallConfirmStep(
             )
 
             else -> Unit
-        }
-
-        Spacer(Modifier.height(metrics.cardGap))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            OxideButton(
-                text = stringResource(R.string.download_install),
-                tone = OxideButtonTone.Primary,
-                enabled = canInstall,
-                onClick = requestInstall,
-            )
         }
     }
 }

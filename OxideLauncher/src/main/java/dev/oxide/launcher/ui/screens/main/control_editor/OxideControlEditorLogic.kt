@@ -130,6 +130,34 @@ fun editorAddBlocker(
 
 fun editorAllowsAddingControls(blocker: EditorAddBlocker): Boolean = blocker == EditorAddBlocker.None
 
+/**
+ * 把"当前选中的控制层"对齐到仍然存在的那一层，返回应当被选中的 uuid
+ *
+ * 编辑器**不允许**停在"有层但一层都没选中"这个状态：面板上它与"一个控件都没有"看起来
+ * 一模一样（0 controls、Select a control layer above to see its controls、
+ * Please select a control layer as the target first.），而 [editorAddBlocker] 于是判成
+ * [EditorAddBlocker.NoSelectedLayer]，[editorAllowsAddingControls] 再把三个新建按钮全部
+ * 禁用——用户看到的就是"保存之前还能编辑，保存之后再进来一个控件都加不了"。
+ * 所以要恢复的是**选中项**，不是把闸门放松：这三处提示与 `addWidget` 的警告一个字都不动。
+ *
+ * 规则只有一条：**还在就还在，不在了就退到第一个**；一个控制层都没有才返回 null，
+ * 那时 [editorAddBlocker] 判 [EditorAddBlocker.NoLayers]，该报的还是照报。
+ * 退到"第一个"而不是"随便一个"，是为了同一份布局每次进来都落在同一层上——
+ * 用户记得住自己刚才在编辑哪一层。
+ *
+ * 因此这里按 [List] 的顺序取第一个，调用方也不许先塞进 `Set` 再取：`Set` 的迭代顺序
+ * 不保证与放入顺序一致，那会把"退到第一个"变成"退到随机一个"。
+ *
+ * 与预览模式无关：[editorAddBlocker] 是**先**判 [EditorAddBlocker.Preview] 的，
+ * 所以恢复选中项在预览模式下也不会把任何编辑能力放行，它只是让控件网格有内容可显示。
+ */
+fun editorReconcileSelectedLayer(currentUuid: String?, layerUuids: List<String>): String? = when {
+    // 一个控制层都没有时不许凭空造一个：NoLayers 那条闸门必须照旧响
+    layerUuids.isEmpty() -> null
+    currentUuid != null && currentUuid in layerUuids -> currentUuid
+    else -> layerUuids.first()
+}
+
 /** 预览模式下控制层不能改名、不能换序、不能删 */
 fun editorAllowsLayerEditing(isPreviewMode: Boolean): Boolean = !isPreviewMode
 

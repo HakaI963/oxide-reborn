@@ -47,9 +47,12 @@ import java.io.File
  * type that appear in its signature; all three were widened to `internal` and nothing else changed.
  *
  * Two categories are deliberately absent:
- * - **Appearance** calls `rememberLauncherForActivityResult(MediaPickerContract(...))` and reads
- *   `LocalBackgroundViewModel`. Paparazzi supplies a lifecycle owner and a saved-state owner but no
- *   `ActivityResultRegistryOwner`, so that branch cannot compose on the JVM at all.
+ * - **Appearance** reads `LocalBackgroundViewModel.current`, whose `compositionLocalOf` default
+ *   throws when nothing provides it, and a real `BackgroundViewModel` cannot be constructed on
+ *   the plain JVM either: its `init` block launches on `Dispatchers.Main`, which has no
+ *   dispatcher here (the test deps are JUnit + Paparazzi only — no Robolectric, no
+ *   coroutines-test). So that branch cannot compose on the JVM at all. What the page does decide
+ *   is pinned by `OxideSettingsRowVisibilityTest` instead: pure functions plus source inspection.
  * - **Controls** is covered separately in `OxideControlsSnapshotTest`, because its top-level
  *   composable probes the device's gyroscope through `SensorManager`.
  *
@@ -101,7 +104,6 @@ class OxideSettingsSnapshotTest {
                 category = category,
                 bridge = bridge,
                 onOpenDrawer = {},
-                onOpenCustomColor = {},
                 onNavigate = { _: OxidePage -> },
             )
         }

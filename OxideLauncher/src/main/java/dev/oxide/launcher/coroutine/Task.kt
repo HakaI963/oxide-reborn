@@ -41,6 +41,22 @@ class Task private constructor(
      */
     val stage = _stage.asStateFlow()
 
+    private val _outcome = MutableStateFlow(TaskOutcome.Queued)
+    /**
+     * 任务结局；[TaskStage] 答不了"是成功了还是炸了"，这一条答得了（见 [TaskOutcome]）
+     */
+    val outcome = _outcome.asStateFlow()
+
+    private val _title = MutableStateFlow<AndroidStringText?>(null)
+    /**
+     * 任务标题
+     *
+     * [task] 本身只是一段挂起函数，没有名字；任务面板在任务**结束之后**还要报这一条做过什么，
+     * 而那时 `Task` 已经不在任何列表里了。因此标题是任务自己带的一份普通字段，由提交方
+     * 填一次（例如"安装 1.20.1"），面板每一节都用它。
+     */
+    val title = _title.asStateFlow()
+
     private val _progress = MutableStateFlow(-1f)
     /** 任务进度状态 */
     val progress = _progress.asStateFlow()
@@ -55,9 +71,30 @@ class Task private constructor(
 
     /**
      * 更新任务阶段
+     *
+     * 阶段与 [outcome] 一起写：阶段只答"跑到哪一步了"，答不了"成没成"，
+     * 所以这一次顺带把结局也推到与阶段对应的那个值上（见 [TaskStage.outcome]）。
      */
     fun updateStage(state: TaskStage) {
         this._stage.update { state }
+        this._outcome.update { state.outcome }
+    }
+
+    /**
+     * 直接写结局，不动阶段
+     *
+     * 用于阶段里根本没有对应值的那两种：抛出异常与用户取消。两者都要如实报出来，
+     * 否则任务面板里"失败"这一节永远只能是空的。
+     */
+    fun markOutcome(outcome: TaskOutcome) {
+        this._outcome.update { outcome }
+    }
+
+    /**
+     * 填一次任务标题；面板在跑与历史两节都用它（见 [title]）
+     */
+    fun updateTitle(text: AndroidStringText?) {
+        this._title.update { text }
     }
 
     /**

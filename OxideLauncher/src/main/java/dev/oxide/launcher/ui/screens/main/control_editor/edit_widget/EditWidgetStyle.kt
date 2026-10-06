@@ -29,12 +29,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.oxide.layercontroller.layout.RendererStyleBox
 import dev.oxide.layercontroller.observable.ObservableButtonStyle
@@ -44,10 +45,11 @@ import dev.oxide.layercontroller.observable.ObservableWidget
 import dev.oxide.launcher.R
 import dev.oxide.launcher.setting.enums.isLauncherInDarkTheme
 import dev.oxide.launcher.ui.base.BaseScreen
-import dev.oxide.launcher.ui.components.MarqueeText
 import dev.oxide.launcher.ui.screens.TitledNavKey
+import dev.oxide.launcher.ui.screens.main.control_editor.EditorRadioMark
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutTextItem
+import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.string.isNotEmptyOrBlank
 
 /**
@@ -149,17 +151,22 @@ private fun ChoseStyleItem(
                 isPressed = false
             )
             Spacer(modifier = Modifier.height(4.dp))
-            MarqueeText(
+            // 旧版是 Material 的 MarqueeText：长名字横向滚动。这里换成 Oxide 的
+            // 单行正文 + 省略号，理由与两张外观列表弹窗里那一处相同
+            Text(
                 modifier = Modifier.fillMaxWidth(),
-                text = style.name.takeIf { it.isNotEmptyOrBlank() } ?: stringResource(R.string.generic_unspecified),
-                textAlign = TextAlign.Center
+                text = style.name.takeIf { it.isNotEmptyOrBlank() }
+                    ?: stringResource(R.string.generic_unspecified),
+                color = Oxide.Fg,
+                fontSize = Oxide.Type.Body.fontSize,
+                lineHeight = Oxide.Type.Body.lineHeight,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            RadioButton(
-                selected = selected,
-                onClick = {
-                    onSelectedChange(!selected)
-                }
-            )
+            // 旧版是 Material 的 RadioButton；换成 Oxide 的单选标记。选中与否除了这一个
+            // 实心块，还由 InfoLayoutItem 的 selected 承担，因此不只靠颜色
+            EditorRadioMark(selected = selected)
         }
     }
 }

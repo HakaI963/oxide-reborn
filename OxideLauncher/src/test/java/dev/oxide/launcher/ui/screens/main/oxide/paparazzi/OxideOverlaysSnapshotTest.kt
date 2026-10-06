@@ -26,6 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.cash.paparazzi.InstantAnimationsRule
+import dev.oxide.launcher.coroutine.TaskHistory
+import dev.oxide.launcher.coroutine.TaskOutcome
 import dev.oxide.launcher.coroutine.TaskStage
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.screens.main.oxide.OxideGameWaitingFacts
@@ -61,6 +63,11 @@ import org.junit.Test
  *
  * - **They must not lie about progress.** `progress = -1f` means "unknown" everywhere in the task
  *   model, not 0%, so the empty progress slot is a real state and gets its own golden.
+ *
+ * - **The task drawer's sections must be visible.** It classifies one input into queued / running /
+ *   history, and a golden showing all three at once is what stops someone from simplifying it back
+ *   to a flat live list — that regression renders as an empty-state panel, which is invisible in
+ *   a review and obvious to the user.
  */
 class OxideOverlaysSnapshotTest {
 
@@ -150,6 +157,103 @@ class OxideOverlaysSnapshotTest {
             )
         }
     }
+
+    /**
+     * All three sections at once: queued, running, and the history that outlives the drawer.
+     *
+     * The user asked for "in task memu have history, running option also add queued menu". Before
+     * this the drawer was one flat list fed only by `TaskSystem.tasksFlow`, so a finished task just
+     * vanished and "did that install work?" had no answer at all. Now all three sections come from
+     * one classification of two inputs — the live tasks and the settled records.
+     *
+     * Each section carries the state that is only distinguishable here:
+     *
+     * - **Queued** is `TaskStage.PREPARING`, i.e. handed over but not started. That is where a
+     *   version install sits between `trackExternalTask` and `startTrackedTask`.
+     * - **Running** is the ordinary `RUNNING` task, with a known rate.
+     * - **History** is built from `TaskHistory` snapshots, which is why it can contain an outcome
+     *   the live model cannot show: a *failure*. `TaskStage` has no failure value, so a task that
+     *   threw used to leave no trace whatsoever. The failed row below keeps its 42% because that is
+     *   the number the user wants afterwards ("it died at 42%"), while the cancelled row shows no
+     *   bar at all — an empty track would read as "downloaded 0%", which is a lie.
+     */
+    @Test
+    fun TaskDrawer_Sections() {
+        val device = OxidePaparazzi.STANDARD
+        paparazzi.shot("TaskDrawer_Sections", device) { metrics ->
+            OxideTaskDrawer(
+                tasks = listOf(
+                    OxideFake.task(
+                        id = "install-1-21-1",
+                        progress = -1f,
+                        stage = TaskStage.PREPARING,
+                        message = "Waiting for the version install to start",
+                    ),
+                    OxideFake.task(
+                        id = "download-mods",
+                        progress = 0.42f,
+                        stage = TaskStage.RUNNING,
+                        message = "Sodium 0.5.8",
+                        bytesPerSec = 1_048_576L,
+                    ),
+                ),
+                history = listOf(
+                    settledRecord("history-ok", TaskOutcome.Succeeded, "Sodium Extra 0.6.0", 1f),
+                    settledRecord("history-failed", TaskOutcome.Failed, "sodium-fabric-0.9.4.jar", 0.42f),
+                    settledRecord("history-cancelled", TaskOutcome.Cancelled, "Lithium 0.14.1", -1f),
+                ),
+                metrics = metrics,
+                onDismiss = {},
+            )
+        }
+    }
+
+    /**
+     * History on its own.
+     *
+     * The state the user's second complaint is actually about: the drawer is closed and the
+     * discover notice is dismissed, yet what happened is still there. A golden of that state is
+     * what stops someone from "simplifying" the drawer back to one live list — that would render
+     * as an empty-state panel, which is exactly the regression.
+     */
+    @Test
+    fun TaskDrawer_HistoryOnly() {
+        val device = OxidePaparazzi.STANDARD
+        paparazzi.shot("TaskDrawer_HistoryOnly", device) { metrics ->
+            OxideTaskDrawer(
+                tasks = emptyList(),
+                history = listOf(
+                    settledRecord("history-ok", TaskOutcome.Succeeded, "Sodium Extra 0.6.0", 1f),
+                    settledRecord("history-failed", TaskOutcome.Failed, "CurseForge API key rejected", -1f),
+                ),
+                metrics = metrics,
+                onDismiss = {},
+            )
+        }
+    }
+
+    /**
+     * A settled record, built the way `TaskSystem` builds one.
+     *
+     * `TaskHistory` is plain data — no clock, no id generation, no `TaskSystem` bookkeeping — so a
+     * golden can hand the drawer exactly the shape the production code hands it. `title` and
+     * `message` are separate on purpose: the history row prints the title as its heading and the
+     * message as the dimmer line under it, which is how "what it was" and "how it ended" stay
+     * distinguishable on one row.
+     */
+    private fun settledRecord(
+        id: String,
+        outcome: TaskOutcome,
+        message: String,
+        progress: Float,
+    ): TaskHistory = TaskHistory(
+        id = id,
+        title = androidText("Downloading mods"),
+        message = androidText(message),
+        progress = progress,
+        rateBytesPerSec = null,
+        outcome = outcome,
+    )
 
     // -----------------------------------------------------------------------
     // Game waiting

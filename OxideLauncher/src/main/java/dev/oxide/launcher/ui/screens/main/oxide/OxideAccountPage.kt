@@ -84,6 +84,7 @@ import dev.oxide.launcher.game.account.yggdrasil.isUsing
 import dev.oxide.launcher.path.URL_MINECRAFT_PURCHASE
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.components.ImePanContainer
+import dev.oxide.launcher.ui.components.SkinPreview3D
 import dev.oxide.launcher.ui.resolveAndroidString
 import dev.oxide.launcher.ui.screens.NormalNavKey
 import dev.oxide.launcher.ui.screens.content.elements.AccountOperation
@@ -1511,9 +1512,13 @@ private fun OxideReloginSheet(
 /**
  * 皮肤与披风
  *
- * 导入 PNG、选手臂型号、抓取微软披风、导入本地披风、重置皮肤，
- * 全部走 [AccountManageViewModel] 的同一个意图，因此文件校验、
- * 推荐型号与上传逻辑与旧界面完全一致。
+ * 第一格是 3D 预览（皮肤与披风都在里面画），其余是导入 PNG、选手臂型号、
+ * 抓取微软披风、导入本地披风、重置皮肤，全部走 [AccountManageViewModel] 的
+ * 同一个意图，因此文件校验、推荐型号与上传逻辑与旧界面完全一致。
+ *
+ * 预览本身是既有的 skinview3d WebView（`SkinPreview3D`），不另写一份渲染：
+ * 旋转、待机动画与披风驱动它都已经有了，为同一件事写第二套模型渲染器
+ * 只会多出一份要单独维护的矩阵代码。
  */
 @Composable
 private fun OxideSkinSheet(
@@ -1556,6 +1561,34 @@ private fun OxideSkinSheet(
         return
     }
 
+    // 预览的皮肤与披风。
+    // 换账号、换皮肤、换披风都要让它重新读一次落盘状态，而这三个动作都会让
+    // AccountsManager 翻转一次 refreshWardrobe（微软披风下载完、本地披风导入完、
+    // 账号登录后拉取皮肤都走它），所以它就是这里唯一需要的信号。
+    val refreshWardrobe by AccountsManager.refreshWardrobe.collectAsStateWithLifecycle()
+    val savedSkinFile = remember(account.uniqueUUID) { account.getSkinFile() }
+    val savedCapeFile = remember(account.uniqueUUID) { account.getCapeFile() }
+    var wardrobe by remember(account.uniqueUUID, refreshWardrobe, pendingSkin) {
+        mutableStateOf(OxideWardrobePresence(false, false))
+    }
+    // 文件在不在不在组合期问：File.exists() 是一次磁盘 IO，而组合期会被反复调用
+    LaunchedEffect(account.uniqueUUID, refreshWardrobe, pendingSkin) {
+        wardrobe = withContext(Dispatchers.IO) {
+            OxideWardrobePresence(
+                skinPresent = savedSkinFile.exists(),
+                capePresent = savedCapeFile.exists(),
+            )
+        }
+    }
+    val preview = oxideSkinPreviewSource(
+        pendingSkin = pendingSkin,
+        savedSkinFile = savedSkinFile,
+        savedSkinModel = account.skinModelType,
+        savedSkinExists = wardrobe.skinPresent,
+        savedCapeFile = savedCapeFile,
+        savedCapeExists = wardrobe.capePresent,
+    )
+
     OxideSection(title = stringResource(R.string.account_change_skin)) {
         OxideSurface(
             modifier = Modifier.fillMaxWidth(),
@@ -1565,6 +1598,24 @@ private fun OxideSkinSheet(
             ),
         ) {
             Column {
+                // 3D 预览：皮肤和披风都在这一格里看。
+                // 导入 PNG 之后、按下 Apply 之前它就跟手里那一份走（见
+                // [oxideSkinPreviewSource]），点手臂型号也立刻重画，所以"选了但
+                // 看不到"这件事在这里消失。
+                SkinPreview3D(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(oxideSkinPreviewHeight(metrics.cardMinWidth.value.toInt()).dp)
+                        .clip(Oxide.RadiusControl),
+                    skinFile = preview.skinFile,
+                    capeFile = preview.capeFile,
+                    modelType = preview.modelType,
+                    // 抽屉的内容在一个纵向滚动容器里，WebView 一旦吃下拖拽就滚不动
+                    // 这一格（TouchGateLayout 也会把触摸整个拦掉），所以这里只作展示：
+                    // 视角固定在正面偏左，看皮肤与披风已经够了
+                    interactionEnabled = false,
+                )
+                OxideSecDivider()
                 OxideSettingRow(
                     label = if (importingSkin) {
                         stringResource(R.string.oxide_sec_accounts_skin_importing)

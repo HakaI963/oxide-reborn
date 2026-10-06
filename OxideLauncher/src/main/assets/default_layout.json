@@ -310,6 +310,99 @@
                     "isSwipple": false,
                     "isPenetrable": false,
                     "isToggleable": false
+                },
+                {
+                    "text": {
+                        "default": "〤",
+                        "matchQueue": []
+                    },
+                    "uuid": "2749e45006f844aab4",
+                    "position": {
+                        "x": 8725,
+                        "y": 5859
+                    },
+                    "buttonSize": {
+                        "type": "percentage",
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
+                        "widthPercentage": 1015,
+                        "heightPercentage": 1015,
+                        "widthReference": "screen_height",
+                        "heightReference": "screen_height"
+                    },
+                    "buttonStyle": "20b40f7977b5",
+                    "visibilityType": "in_game",
+                    "clickEvents": [
+                        {
+                            "type": "launcher_event",
+                            "key": "GLFW_MOUSE_BUTTON_LEFT"
+                        }
+                    ],
+                    "isSwipple": false,
+                    "isPenetrable": false,
+                    "isToggleable": false
+                },
+                {
+                    "text": {
+                        "default": "✜",
+                        "matchQueue": []
+                    },
+                    "uuid": "ea1b91b4af2144b3bf",
+                    "position": {
+                        "x": 7741,
+                        "y": 5859
+                    },
+                    "buttonSize": {
+                        "type": "percentage",
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
+                        "widthPercentage": 1015,
+                        "heightPercentage": 1015,
+                        "widthReference": "screen_height",
+                        "heightReference": "screen_height"
+                    },
+                    "buttonStyle": "20b40f7977b5",
+                    "visibilityType": "in_game",
+                    "clickEvents": [
+                        {
+                            "type": "launcher_event",
+                            "key": "GLFW_MOUSE_BUTTON_RIGHT"
+                        }
+                    ],
+                    "isSwipple": false,
+                    "isPenetrable": false,
+                    "isToggleable": false
+                },
+                {
+                    "text": {
+                        "default": "⋐",
+                        "matchQueue": []
+                    },
+                    "uuid": "f269c0ff53e2444d84",
+                    "position": {
+                        "x": 6909,
+                        "y": 9604
+                    },
+                    "buttonSize": {
+                        "type": "dp",
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
+                        "widthPercentage": 1180,
+                        "heightPercentage": 1047,
+                        "widthReference": "screen_height",
+                        "heightReference": "screen_height"
+                    },
+                    "buttonStyle": "20b40f7977b5",
+                    "visibilityType": "in_game",
+                    "clickEvents": [
+                        {
+                            "type": "key",
+                            "key": "GLFW_KEY_E"
+                        }
+                    ],
+                    "isSwipple": false,
+                    "isPenetrable": false,
+                    "isToggleable": false
                 }
             ]
         }

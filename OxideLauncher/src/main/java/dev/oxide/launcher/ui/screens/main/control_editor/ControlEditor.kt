@@ -47,7 +47,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.oxide.guide.guideNode
 import dev.oxide.layercontroller.ControlEditorLayer
 import dev.oxide.layercontroller.data.ButtonSize
 import dev.oxide.layercontroller.data.CenterPosition
@@ -67,7 +66,6 @@ import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.enums.isLauncherInDarkTheme
 import dev.oxide.launcher.ui.components.MenuState
 import dev.oxide.launcher.ui.components.rememberBoxSize
-import dev.oxide.launcher.ui.guide.GuideKeys
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_joystick.EditJoystickStyleDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_style.EditButtonStyleDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_widget.EditWidgetDialog
@@ -326,10 +324,8 @@ fun BoxWithConstraintsScope.ControlEditor(
         )
 
         EditorBall(
-            modifier = Modifier.guideNode(
-                key = GuideKeys.Editor.Step.MenuBall,
-                holeRadius = 12.dp
-            ),
+            // 引导已经整条移除，因此这一层不再挂 `guideNode`：编辑器里已经没有
+            // GuideHost，锚点注册上去也只会被丢掉
             position = viewModel.editorBallPosition,
             onPositionChanged = { viewModel.editorBallPosition = it },
             opened = dockOpen,

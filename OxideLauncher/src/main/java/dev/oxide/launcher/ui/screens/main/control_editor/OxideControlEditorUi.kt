@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -466,6 +467,60 @@ internal fun EditorActionRow(
                 .clip(Oxide.RadiusBadge)
                 .background(if (enabled) Oxide.FgGhost else Oxide.Line)
         )
+    }
+}
+
+/**
+ * 勾选标记
+ *
+ * 替掉 Material 的 `Checkbox`：一个方框，选中时里面多一个实心块并打一个 ✓。
+ * 选中与否**同时**由外层行的 `selected` 语义承担，因此读屏软件拿得到状态，
+ * 不必只靠这两个像素去猜。
+ */
+@Composable
+internal fun EditorCheckMark(selected: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(16.dp)
+            .clip(Oxide.RadiusBadge)
+            .border(BorderStroke(1.dp, if (selected) Oxide.FgMuted else Oxide.Line), Oxide.RadiusBadge),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Text(
+                text = "✓",
+                color = Oxide.FgMuted,
+                fontSize = Oxide.Type.MicroLabel.fontSize,
+                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * 单选标记
+ *
+ * 替掉 Material 的 `RadioButton`：选中时填充实心块，没选中时只留一个描边圈。
+ * 同样地，选中态由外层行的 selected 语义承担，这个图形只是第二重线索。
+ */
+@Composable
+internal fun EditorRadioMark(selected: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(16.dp)
+            .clip(CircleShape)
+            .border(BorderStroke(1.dp, if (selected) Oxide.FgMuted else Oxide.Line), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(Oxide.FgMuted)
+            )
+        }
     }
 }
 

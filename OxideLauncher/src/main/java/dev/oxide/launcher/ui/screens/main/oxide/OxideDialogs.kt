@@ -25,6 +25,7 @@ import android.graphics.Color as AndroidColor
 import android.graphics.drawable.ColorDrawable
 import android.view.ViewGroup
 import android.view.Window
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -74,6 +75,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.oxide.launcher.R
 import dev.oxide.launcher.ui.screens.content.elements.DisabledAlpha
 import dev.oxide.launcher.ui.theme.Oxide
@@ -1033,6 +1037,38 @@ fun OxideTaskDialog(
 // ---------------------------------------------------------------------------
 
 /**
+ * 给自己的 `android.app.Dialog` 窗口做那块 [ComposeView]
+ *
+ * 一个裸 `Dialog` 的 decor view 上**没有** `ViewTreeLifecycleOwner`、
+ * `ViewTreeSavedStateRegistryOwner`、`ViewTreeViewModelStoreOwner`，而
+ * `AbstractComposeView.onAttachedToWindow` 三个都要：拿不到就直接
+ * `IllegalStateException: ViewTreeLifecycleOwner not found from ...`，
+ * 也就是 v1.8.0 上"点任何外部链接就崩"的那一条。
+ *
+ * `ViewCompositionStrategy.DisposeOnDetachedFromWindow` 救不了它：策略只在
+ * `onAttachedToWindow` **之后**才决定何时销毁，崩溃发生在更早的那一步。所以
+ * 顺序必须是先把三个 owner 挂上去，再用
+ * [ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed]——只有有了
+ * owner，这一条策略才有"随视图树生命周期销毁"可跟随。
+ *
+ * 三个 owner 全部取自宿主 Activity：`AbstractAppCompatActivity` 继承
+ * `AppCompatActivity` -> [ComponentActivity]，它本身就是
+ * `LifecycleOwner` / `SavedStateRegistryOwner` / `ViewModelStoreOwner`。签名
+ * 收的是 [Activity]，所以在这里落一次类型；落到不上说明这块窗口挂不了组合，
+ * 那也只应该在这一处炸。
+ */
+private fun oxideDialogComposeView(activity: Activity, content: @Composable () -> Unit): ComposeView {
+    val component = activity as ComponentActivity
+    return ComposeView(component).apply {
+        setViewTreeLifecycleOwner(component)
+        setViewTreeSavedStateRegistryOwner(component)
+        setViewTreeViewModelStoreOwner(component)
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        setContent(content)
+    }
+}
+
+/**
  * 在一个自己的窗口里展示 Oxide 面板
  *
  * 只有 [dev.oxide.launcher.viewmodel.ErrorViewModel] 需要它：错误是从 Activity 的
@@ -1064,20 +1100,15 @@ fun showOxideMessageDialog(
     host.setOnDismissListener { onDismiss() }
 
     host.setContentView(
-        ComposeView(context).apply {
-            // 对话框的窗口没有 ViewTreeLifecycleOwner，
-            // 所以用"脱离窗口即销毁"这一条而不是 DisposeOnViewTreeLifecycleDestroyed
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent {
-                ProvideOxideChrome {
-                    OxideHostedMessagePanel(
-                        title = title,
-                        message = message,
-                        confirmText = confirmText,
-                        closeDescription = context.getString(R.string.oxide_dlg_close),
-                        onClose = { host.dismiss() },
-                    )
-                }
+        oxideDialogComposeView(context) {
+            ProvideOxideChrome {
+                OxideHostedMessagePanel(
+                    title = title,
+                    message = message,
+                    confirmText = confirmText,
+                    closeDescription = context.getString(R.string.oxide_dlg_close),
+                    onClose = { host.dismiss() },
+                )
             }
         }
     )
@@ -1192,29 +1223,25 @@ fun showOxideLinkDialog(
     host.setCanceledOnTouchOutside(false)
 
     host.setContentView(
-        ComposeView(context).apply {
-            // 对话框的窗口没有 ViewTreeLifecycleOwner，同 showOxideMessageDialog
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent {
-                ProvideOxideChrome {
-                    OxideHostedLinkPanel(
-                        title = title,
-                        link = link,
-                        confirmText = confirmText,
-                        cancelText = cancelText,
-                        copyText = copyText,
-                        closeDescription = context.getString(R.string.oxide_dlg_close),
-                        onOpen = {
-                            host.dismiss()
-                            onOpen(link)
-                        },
-                        onCopy = {
-                            host.dismiss()
-                            onCopy(link)
-                        },
-                        onDismiss = { host.dismiss() },
-                    )
-                }
+        oxideDialogComposeView(context) {
+            ProvideOxideChrome {
+                OxideHostedLinkPanel(
+                    title = title,
+                    link = link,
+                    confirmText = confirmText,
+                    cancelText = cancelText,
+                    copyText = copyText,
+                    closeDescription = context.getString(R.string.oxide_dlg_close),
+                    onOpen = {
+                        host.dismiss()
+                        onOpen(link)
+                    },
+                    onCopy = {
+                        host.dismiss()
+                        onCopy(link)
+                    },
+                    onDismiss = { host.dismiss() },
+                )
             }
         }
     )

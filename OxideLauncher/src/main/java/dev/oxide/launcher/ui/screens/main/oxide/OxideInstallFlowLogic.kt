@@ -18,6 +18,8 @@
 
 package dev.oxide.launcher.ui.screens.main.oxide
 
+import androidx.annotation.StringRes
+import dev.oxide.launcher.R
 import kotlin.math.roundToInt
 
 /**
@@ -148,6 +150,86 @@ internal fun oxideInstallNextStep(state: OxideInstallFlowState): OxideInstallSte
 
     OxideInstallStep.Install -> null
 }
+
+// ---------------------------------------------------------------------------
+// 底部动作行
+// ---------------------------------------------------------------------------
+
+/** 底部动作行右侧那个按钮按下时做的事 */
+internal enum class OxideInstallFooterKind {
+    /** 往前走一步 */
+    Next,
+
+    /** 提交这一次安装 */
+    Install,
+}
+
+/**
+ * 底部动作行右侧那个按钮的完整定义：做什么、写什么字、此刻亮不亮
+ *
+ * 三件事同源，所以界面上不存在"文案是一种动作、点击却是另一种"的可能。
+ */
+internal data class OxideInstallFooterAction(
+    /** 点下去触发哪个回调 */
+    val kind: OxideInstallFooterKind,
+    /** 按钮上写的那句话 */
+    @StringRes val labelRes: Int,
+    /** 亮不亮 */
+    val enabled: Boolean,
+)
+
+/**
+ * 底部动作行右侧那个按钮此刻该是什么
+ *
+ * **第三步没有"下一步"**，因为它自己就是终点：[oxideInstallNextStep] 在
+ * [OxideInstallStep.Install] 上返回 null，再往前不是第四步，而是**安装本身**。
+ * 那个位置上原本画着的 `oxide_inst_next` 因此永远是一条禁用的死路，
+ * 而真正能提交安装的按钮却被放在可滚动的内容区末尾——于是最后一步上用户必须
+ * 先往下滚，才看得见那个真正管用的按钮（v1.8.0 设备反馈里的那条）。
+ *
+ * 所以第三步的右侧按钮就是安装本身：文案换成 [R.string.download_install]，
+ * 回调换成提交安装，亮不亮只看 [canInstall]（版本名非空、合法、不与已有版本重名，
+ * 且此刻没有另一次安装在跑）。整块面板因此只有**一个**提交入口，而且它长在底部
+ * 动作行上，永远不需要滚动。
+ *
+ * 前两步一个字都没变：仍然是 [R.string.oxide_inst_next]、仍然往前走、亮不亮仍然由
+ * [nextStep] 决定，所以"还没选版本所以到不了下一步"依旧看得见，而不是凭空消失。
+ */
+internal fun oxideInstallFooterAction(
+    step: OxideInstallStep,
+    nextStep: OxideInstallStep?,
+    canInstall: Boolean,
+): OxideInstallFooterAction = when (step) {
+    OxideInstallStep.Version, OxideInstallStep.Loader -> OxideInstallFooterAction(
+        kind = OxideInstallFooterKind.Next,
+        labelRes = R.string.oxide_inst_next,
+        enabled = nextStep != null,
+    )
+
+    OxideInstallStep.Install -> OxideInstallFooterAction(
+        kind = OxideInstallFooterKind.Install,
+        labelRes = R.string.download_install,
+        enabled = canInstall,
+    )
+}
+
+/**
+ * 版本名此刻能不能拿来装
+ *
+ * 三件事里任何一件不成立就不行：不能是空串（非法字符表拦不住空串，那一条要单独判）、
+ * 不能含非法字符或路径穿越、也不能与磁盘上已经有的那个重名。
+ *
+ * [existsProbe] 为 null 是"还没探测完"，此时**不**当作可用：宁可按钮晚一会儿亮，
+ * 也不要让用户先按下安装、再被告知这个名字已经被占了。
+ *
+ * 这一条与"表单上要不要标红"不是同一件事：标红只看**已经知道**的错误，
+ * 因此探测在途时那个「安装」是灰的，而输入框不会先闪一下红再收回。
+ */
+internal fun oxideInstallNameUsable(
+    name: String,
+    filenameInvalid: Boolean,
+    existsProbe: Boolean?,
+): Boolean = name.isNotEmpty() && !filenameInvalid && existsProbe == false
 
 // ---------------------------------------------------------------------------
 // 面板尺寸

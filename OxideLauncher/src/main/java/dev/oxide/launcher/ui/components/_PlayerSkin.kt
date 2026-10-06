@@ -309,11 +309,25 @@ fun SkinPreview3D(
             if (!pageFinished) return@LaunchedEffect
             playerSkin.setInteractionEnabled(interactionEnabled)
         }
+        // 皮肤与披风各自单独处理，"没有"必须是一个**明确的状态**而不是"什么都不做"：
+        // 什么都不做的话，WebView 会把上一次载入的那张留在原地，于是账号换人、皮肤被
+        // 重置、披风被摘掉之后预览里还是旧的那一份。所以 null 走的是各自的重置入口
+        // （默认 Steve / 不画披风），而不是跳过。
         LaunchedEffect(pageFinished, skinFile, capeFile, modelType, refreshKey) {
             if (!pageFinished) return@LaunchedEffect
-            runCatching {
-                skinFile?.inputStream().use { playerSkin.loadSkin(it, modelType) }
-                capeFile?.inputStream().use { playerSkin.loadCape(it) }
+            if (skinFile != null) {
+                runCatching {
+                    skinFile.inputStream().use { playerSkin.loadSkin(it, modelType) }
+                }
+            } else {
+                playerSkin.loadSkin(skinId = null, modelType)
+            }
+            if (capeFile != null) {
+                runCatching {
+                    capeFile.inputStream().use { playerSkin.loadCape(it) }
+                }
+            } else {
+                playerSkin.loadCape(cape = null)
             }
         }
 

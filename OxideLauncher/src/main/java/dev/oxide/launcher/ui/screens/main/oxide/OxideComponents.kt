@@ -67,7 +67,19 @@ import dev.oxide.launcher.ui.theme.Oxide
  * 也避免每个页面各写一份渐变和动画。
  */
 
-/** 卡片 / 面板的底板：暗色渐变 + 1px 低透明度白边 */
+/**
+ * 卡片 / 面板的底板：暗色渐变 + 1px 低透明度白边
+ *
+ * [solid] 把不透明的那层底色换成 [Oxide.BgElevated]，其余（渐变、描边、圆角、内边距、
+ * 点击语义）一个字都不变。
+ *
+ * 为什么要有这个开关，而不是再写一个"不透明底板"的控件：默认的 [Oxide.SurfaceBase] 在暗色
+ * 主题下是 `Color(0x170A0A0A)`——9% 不透明度——所以它**本来就是给浮在内容上面的一层卡片
+ * 用的**，压在一整页结果网格上的浮层必须用它自己的不透明底色，否则底下的卡片会透上来。
+ * 仓库里已经有两处把这件事写进了注释（`OxideContentSurface`、`OxideSubWindow`），而
+ * `OxideLaunchPage` / `OxideDialogs` 也各自写过一次"不要用 SurfaceBase"的提醒。
+ * 与其让第五处再复述一遍，不如把区别做成参数。
+ */
 @Composable
 fun OxideSurface(
     modifier: Modifier = Modifier,
@@ -75,11 +87,19 @@ fun OxideSurface(
     onClick: (() -> Unit)? = null,
     shape: androidx.compose.ui.graphics.Shape = Oxide.RadiusCard,
     contentPadding: PaddingValues = PaddingValues(14.dp),
+    /** 面板类浮层：底色换成完全不透明的 [Oxide.BgElevated] */
+    solid: Boolean = false,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     val base = modifier
         .clip(shape)
-        .background(if (selected) Oxide.BgTabActive else Oxide.SurfaceBase)
+        .background(
+            when {
+                selected -> Oxide.BgTabActive
+                solid -> Oxide.BgElevated
+                else -> Oxide.SurfaceBase
+            }
+        )
         .background(Oxide.SurfaceBrush)
         .border(
             BorderStroke(

@@ -49,14 +49,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.oxide.guide.guideLazyList
 import dev.oxide.layercontroller.data.HideLayerWhen
 import dev.oxide.layercontroller.observable.ObservableControlLayer
 import dev.oxide.layercontroller.observable.ObservableWidget
 import dev.oxide.layercontroller.utils.snap.SnapMode
 import dev.oxide.launcher.R
 import dev.oxide.launcher.setting.AllSettings
-import dev.oxide.launcher.ui.guide.GuideKeys
 import dev.oxide.launcher.ui.screens.main.oxide.OxideBadgeTone
 
 /**
@@ -289,21 +287,7 @@ private fun EditorDockBody(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            // 引导要把某一分区滚进视口；控件层分区原来在右侧那一栏，
-            // 现在整条面板是一根列表，因此把引导挂在这根列表上
-            .guideLazyList(listState) { key ->
-                when (key) {
-                    GuideKeys.Editor.Step.LayerList -> "section_layers"
-                    GuideKeys.Editor.Step.CreateLayer -> "create_layer"
-                    GuideKeys.Editor.Step.AddButtons -> "add_controls"
-                    GuideKeys.Editor.Step.AddStyles -> "styles"
-                    GuideKeys.Editor.Step.Preview -> "preview"
-                    GuideKeys.Editor.Step.Save -> "save"
-                    else -> null
-                }
-            },
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(metrics.dockPadding),
         verticalArrangement = Arrangement.spacedBy(metrics.rowGap),
     ) {
