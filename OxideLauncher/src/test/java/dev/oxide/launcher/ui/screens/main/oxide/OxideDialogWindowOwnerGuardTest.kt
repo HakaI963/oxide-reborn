@@ -244,10 +244,10 @@ class OxideDialogWindowOwnerGuardTest {
      * String literals and comments have already been blanked by [codeOf], so a `(`
      * inside a URL or a KDoc cannot shift the count.
      */
-    private fun balancedEndFrom(open: Int): Int {
+    private fun String.balancedEndFrom(open: Int): Int {
         var depth = 0
         var index = open
-        while (index < length) {
+        while (index < this.length) {
             when (this[index]) {
                 '(' -> depth++
                 ')' -> {

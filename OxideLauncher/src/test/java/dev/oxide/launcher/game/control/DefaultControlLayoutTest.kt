@@ -43,6 +43,13 @@ private val NON_NEGATIVE_INT = "\\d+".toRegex()
 /** 点击事件类型里那些会指向别的层的类型 */
 private val LAYER_EVENT_TYPES = setOf("switch_layer", "show_layer", "hide_layer")
 
+/** `ControlEventKeycode` 里声明的鼠标键，不是这里发明的名字 */
+private val MOUSE_KEYS = listOf(
+    ControlEventKeycode.GLFW_MOUSE_BUTTON_LEFT,
+    ControlEventKeycode.GLFW_MOUSE_BUTTON_MIDDLE,
+    ControlEventKeycode.GLFW_MOUSE_BUTTON_RIGHT,
+)
+
 /**
  * 启动器事件键的声明处，单测从源码里读，避免在测试里抄第二份清单
  *
@@ -74,13 +81,6 @@ private val LAUNCHER_EVENT_DECLARATIONS: Set<String> = run {
         .forEach { keys.add(it) }
     keys
 }
-
-/** `ControlEventKeycode` 里声明的鼠标键，不是这里发明的名字 */
-private val MOUSE_KEYS = listOf(
-    ControlEventKeycode.GLFW_MOUSE_BUTTON_LEFT,
-    ControlEventKeycode.GLFW_MOUSE_BUTTON_MIDDLE,
-    ControlEventKeycode.GLFW_MOUSE_BUTTON_RIGHT,
-)
 
 /**
  * 从测试工作目录往上定位仓库里 src/main 下的某个文件。
