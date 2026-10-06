@@ -43,44 +43,36 @@ private val NON_NEGATIVE_INT = "\\d+".toRegex()
 /** 点击事件类型里那些会指向别的层的类型 */
 private val LAYER_EVENT_TYPES = setOf("switch_layer", "show_layer", "hide_layer")
 
-/** `ControlEventKeycode` 里声明的鼠标键，不是这里发明的名字 */
-private val MOUSE_KEYS = listOf(
-    ControlEventKeycode.GLFW_MOUSE_BUTTON_LEFT,
-    ControlEventKeycode.GLFW_MOUSE_BUTTON_MIDDLE,
-    ControlEventKeycode.GLFW_MOUSE_BUTTON_RIGHT,
-)
-
 /**
- * 启动器事件键的声明处，单测从源码里读，避免在测试里抄第二份清单
+ * 启动器事件键的声明处，单测从源码与 classpath 里读，避免在测试里抄第二份清单
  *
- * 它是两条路径，不是一条：`Events.kt` 里 `launcherEvent()` 先用
+ * 它是两条路径，不是一条。`Events.kt` 里 `launcherEvent()` 先用
  * `eventKey.startsWith("GLFW_MOUSE_")` 把整条前缀交给 `lwjglEvent()`，剩下的才走
- * `when (eventKey)` 里的 `launcher.event.*` 常量。只捞常量会把鼠标键判成"没声明"，
+ * `when (eventKey)` 里的 `launcher.event.*` 常量。只捞后者会把鼠标键判成"没声明"，
  * 于是用户提供的默认布局里那两个鼠标键会让这条断言假失败。
  *
- * 鼠标键那一半直接引用 `ControlEventKeycode`（`:InputMap` 是本模块的 implementation 依赖，
- * 单测的编译类路径上就有），不是把键名抄一份过来——抄一份必然会跟上游脱节。
+ * 前一半从 `Events.kt` 的源码里读，后一半用反射读 `ControlEventKeycode` 上声明的
+ * `public static final String`（`:InputMap` 是本模块的 implementation 依赖，单测的
+ * 类路径上就有）。反射比抄一份键名强：上游加了新键这里自动跟上，删了也自动跟上删。
+ *
+ * **必须在 `by lazy` 里算**，不能放进顶层 `val` 的初始化：那样它会在测试类构造之前
+ * 就抛，整类的用例会一起挂成 `ExceptionInInitializerError`，看不出是哪一条断言坏了。
  */
-private val LAUNCHER_EVENT_DECLARATIONS: Set<String> = run {
-    val source = locate("java/dev/oxide/launcher/ui/control/event/Events.kt")
+private val LAUNCHER_EVENT_DECLARATIONS: Set<String> by lazy {
+    val declaredInEvents = locate("java/dev/oxide/launcher/ui/control/event/Events.kt")
         .readLines()
         .map { it.trim() }
-    val keys = source
-        .filter { it.startsWith("const val ") && "launcher.event." in it }
-        .mapNotNull { line -> "\"([^\"]+)\"".toRegex().find(line)?.groupValues?.get(1) }
-        .toMutableSet()
-    // 前缀同样从源码里读：Events.kt 自己的分发条件就是这份清单的另一半
-    val mousePrefix = source.firstNotNullOfOrNull { line ->
-        "startsWith(\"([^\"]+)\"".toRegex().find(line)?.groupValues?.get(1)
-    }
-    require(mousePrefix != null) {
-        "Events.kt no longer routes any prefixed launcher event; update this allow-list"
-    }
-    MOUSE_KEYS
-        .filter { it.startsWith(mousePrefix) }
-        .forEach { keys.add(it) }
-    keys
+        .filter { it.startsWith("const val ") && it.contains("launcher.event.") }
+        .mapNotNull { line -> QUOTED.find(line)?.groupValues?.get(1) }
+    val declaredKeycodes = ControlEventKeycode::class.java.fields
+        .mapNotNull { field -> runCatching { field.get(null) as? String }.getOrNull() }
+    (declaredInEvents + declaredKeycodes).toSet()
 }
+
+/** 从一行 Kotlin 里取出第一个双引号字符串 */
+private val QUOTED = QUOTED_PATTERN.toRegex()
+
+private const val QUOTED_PATTERN = "\"([^\"]+)\""
 
 /**
  * 从测试工作目录往上定位仓库里 src/main 下的某个文件。

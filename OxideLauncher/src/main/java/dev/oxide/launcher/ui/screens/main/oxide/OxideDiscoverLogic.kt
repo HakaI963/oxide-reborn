@@ -884,6 +884,70 @@ internal class DiscoverFilesCache<T>(
 internal const val DISCOVER_FILES_CACHE_CAPACITY: Int = 16
 
 // ---------------------------------------------------------------------------
+// 已安装：一个项目装在哪个实例里
+// ---------------------------------------------------------------------------
+
+/**
+ * 本地一条"已安装"记录，附带它所属的实例
+ *
+ * **本地记录本身不带实例，也不带 Minecraft 版本。** `InstalledMod` 的字段只有
+ * `platform` / `projectId` / `versionId` / `versionName` / `notFound`（`InstalledMod.kt`），
+ * `ModFingerprints` 更只有 `sha1` 与 `murmur2`——指纹按文件绝对路径做键，与版本无关。
+ * 指纹扫描是**一次扫一个实例的 mods 目录**（`DownloadModViewModel.scan` 收一个 `Version`），
+ * 所以"这份记录属于哪个实例"这件事只存在于发起扫描的那一层，必须由它补进来。
+ *
+ * 这就是本类型存在的全部理由：它不是把已有信息重新命名，而是把扫描目标这一个外部事实
+ * 记下来，使"装在实例 X 里吗"这个问题有一个可以断言的答案。
+ *
+ * [versionName] 是模组自己的版本号（平台给的文件版本号），**不是** Minecraft 版本；
+ * 留着它是为了在界面上区分同一个项目的两次安装，而不是用来回答"装在哪一档 MC 上"。
+ */
+@Immutable
+internal data class DiscoverInstalledRecord(
+    val platform: Platform,
+    val projectId: String,
+    val versionName: String,
+    /** 这次扫描扫的是哪个实例的目录；null 时这条记录不可信 */
+    val instanceName: String?,
+)
+
+/**
+ * 这条记录算不算"装在当前范围内"
+ *
+ * 范围为空时（还没有选中任何一个实例，或扫描还没落定）**一律不算数**：宁可这一帧不给
+ * 「Installed」标记，也不要把上一份扫描的结果挂在新的范围名下。
+ *
+ * @param record 本地记录
+ * @param platform 当前搜索平台；两个平台的 id 会撞车，必须一起比
+ * @param scopeInstanceName 用户选中的实例名；null 表示跟随当前选中的实例
+ */
+internal fun discoverProjectInstalled(
+    record: DiscoverInstalledRecord,
+    platform: Platform,
+    scopeInstanceName: String? = null,
+): Boolean {
+    if (record.platform != platform) return false
+    if (record.projectId.isBlank()) return false
+    if (record.instanceName.isNullOrBlank()) return false
+    val scope = scopeInstanceName?.trim()?.takeIf { it.isNotEmpty() } ?: return true
+    return record.instanceName == scope
+}
+
+/**
+ * 从一批本地记录里取出当前平台下算"已安装"的那一批
+ *
+ * 纯函数：磁盘、网络、Compose 一律不碰，所以"换实例之后标记不会留在上一份结果上"
+ * 这条能被单测钉死。
+ */
+internal fun discoverInstalledProjectIds(
+    records: List<DiscoverInstalledRecord>,
+    platform: Platform,
+    scopeInstanceName: String? = null,
+): Set<String> =
+    records.filter { discoverProjectInstalled(it, platform, scopeInstanceName) }
+        .mapTo(LinkedHashSet()) { it.projectId }
+
+// ---------------------------------------------------------------------------
 // 安装前确认
 // ---------------------------------------------------------------------------
 
@@ -1360,7 +1424,16 @@ internal data class DiscoverInstanceTarget(
     val minecraftVersion: String?,
     /** 实例自己的模组加载器显示名；没有加载器就是空集 */
     val loaders: Set<String> = emptySet(),
-)
+) {
+    /**
+     * 本地那条"已安装"记录（模组侧）该带的实例名
+     *
+     * 装在这一档的模组，实例名就是 [name]——它同时也是版本文件夹的名字，
+     * 也就是启动器里的"版本名"。这就是用户说的"按版本名/实例"能成立的原因：
+     * 这一启动器里两者是同一个东西。
+     */
+    val instanceName: String get() = name
+}
 
 /** 这次安装最终落到哪里 */
 @Immutable

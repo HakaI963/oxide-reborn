@@ -594,6 +594,12 @@ private fun NavigationUI(
     tasksExpanded: Boolean,
     onToggleTasks: () -> Unit,
     /**
+     * 把任务面板打开（不是切换）
+     *
+     * 走的是同一个设置，所以"顶栏按钮关掉之后页面再叫一次"仍然是打开的。
+     */
+    onOpenTasks: () -> Unit,
+    /**
      * 打开一份协议全文
      *
      * 协议全文曾经是 `NormalNavKey.License` 那条整页旧界面，现在由宿主那一层的
@@ -694,6 +700,9 @@ private fun NavigationUI(
                             tasks = tasks,
                             tasksExpanded = tasksExpanded,
                             onToggleTasks = onToggleTasks,
+                            // 页面（发现页那条安装提示）没有面板状态可读，因此给它的是
+                            // "打开"而不是"切换"：两者写的是同一个设置
+                            onOpenTasks = { AllSettings.launcherTaskMenuExpanded.save(true) },
                         )
 
                         // 面板盖在整块外壳之上，所以它自带底色与调色板：

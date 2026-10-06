@@ -274,9 +274,27 @@ class EditorViewModelSelectionSourceTest {
     fun `选中的仍然只有一个真相`() {
         // selectedLayer 仍然是那个可观察的 ObservableControlLayer?，uuid 只作为一份记忆存在。
         // 另立一个平行的"选中的 uuid"字段只会带来两份可能对不上的状态。
+        //
+        // 写法是显式 `MutableState` + 自定义读写，不是 `by mutableStateOf(...)`：Kotlin 不允许
+        // 委托属性带访问器，而这里必须在写入的那一处记下 uuid。两条路径的可观察语义一样，
+        // 但源码形状不同，所以这里两条都认、并且要求读写都经过那个 state。
+        val delegated = "var selectedLayer by mutableStateOf<ObservableControlLayer?>(null)"
+        val explicit = "var selectedLayer: ObservableControlLayer?"
         assertTrue(
             "selectedLayer must stay an observable ObservableControlLayer?; got $vm",
-            vm.contains("var selectedLayer by mutableStateOf<ObservableControlLayer?>(null)"),
+            vm.contains(delegated) || vm.contains(explicit),
+        )
+        assertTrue(
+            "the property has to be backed by a MutableState so composition still observes it; got $vm",
+            vm.contains("private val selectedLayerState = mutableStateOf<ObservableControlLayer?>(null)"),
+        )
+        assertTrue(
+            "the getter has to read through that state, not through a field",
+            vm.contains("get() = selectedLayerState.value"),
+        )
+        assertTrue(
+            "the setter has to write through that state",
+            vm.contains("selectedLayerState.value = value"),
         )
         assertTrue(
             "the uuid memory has to be written where the selection is written",

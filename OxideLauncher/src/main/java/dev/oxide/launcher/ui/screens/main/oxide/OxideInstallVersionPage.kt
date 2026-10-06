@@ -79,8 +79,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.JsonSyntaxException
 import dev.oxide.launcher.R
+import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.coroutine.TaskLogOutput
+import dev.oxide.launcher.coroutine.TaskOutcome
 import dev.oxide.launcher.coroutine.TaskStage
+import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.coroutine.TitledTask
 import dev.oxide.launcher.game.addons.modloader.AddonVersion
 import dev.oxide.launcher.game.addons.modloader.ModLoader
@@ -148,6 +151,14 @@ import java.nio.channels.UnresolvedAddressException
 import java.util.concurrent.TimeoutException
 
 private const val INSTALL_TAG = "OxideInstallVersionPage"
+
+/**
+ * 版本安装在任务系统里登记时的 id 前缀
+ *
+ * 带上前缀而不是直接用版本名，是为了不和别的任务撞 id：`Task` 的相等与去重全都只看 id，
+ * 而下载那一类任务用的是平台文件名之类的 id。同一个版本名在两种任务里同时出现是可能的。
+ */
+private const val TASK_ID_PREFIX = "oxide-version-install:"
 
 // ---------------------------------------------------------------------------
 // 纯逻辑
@@ -750,6 +761,17 @@ private class OxideInstallViewModel : ViewModel() {
     var installer by mutableStateOf<GameInstaller?>(null)
         private set
 
+    /**
+     * 这一次安装在任务系统里登记到的 id
+     *
+     * 版本安装走的是 `GameInstaller` 自带的 `TaskFlowExecutor`，**不经过**
+     * `TaskSystem.submitTask`，因此它从来不出现在任务面板的"在跑"列表里——而用户要的是
+     * 任务面板里能看见"正在装 1.20.1"，而且是在**排队**那一节里先看见它。
+     * `GameInstaller.installGame` 的阶段要等网络往返之后才建得出来，所以 id 在真正开跑前
+     * 就要先占好：登记时是 Queued，`onStart` 推成 Running。
+     */
+    private var trackedTaskId: String? = null
+
     /** 版本名称存在性检查的刷新计数；安装结束后会变一次，用来重新探测 */
     var versionNameCheck by mutableIntStateOf(0)
         private set
@@ -762,6 +784,25 @@ private class OxideInstallViewModel : ViewModel() {
         operation = OxideInstallOperation.WarningForMobileData(info)
     }
 
+    /**
+     * 把这一次安装登记进任务系统，排在"排队"一节
+     *
+     * 用的是同一个 [Task] 类型、同一个列表、同一份历史，因此"装一个 Minecraft 版本"与
+     * "下载一个模组"在面板上是同一类东西的两条记录，而不是两套并行的账。
+     * 已经登记过同一个 id 时返回 null，重复点安装不会多出一条。
+     */
+    private fun trackInstall(info: GameDownloadInfo): String? =
+        TaskSystem.trackExternalTask(
+            Task.runTask(
+                id = TASK_ID_PREFIX + info.customVersionName,
+                // 这条任务不由任务系统执行（GameInstaller 走的是 TaskFlowExecutor），
+                // 所以这里只有一个空挂起函数；它永远不会被调用。
+                task = {},
+            ).apply {
+                updateTitle(androidText(R.string.oxide_tasks_version_install_title, info.customVersionName))
+            }
+        )
+
     fun install(
         context: Context,
         info: GameDownloadInfo,
@@ -769,10 +810,16 @@ private class OxideInstallViewModel : ViewModel() {
         onStop: () -> Unit = {},
     ) {
         operation = OxideInstallOperation.Installing
+        // 先排队再开跑：面板上先出现"排队"里的那一行，装真正开始后推成"运行"
+        val tracked = trackInstall(info)
+        trackedTaskId = tracked
         installer = GameInstaller(context, info, viewModelScope).also {
+            if (tracked != null) TaskSystem.startTrackedTask(tracked)
             it.installGame(
                 onInstalled = { version ->
                     installer = null
+                    TaskSystem.finishTrackedTask(tracked ?: trackedTaskId.orEmpty(), TaskOutcome.Succeeded)
+                    trackedTaskId = null
                     VersionsManager.refresh("[OxideInstall] GameInstaller.onInstalled", version)
                     operation = OxideInstallOperation.Succeeded
                     versionNameCheck++
@@ -780,12 +827,17 @@ private class OxideInstallViewModel : ViewModel() {
                 },
                 onError = { th ->
                     installer = null
+                    // 失败也要进历史，而不是凭空消失：用户事后要能回答"刚才那次成了没有"
+                    TaskSystem.finishTrackedTask(tracked ?: trackedTaskId.orEmpty(), TaskOutcome.Failed)
+                    trackedTaskId = null
                     operation = OxideInstallOperation.Failed(th)
                     versionNameCheck++
                     onStop()
                 },
                 onGameAlreadyInstalled = {
                     // 刚装完又点了一次安装：重置状态，否则下一次安装发不出去
+                    TaskSystem.finishTrackedTask(tracked ?: trackedTaskId.orEmpty(), TaskOutcome.Succeeded)
+                    trackedTaskId = null
                     operation = OxideInstallOperation.AlreadyInstalled
                     versionNameCheck++
                     onStop()
@@ -797,6 +849,9 @@ private class OxideInstallViewModel : ViewModel() {
 
     fun cancel() {
         installer?.cancelInstall()
+        // 取消同样要收尾：否则这一条会永远停在"运行"里，面板上再也看不到它
+        trackedTaskId?.let { TaskSystem.finishTrackedTask(it, TaskOutcome.Cancelled) }
+        trackedTaskId = null
         installer = null
         operation = OxideInstallOperation.None
         versionNameCheck++
