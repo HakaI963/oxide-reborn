@@ -298,21 +298,6 @@ private fun AreaButton(
     position: CardPosition,
     onClick: () -> Unit
 ) {
-    val containerColor by animateColorAsState(
-        if (isSelected) {
-            MaterialTheme.colorScheme.secondary
-        } else {
-            MaterialTheme.colorScheme.secondaryContainer
-        }
-    )
-    val contentColor by animateColorAsState(
-        if (isSelected) {
-            MaterialTheme.colorScheme.onSecondary
-        } else {
-            MaterialTheme.colorScheme.onSecondaryContainer
-        }
-    )
-
     Box(
         modifier = modifier
             .clip(rememberSettingsCardShape(position))

@@ -446,7 +446,9 @@ internal fun EditorOperationDialogs(viewModel: EditorViewModel) {
             OxideConfirmDialog(
                 title = stringResource(R.string.control_manage_failed_to_save),
                 message = operation.error.getMessageOrToString(),
-                // 只有一枚确认按钮：与旧的单按钮重载一致（cancelText 传空串即不画）
+                // 只有一枚确认按钮：与旧的单按钮重载一致（cancelText 传空串即不画，
+                // confirmText 的默认值也是同一个 key，所以这里显式写出来）
+                confirmText = stringResource(R.string.generic_confirm),
                 cancelText = "",
                 onConfirm = {
                     viewModel.editorOperation = EditorOperation.None
@@ -578,6 +580,7 @@ internal fun EditorWarningOperationDialogs(viewModel: EditorViewModel) {
                 title = stringResource(R.string.control_editor_menu_no_layers_title),
                 message = stringResource(R.string.control_editor_menu_no_layers_message),
                 // 只有一枚确认按钮，与旧的单按钮重载一致
+                confirmText = stringResource(R.string.generic_confirm),
                 cancelText = "",
                 onConfirm = {
                     viewModel.editorWarningOperation = EditorWarningOperation.None
@@ -592,6 +595,7 @@ internal fun EditorWarningOperationDialogs(viewModel: EditorViewModel) {
             OxideConfirmDialog(
                 title = stringResource(R.string.control_editor_menu_no_selected_layer_title),
                 message = stringResource(R.string.control_editor_menu_no_selected_layer_message),
+                confirmText = stringResource(R.string.generic_confirm),
                 cancelText = "",
                 onConfirm = {
                     viewModel.editorWarningOperation = EditorWarningOperation.None
