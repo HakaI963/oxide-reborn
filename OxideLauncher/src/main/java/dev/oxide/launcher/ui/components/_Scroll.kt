@@ -58,7 +58,7 @@ fun Modifier.fadeEdge(
     length: Dp = 12.dp,
     direction: EdgeDirection = EdgeDirection.Vertical,
     position: EdgeSide = EdgeSide.Both,
-    style: FadeStyle = createDefaultFadeStyle(direction)
+    style: FadeStyle = defaultFadeStyle(direction)
 ): Modifier {
     val fadePx = with(LocalDensity.current) { length.toPx() }
 
@@ -98,7 +98,7 @@ fun Modifier.fadeEdge(
     length: Dp = 12.dp,
     direction: EdgeDirection = EdgeDirection.Vertical,
     position: EdgeSide = EdgeSide.Both,
-    style: FadeStyle = createDefaultFadeStyle(direction)
+    style: FadeStyle = defaultFadeStyle(direction)
 ): Modifier {
     val fadePx = with(LocalDensity.current) { length.toPx() }
     val layoutInfo = state.layoutInfo
@@ -239,6 +239,22 @@ fun createDefaultFadeStyle(
         },
         blendMode = BlendMode.DstOut
     )
+}
+
+/**
+ * 两个方向的默认渐隐样式各一份共享实例。
+ *
+ * 渐隐修饰符在组合阶段读取滚动位置，因此滚动期间调用点逐帧重组，默认值也随之
+ * 逐帧求值；若默认值仍现场构造，滚动会持续分配 FadeStyle 与 Brush（含色标数组）。
+ * [FadeStyle] 与 [Brush] 均不可变，共享同一实例不改变任何绘制结果。
+ */
+private val DefaultVerticalFadeStyle = createDefaultFadeStyle(EdgeDirection.Vertical)
+private val DefaultHorizontalFadeStyle = createDefaultFadeStyle(EdgeDirection.Horizontal)
+
+/** 每个方向的默认渐隐样式（共享实例；需要自有副本的调用方应使用 [createDefaultFadeStyle]） */
+internal fun defaultFadeStyle(direction: EdgeDirection): FadeStyle = when (direction) {
+    EdgeDirection.Vertical -> DefaultVerticalFadeStyle
+    EdgeDirection.Horizontal -> DefaultHorizontalFadeStyle
 }
 
 

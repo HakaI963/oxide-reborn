@@ -45,7 +45,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -92,8 +91,6 @@ import dev.oxide.launcher.ui.activities.startEditorActivity
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.components.SimpleAlertDialog
 import dev.oxide.launcher.ui.components.SimpleEditDialog
-import dev.oxide.launcher.ui.components.toColorOrNull
-import dev.oxide.launcher.ui.components.toHex
 import dev.oxide.launcher.ui.control.HotbarRule
 import dev.oxide.launcher.ui.control.gamepad.JoystickMode
 import dev.oxide.launcher.ui.resolveAndroidString
@@ -2023,44 +2020,3 @@ internal fun oxideGamepadInputModeName(mode: GamepadInputMode): String = stringR
 @Composable
 internal fun oxideJoystickModeName(mode: JoystickMode): String = stringResource(mode.titleRes)
 
-/**
- * 自定义主题色：启动器自带的是完整的取色器组件，这里用同一套十六进制规则
- * 复现它的输入与写入路径，颜色不合规时不会写盘。
- */
-@Composable
-internal fun OxideCustomColorDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit,
-) {
-    var draft by remember {
-        mutableStateOf(Color(AllSettings.launcherCustomColor.state).toHex())
-    }
-    val parsed = remember(draft) { draft.toColorOrNull() }
-
-    SimpleEditDialog(
-        title = stringResource(R.string.oxide_set_custom_color),
-        value = draft,
-        onValueChange = { draft = it },
-        isError = parsed == null,
-        supportingText = {
-            if (parsed != null) {
-                Text(text = parsed.toHex())
-            }
-        },
-        onDismissRequest = onDismiss,
-        onConfirm = {
-            val color = parsed
-            if (color != null) {
-                onConfirm(color.toArgbInt())
-                onDismiss()
-            }
-        },
-    )
-}
-
-private fun Color.toArgbInt(): Int = android.graphics.Color.argb(
-    (alpha * 255f).toInt().coerceIn(0, 255),
-    (red * 255f).toInt().coerceIn(0, 255),
-    (green * 255f).toInt().coerceIn(0, 255),
-    (blue * 255f).toInt().coerceIn(0, 255),
-)

@@ -404,6 +404,14 @@ private class FirefliesDrawer(
     }
 }
 
+/**
+ * 前层波浪渐变的横向滚动偏移（px）。
+ *
+ * 原先是内联在逐帧路径里的表达式；提出来成纯函数，单测才能守住公式不变。
+ */
+internal fun flameBandWaveOffset(clock: Float, speedDp: Float, density: Float, period: Float): Float =
+    (clock * speedDp * density) % period
+
 private class BatDrawer(
     private val simulator: BatSwarmSimulator
 ) : EffectDrawer {
@@ -416,6 +424,21 @@ private class BatDrawer(
     private val bodyRect = RectF()
     private val matrix = Matrix()
     private var isDark = false
+
+    // 火焰带着色器缓存：输入（宽高/密度/配色）不变时整组复用，逐帧路径零构造
+    private var bandShaderWidth = Float.NaN
+    private var bandShaderHeight = Float.NaN
+    private var bandShaderDensity = Float.NaN
+    private var bandShaderHalo = 0
+    private var bandShaderCore = 0
+    private var bandShaders: FlameBandShaders? = null
+    private val bandWaveMatrix = Matrix()
+
+    /** 火焰带的一组着色器：三层竖向渐变 + 前层滚动波浪渐变 */
+    private class FlameBandShaders(
+        val layers: List<LinearGradient>,
+        val wave: LinearGradient
+    )
 
     override fun setTheme(isDark: Boolean) {
         this.isDark = isDark
@@ -497,7 +520,52 @@ private class BatDrawer(
     }
 
     /**
+     * 火焰带的全部着色器，按输入缓存。
+     *
+     * 渐变几何只随宽高、密度与配色（[wispHalo] / [wispCore]）变化，而这些只来自
+     * 表面尺寸变更与主题切换。之前每帧新建 4 个 [LinearGradient] 与 1 个 [Matrix]，
+     * 渲染线程上持续产生小对象与原生着色器 churn。
+     */
+    private fun flameBandShaders(width: Float, height: Float, density: Float): FlameBandShaders {
+        bandShaders?.let { cached ->
+            if (width == bandShaderWidth && height == bandShaderHeight && density == bandShaderDensity &&
+                wispHalo == bandShaderHalo && wispCore == bandShaderCore
+            ) {
+                return cached
+            }
+        }
+
+        val bandHeight = BAND_HEIGHT_DP * density
+        val layers = LAYER_SCALES.indices.map { layer ->
+            val layerHeight = bandHeight * LAYER_SCALES[layer]
+            val color = if (layer == LAYER_SCALES.lastIndex) wispCore else wispHalo
+            LinearGradient(
+                0f, height, 0f, height - layerHeight,
+                color, color and 0x00FFFFFF,
+                Shader.TileMode.CLAMP
+            )
+        }
+        val period = width / BAND_WAVE_COUNT
+        val wave = LinearGradient(
+            0f, 0f, period, 0f,
+            intArrayOf(wispCore and 0x00FFFFFF, wispCore, wispCore and 0x00FFFFFF),
+            floatArrayOf(0f, 0.5f, 1f),
+            Shader.TileMode.REPEAT
+        )
+
+        bandShaderWidth = width
+        bandShaderHeight = height
+        bandShaderDensity = density
+        bandShaderHalo = wispHalo
+        bandShaderCore = wispCore
+        return FlameBandShaders(layers, wave).also { bandShaders = it }
+    }
+
+    /**
      * 底部火焰带
+     *
+     * 逐帧路径不创建着色器与矩阵：滚动只更新缓存渐变的局部矩阵
+     * （`setLocalMatrix` 会把矩阵值拷进原生着色器，复用同一个 [Matrix] 是安全的）。
      */
     private fun drawFlameBand(canvas: Canvas, paint: Paint, width: Float, height: Float) {
         if (width <= 0f || height <= 0f) return
@@ -505,33 +573,25 @@ private class BatDrawer(
         val density = simulator.density
         val bandHeight = BAND_HEIGHT_DP * density
         val breathing = 0.85f + 0.15f * sin(clock * 1.3f)
+        val shaders = flameBandShaders(width, height, density)
 
         for (layer in LAYER_SCALES.indices) {
             val scale = LAYER_SCALES[layer]
             val layerHeight = bandHeight * scale
-            val color = if (layer == LAYER_SCALES.lastIndex) wispCore else wispHalo
             buildWavePath(path, width, height, layerHeight, clock * LAYER_SPEEDS[layer], layer * 1.7f)
 
-            paint.shader = LinearGradient(
-                0f, height, 0f, height - layerHeight,
-                color, color and 0x00FFFFFF,
-                Shader.TileMode.CLAMP
-            )
+            paint.shader = shaders.layers[layer]
             paint.alpha = (LAYER_ALPHAS[layer] * breathing * 255f).toInt().coerceIn(0, 255)
             canvas.drawPath(path, paint)
 
             if (layer == LAYER_SCALES.lastIndex) {
-                // 前层叠加滚动的波浪化透明度
+                // 前层叠加滚动的波浪化透明度：滚动靠局部矩阵，渐变本身无需重建
                 val period = width / BAND_WAVE_COUNT
-                paint.shader = LinearGradient(
-                    0f, 0f, period, 0f,
-                    intArrayOf(color and 0x00FFFFFF, color, color and 0x00FFFFFF),
-                    floatArrayOf(0f, 0.5f, 1f),
-                    Shader.TileMode.REPEAT
-                ).apply {
-                    val offset = (clock * BAND_WAVE_SPEED_DP * density) % period
-                    setLocalMatrix(Matrix().apply { postTranslate(-offset, 0f) })
-                }
+                val offset = flameBandWaveOffset(clock, BAND_WAVE_SPEED_DP, density, period)
+                bandWaveMatrix.reset()
+                bandWaveMatrix.postTranslate(-offset, 0f)
+                shaders.wave.setLocalMatrix(bandWaveMatrix)
+                paint.shader = shaders.wave
                 paint.alpha = (0.55f * breathing * 255f).toInt().coerceIn(0, 255)
                 canvas.drawPath(path, paint)
             }

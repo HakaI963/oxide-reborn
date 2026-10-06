@@ -293,9 +293,11 @@ private fun OxideSettingsPageContent(
             null -> {}
         }
 
-        // 自定义主题色的对话框（OxideCustomColorDialog）与它的设置项
-        // launcherCustomColor 都还在树里，只是"颜色主题"那一行已经从外观页移走，
-        // 因此这里暂时没有入口；把那一行加回来时，删掉这段注释即可恢复。
+        // 自定义主题色的入口随"颜色主题"那一行一并从外观页移走，配套的
+        // OxideCustomColorDialog 没有任何调用方了，本就该跟着行一起拿掉。
+        // 设置项 launcherCustomColor 本身还在 AllSettings 里，只是这页不再暴露——
+        // 真要恢复，把行和对话框一并接回去即可，键与读取它的路径（Theme.kt /
+        // NativeThemeUtils.kt）从没动过。
     }
 }
 
