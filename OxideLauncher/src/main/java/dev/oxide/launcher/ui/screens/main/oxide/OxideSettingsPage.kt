@@ -18,7 +18,6 @@
 package dev.oxide.launcher.ui.screens.main.oxide
 
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -57,9 +56,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.materialkolor.PaletteStyle
 import dev.oxide.launcher.R
-import dev.oxide.launcher.contract.MediaPickerContract
 import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.game.download.assets.platform.Platform
@@ -70,7 +67,6 @@ import dev.oxide.launcher.path.URL_PROJECT
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.enums.ActionMenuSide
 import dev.oxide.launcher.setting.enums.AppLanguage
-import dev.oxide.launcher.setting.enums.BackgroundBlur
 import dev.oxide.launcher.setting.enums.DarkMode
 import dev.oxide.launcher.setting.enums.MirrorSourceType
 import dev.oxide.launcher.setting.enums.applyLanguage
@@ -162,6 +158,19 @@ internal fun colorThemeEntries(sdkInt: Int): List<ColorThemeType> =
     }
 
 /**
+ * "清除已设置的壁纸"这一行该不该出现
+ *
+ * 颜色主题与整块壁纸控件已经从这一页移走了（见 `AppearanceCategory` 的说明），
+ * 但**已经设过的壁纸必须还有办法清掉**：那一行是这条设置剩下的唯一出口，
+ * 没有它，界面上就再没有一处能把启动器的背景改回空白。
+ *
+ * 反过来，没设壁纸时它必须**不出现**，而不是留一枚点下去什么也不会发生的灰行——
+ * 这条是 `OxideSettingsRowVisibilityTest` 对整本设置页立下的规矩。
+ * 纯函数，因此两种状态都可以直接单测。
+ */
+internal fun oxideWallpaperClearVisible(hasValidWallpaper: Boolean): Boolean = hasValidWallpaper
+
+/**
  * 设置页
  *
  * 结构与参考稿一致：左侧一列分类，右侧一块分组面板，分类之间是紧凑的行、开关与选择器。
@@ -193,7 +202,6 @@ private fun OxideSettingsPageContent(
 
     var selected by rememberSaveable { mutableStateOf(OxideSettingsCategory.General) }
     var drawer by remember { mutableStateOf<OxideDrawerRequest?>(null) }
-    var customColorDialog by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
         OxidePageColumn(metrics = metrics) {
@@ -232,7 +240,6 @@ private fun OxideSettingsPageContent(
                             category = selected,
                             bridge = bridge,
                             onOpenDrawer = { request -> drawer = request },
-                            onOpenCustomColor = { customColorDialog = true },
                             onNavigate = onNavigate,
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
@@ -252,7 +259,6 @@ private fun OxideSettingsPageContent(
                             category = selected,
                             bridge = bridge,
                             onOpenDrawer = { request -> drawer = request },
-                            onOpenCustomColor = { customColorDialog = true },
                             onNavigate = onNavigate,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         )
@@ -287,12 +293,9 @@ private fun OxideSettingsPageContent(
             null -> {}
         }
 
-        if (customColorDialog) {
-            OxideCustomColorDialog(
-                onDismiss = { customColorDialog = false },
-                onConfirm = { AllSettings.launcherCustomColor.save(it) },
-            )
-        }
+        // 自定义主题色的对话框（OxideCustomColorDialog）与它的设置项
+        // launcherCustomColor 都还在树里，只是"颜色主题"那一行已经从外观页移走，
+        // 因此这里暂时没有入口；把那一行加回来时，删掉这段注释即可恢复。
     }
 }
 
@@ -409,7 +412,6 @@ internal fun OxideSettingsPanel(
     category: OxideSettingsCategory,
     bridge: OxideLauncherBridge,
     onOpenDrawer: (OxideDrawerRequest) -> Unit,
-    onOpenCustomColor: () -> Unit,
     onNavigate: (OxidePage) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -423,7 +425,7 @@ internal fun OxideSettingsPanel(
             // 控制这一类整块都在面板里展开，见 OxideControlsPanel
             OxideSettingsCategory.Controls -> OxideControlsPanel(metrics = metrics, bridge = bridge)
             OxideSettingsCategory.Downloads -> DownloadsCategory(metrics, bridge, onNavigate)
-            OxideSettingsCategory.Appearance -> AppearanceCategory(metrics, bridge, onOpenCustomColor)
+            OxideSettingsCategory.Appearance -> AppearanceCategory(metrics)
             else -> {
                 val drawer = category.drawer()
                 OxideDrawerCategorySummary(metrics = metrics, category = category)
@@ -843,77 +845,35 @@ private fun NativeLibPluginRow(
 // 分类：外观
 // ---------------------------------------------------------------------------
 
+/**
+ * 外观
+ *
+ * 这一页现在只留两样：**界面缩放**，以及**已经在用的壁纸的清除入口**。
+ *
+ * "颜色主题"与整块"壁纸"按用户要求从这一页移走了（v1.8.0 的截图见 issue），
+ * 但**设置项本身一个都没有删**：`launcherColorTheme`、`launcherCustomColor`、
+ * `launcherCustomPaletteStyle`、`launcherBackgroundOpacity`、`videoBackgroundVolume`、
+ * `backgroundBlur`、`backgroundBlurType` 全部留在 `AllSettings` 里，
+ * `ui/theme/Theme.kt`、`NativeThemeUtils.kt`、`BackgroundViewModel.kt`、
+ * `BackgroundGlass.kt` 这些真正读它们的地方一行没动。删掉一行和删掉一套能用的
+ * 配色／毛玻璃不是一回事：前者随时能加回来，后者要在二十多个文件里回滚。
+ *
+ * 保留清除入口是另一回事，而且是必须的：壁纸已经设过的账号，
+ * 如果这一页连"清掉它"都没有，那张图就永远留在启动器上，而界面上再没有一处
+ * 能把它拿掉——那就是把设置变成了只能进不能出的单向门。所以这一行**只在真的
+ * 有壁纸时**出现（见 `oxideWallpaperClearVisible`），平时不留一枚点不动的灰行。
+ */
 @Composable
 private fun AppearanceCategory(
     metrics: OxideMetrics,
-    bridge: OxideLauncherBridge,
-    onOpenCustomColor: () -> Unit,
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val backgroundViewModel = LocalBackgroundViewModel.current
-    //宿主没有提供背景管理时，背景相关的开关一律不可用，而不是直接崩掉
-    val backgroundAvailable = backgroundViewModel != null
     val backgroundValid = backgroundViewModel?.isValid == true
-    val backgroundVideo = backgroundViewModel?.isVideo == true
-    // API 31 以下不列 Dynamic，否则那一项会保存成功却看不出任何变化
-    val themeEntries = remember { colorThemeEntries(Build.VERSION.SDK_INT) }
-    val storedTheme = AllSettings.launcherColorTheme.state
-    val colorTheme = if (storedTheme in themeEntries) storedTheme else themeEntries.first()
 
-    val filePicker = rememberLauncherForActivityResult(
-        MediaPickerContract(allowImages = true, allowVideos = true, allowMultiple = false)
-    ) { result ->
-        val uri = result?.firstOrNull() ?: return@rememberLauncherForActivityResult
-        TaskSystem.submitTask(
-            Task.runTask(
-                dispatcher = Dispatchers.IO,
-                task = { task ->
-                    task.updateMessage(androidText(R.string.settings_launcher_background_importing))
-                    backgroundViewModel?.import(context, uri)
-                },
-                onError = {
-                    backgroundViewModel?.delete()
-                    bridge.showToast(R.string.error_import_image)
-                },
-            )
-        )
-    }
+    var confirmClear by remember { mutableStateOf(false) }
 
-    var confirmReset by remember { mutableStateOf(false) }
-
-    Group(index = 0, title = stringResource(R.string.oxide_set_section_theme), metrics = metrics) {
-        OxideEnumRow(
-            label = stringResource(R.string.settings_launcher_color_theme_title),
-            hint = stringResource(R.string.settings_launcher_color_theme_summary),
-            metrics = metrics,
-            entries = themeEntries,
-            selected = colorTheme,
-            nameOf = { oxideColorThemeName(it) },
-            onSelect = { picked ->
-                AllSettings.launcherColorTheme.save(picked)
-                if (picked == ColorThemeType.CUSTOM) onOpenCustomColor()
-            },
-        )
-        if (colorTheme == ColorThemeType.CUSTOM) {
-            OxideEnumRow(
-                label = stringResource(R.string.settings_launcher_color_theme_style),
-                metrics = metrics,
-                entries = PaletteStyle.entries,
-                selected = AllSettings.launcherCustomPaletteStyle.state,
-                nameOf = { it.name },
-                onSelect = { AllSettings.launcherCustomPaletteStyle.save(it) },
-            )
-            OxideActionRow(
-                label = stringResource(R.string.oxide_set_custom_color),
-                hint = stringResource(R.string.oxide_set_custom_color_detail),
-                onClick = onOpenCustomColor,
-            )
-        }
-    }
-
-    // 界面缩放夹在主题与壁纸之间：它和主题一样是"整个界面长什么样"的事，
-    // 而壁纸是内容底色。选中值直接读 .state，所以改完立刻生效并立刻存盘。
+    // 界面缩放：选中值直接读 .state，所以改完立刻生效并立刻存盘
     val guiScalePercent = AllSettings.launcherGuiScale.state
     // 存储里的值可能来自旧版本或手改的备份，落不到档位上就退回 100%
     val guiScaleSelected = if (guiScalePercent in OxideGuiScaleSteps) {
@@ -922,7 +882,7 @@ private fun AppearanceCategory(
         OxideGuiScaleDefaultPercent
     }
 
-    Group(index = 1, title = stringResource(R.string.oxide_set_section_interface), metrics = metrics) {
+    Group(index = 0, title = stringResource(R.string.oxide_set_section_interface), metrics = metrics) {
         OxideEnumRow(
             label = stringResource(R.string.oxide_set_gui_scale),
             hint = stringResource(R.string.oxide_set_gui_scale_detail),
@@ -934,74 +894,31 @@ private fun AppearanceCategory(
         )
     }
 
-    Group(index = 2, title = stringResource(R.string.oxide_set_section_background), metrics = metrics) {
-        OxideActionRow(
-            label = stringResource(R.string.settings_launcher_background_title),
-            hint = stringResource(R.string.settings_launcher_background_summary),
-            value = if (backgroundValid) stringResource(R.string.oxide_set_in_use) else null,
-            enabled = backgroundAvailable,
-            onClick = { filePicker.launch(Unit) },
-        )
-        if (backgroundValid) {
+    if (oxideWallpaperClearVisible(backgroundValid)) {
+        Group(
+            index = 1,
+            title = stringResource(R.string.oxide_set_section_background),
+            metrics = metrics,
+        ) {
             OxideActionRow(
-                label = stringResource(R.string.generic_reset),
+                label = stringResource(R.string.settings_launcher_background_title),
                 hint = stringResource(R.string.oxide_set_background_reset_detail),
-                onClick = { confirmReset = true },
+                value = stringResource(R.string.generic_clear),
+                onClick = { confirmClear = true },
             )
         }
-        OxideIntRow(
-            label = stringResource(R.string.settings_launcher_background_opacity_title),
-            hint = stringResource(R.string.settings_launcher_background_opacity_summary),
-            metrics = metrics,
-            value = AllSettings.launcherBackgroundOpacity.state,
-            range = AllSettings.launcherBackgroundOpacity.floatRange.toIntRange(),
-            step = 5,
-            suffix = "%",
-            enabled = backgroundValid,
-            onValueChange = { AllSettings.launcherBackgroundOpacity.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_launcher_background_video_volume_title),
-            hint = stringResource(R.string.settings_launcher_background_video_volume_summary),
-            metrics = metrics,
-            value = AllSettings.videoBackgroundVolume.state,
-            range = AllSettings.videoBackgroundVolume.floatRange.toIntRange(),
-            step = 5,
-            suffix = "%",
-            enabled = backgroundValid && backgroundVideo,
-            onValueChange = { AllSettings.videoBackgroundVolume.save(it) },
-        )
-        OxideIntRow(
-            label = stringResource(R.string.settings_title_blur),
-            hint = stringResource(R.string.settings_launcher_background_blur_summary),
-            metrics = metrics,
-            value = AllSettings.backgroundBlur.state,
-            range = AllSettings.backgroundBlur.floatRange.toIntRange(),
-            suffix = " dp",
-            enabled = backgroundValid,
-            onValueChange = { AllSettings.backgroundBlur.save(it) },
-        )
-        OxideEnumRow(
-            label = stringResource(R.string.oxide_set_blur_type),
-            metrics = metrics,
-            entries = BackgroundBlur.entries,
-            selected = AllSettings.backgroundBlurType.state,
-            enabled = backgroundValid,
-            nameOf = { oxideBackgroundBlurName(it) },
-            onSelect = { AllSettings.backgroundBlurType.save(it) },
-        )
     }
 
-    if (confirmReset) {
+    if (confirmClear) {
         OxideConfirmDialog(
-            title = stringResource(R.string.generic_reset),
+            title = stringResource(R.string.generic_clear),
             message = stringResource(R.string.settings_launcher_background_reset_message),
-            confirmText = stringResource(R.string.generic_reset),
+            confirmText = stringResource(R.string.generic_clear),
             onConfirm = {
-                confirmReset = false
+                confirmClear = false
                 scope.launch { backgroundViewModel?.delete() }
             },
-            onDismiss = { confirmReset = false },
+            onDismiss = { confirmClear = false },
         )
     }
 }
