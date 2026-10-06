@@ -217,11 +217,27 @@ class OxideTaskPanelTest {
      */
     @Test
     fun historyProgressIsAbsentForOutcomesThatNeverMeasuredAnything() {
-        assertNull(oxideTaskHistoryProgress(settledRecord("s", TaskOutcome.Succeeded, progress = -1f)).let {
-            oxideTaskProgressPercent(it ?: -1f)
-        })
-        assertNull(oxideTaskProgressPercent(oxideTaskHistoryProgress(settledRecord("c", TaskOutcome.Cancelled)) ?: 0f))
-        assertEquals(100, oxideTaskProgressPercent(oxideTaskHistoryProgress(settledRecord("s", TaskOutcome.Succeeded, progress = 1f)) ?: -1f))
+        // 断言的是 `oxideTaskHistoryProgress` 本身给不给得出进度，不是把 null 兜底成
+        // 某个数之后再读一遍——后者会把 null 变成 0 或 -1，断言于是永远不成立，
+        // 也永远测不出"这里本该没有进度条"。
+        assertNull(
+            "a succeeded record that never reported progress must not draw a bar",
+            oxideTaskHistoryProgress(settledRecord("s", TaskOutcome.Succeeded, progress = -1f)),
+        )
+        assertNull(
+            "a cancelled record has nothing to measure, so it must not draw a bar",
+            oxideTaskHistoryProgress(settledRecord("c", TaskOutcome.Cancelled)),
+        )
+        assertNull(
+            "a queued record is not running yet",
+            oxideTaskHistoryProgress(settledRecord("q", TaskOutcome.Queued)),
+        )
+        assertEquals(
+            100,
+            oxideTaskProgressPercent(
+                oxideTaskHistoryProgress(settledRecord("s", TaskOutcome.Succeeded, progress = 1f)) ?: -1f,
+            ),
+        )
     }
 
     // -----------------------------------------------------------------------
@@ -338,13 +354,33 @@ class OxideTaskPanelTest {
      * 发现页右下角那条安装提示没有面板状态可读，它要的只是把面板叫出来。
      * 因此这一条是"打开"而不是"切换"，但两处写的是同一个设置——否则
      * 面板就有两份互不相干的真相。
+     *
+     * 两处都收敛到 `MainScreen` 里的那两个具名函数上：顶栏按钮写
+     * `changeTasksExpandedState()`，页面叫出面板写 `openTaskPanel()`。断言认的是
+     * 这两个函数各自写了哪个设置键，而不是认某一行字面量——写法会变，两条路径
+     * 共用同一个键这件事不会。
      */
     @Test
     fun thePanelOpensProgrammaticallyThroughTheSameSettingAsTheTopBar() {
         val main = code(readSource("ui/screens/main/MainScreen.kt"))
+        val toggle = main.substringAfter("fun changeTasksExpandedState()").substringBefore("\n    }")
+        val open = main.substringAfter("fun openTaskPanel()").substringBefore("\n    }")
         assertTrue(
-            "the programmatic open must write the one setting the top bar toggles",
-            main.contains("onOpenTasks = { AllSettings.launcherTaskMenuExpanded.save(true) }"),
+            "the top bar toggle must write launcherTaskMenuExpanded; got $toggle",
+            toggle.contains("AllSettings.launcherTaskMenuExpanded.save("),
+        )
+        assertTrue(
+            "the programmatic open must write that same setting; got $open",
+            open.contains("AllSettings.launcherTaskMenuExpanded.save("),
+        )
+        assertTrue(
+            "the programmatic open must not toggle: it has no panel state to read",
+            !open.contains("!isTaskMenuExpanded"),
+        )
+        assertTrue(
+            "both call sites must go through those two functions, not inline their own writes",
+            main.contains("onToggleTasks = ::changeTasksExpandedState,") &&
+                main.contains("onOpenTasks = ::openTaskPanel,"),
         )
         assertTrue(
             "the top bar button must still work",

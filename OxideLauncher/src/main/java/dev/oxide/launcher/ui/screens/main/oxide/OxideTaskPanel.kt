@@ -104,7 +104,7 @@ internal fun OxideTaskDrawer(
     ) {
         TaskSections(
             sections = oxideTaskSectionsOf(
-                tasks.map(Task::toTaskEntry) + history.map(TaskHistory::toTaskEntry)
+                tasks.map { it.toTaskEntry() } + history.map { it.toTaskEntry() }
             ),
         )
     }
