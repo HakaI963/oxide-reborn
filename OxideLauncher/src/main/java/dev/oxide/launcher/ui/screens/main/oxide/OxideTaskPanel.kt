@@ -52,10 +52,12 @@ import dev.oxide.launcher.utils.file.formatFileSize
  * 这一块原本是 MainActivity 上那个 30% 宽的旧 Zalith 侧滑卡片，直接压在 Oxide 外壳上面，
  * 是新外壳里最显眼的一处旧界面。现在它是一个正常的 Oxide 抽屉。
  *
- * 三节（排队 / 运行 / 历史）来自**一份**数据，不是三套账：[tasks] 是任务系统里"已经交出去、
+ * 五节（下载中 / 已完成 / 排队 / 运行中 / 历史）来自**一份**数据，不是五套账：[tasks] 是任务系统里"已经交出去、
  * 还没收尾"的那一份，[history] 是它自己留的收尾快照，两边都住在 `TaskSystem` 这个进程级
  * 单例上——所以关掉抽屉、手点叉号收掉发现页那条提示条、甚至换一页，历史都不会消失。
  * 分节规则在 `OxideTaskSectionsLogic.kt` 里，是纯函数，因此可以在不启动 Compose 的前提下测。
+ * 下载类与一般任务的分界是 `TaskKind`：下载中收的是还没收尾的下载（排队与运行中合并），
+ * 已完成收的是收尾了的下载（成功 / 失败 / 取消靠行尾标记区分），剩下的三节还是原来的排队 / 运行 / 历史。
  *
  * 下面三个纯函数单独拆出来，也是为了能在不启动 Compose 的前提下测：
  * `Task.updateProgress` 会把负值保留成 -1f，那表示"进度不可知"，不是 0%。
@@ -81,6 +83,9 @@ internal fun oxideTaskStageLabel(stage: TaskStage): Int = when (stage) {
  *
  * 列表用 LazyColumn：任务数量没有上限，而竖向滚动已经被抽屉本体占着了，
  * 换成 Column 就会得到嵌套滚动容器。
+ *
+ * 五节的顺序即 [OxideTaskSection] 的声明顺序：下载中与已完成在前，
+ * 那是用户点开这个抽屉最想看的两节。
  *
  * @param history 已经收尾的任务；为空是正常的（第一次打开抽屉时还没有）
  */
@@ -111,11 +116,11 @@ internal fun OxideTaskDrawer(
 }
 
 /**
- * 三节
+ * 五节
  *
- * 空的那一节整节不画：三个空标题（"Preparing" 底下什么都没有）比不画更让人以为这里本来该有东西。
- * 三节全空时才用整块空状态，那一句说的是"现在没有在跑的东西"，而不是"从来就没有过"——
- * 历史还留着东西时这三句都不出现。
+ * 空的那一节整节不画：五个空标题（"Preparing" 底下什么都没有）比不画更让人以为这里本来该有东西。
+ * 五节全空时才用整块空状态，那一句说的是"现在没有在跑的东西"，而不是"从来就没有过"——
+ * 历史或已完成里还留着东西时这几句都不出现。
  */
 @Composable
 private fun TaskSections(sections: OxideTaskSections) {
@@ -132,6 +137,8 @@ private fun TaskSections(sections: OxideTaskSections) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         listOf(
+            OxideTaskSection.Downloading,
+            OxideTaskSection.Complete,
             OxideTaskSection.Queued,
             OxideTaskSection.Running,
             OxideTaskSection.History,

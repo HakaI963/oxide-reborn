@@ -24,10 +24,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import dev.oxide.layercontroller.data.VisibilityType
 import dev.oxide.layercontroller.observable.ObservableControlLayer
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.components.OwnOutlinedTextField
 import dev.oxide.launcher.ui.components.SingleLineTextCheck
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutListItem
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSwitchItem
@@ -51,6 +48,8 @@ import dev.oxide.launcher.ui.screens.main.control_editor.getVisibilityText
 import dev.oxide.launcher.ui.screens.main.oxide.OxideButton
 import dev.oxide.launcher.ui.screens.main.oxide.OxideButtonTone
 import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogShell
+import dev.oxide.launcher.ui.screens.main.oxide.OxideSecInput
+import dev.oxide.launcher.ui.screens.main.oxide.rememberOxideMetrics
 
 /**
  * 控件层属性对话框
@@ -66,12 +65,9 @@ import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogShell
  * - 点"复制"之后滚动区仍然回到顶部（旧版靠 `scrollToTop` 这个 state）；
  * - 底部仍然是删除（描边）与关闭（实心）两枚，两枚都还在同一行；
  * - 点遮罩仍然关不掉（`dismissOnClickOutside = false`），返回键仍然能关——
- *   也就是 `dismissByDialog = false`：它只关掉遮罩点击，`dismissOnBackPress` 保持默认。
- *
- * 有一处**明确保留的旧东西**：名称输入框仍是 `ui/components` 的
- * `OwnOutlinedTextField`（Material `OutlinedTextField` 的一层壳）。它被别的界面共用，
- * 改它是一次输入控件的重做而不是对话框换皮，因此这一轮不动——换句话说，这一块面板
- * 内部仍有一处 Material 的输入框外观。
+ *   也就是 `dismissByDialog = false`：它只关掉遮罩点击，`dismissOnBackPress` 保持默认；
+ * - 名称输入框是 Oxide 的输入行（`OxideSecInput`），
+ *   与输入类对话框里的是同一块，不再是 Material 的描边输入框。
  */
 @Composable
 fun EditControlLayerDialog(
@@ -113,20 +109,17 @@ fun EditControlLayerDialog(
                     onSingleLined = { layer.name = it }
                 )
 
-                //控件层名称
-                OwnOutlinedTextField(
+                //控件层名称：Oxide 的输入行，与输入类对话框里的是同一块
+                OxideSecInput(
+                    metrics = rememberOxideMetrics(),
                     modifier = Modifier.fillMaxWidth(),
                     value = layer.name,
                     onValueChange = {
                         layer.name = it
                     },
-                    label = {
-                        Text(stringResource(R.string.control_editor_layers_attribute_name))
-                    },
+                    placeholder = "",
+                    label = stringResource(R.string.control_editor_layers_attribute_name),
                     singleLine = true,
-                    // 旧版写的是 MaterialTheme.shapes.large，也就是 M3 默认的 16dp；
-                    // 直接写死同一个数，这一块输入框因此看起来一模一样
-                    shape = RoundedCornerShape(16.dp),
                 )
 
                 //可见场景

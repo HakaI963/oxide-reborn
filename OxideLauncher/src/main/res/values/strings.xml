@@ -1818,9 +1818,6 @@
     <string name="oxide_set_renderer_missing">The saved renderer (%1$s) is not installed. Pick one below to replace it.</string>
     <string name="oxide_set_driver_missing">The saved Vulkan driver (%1$s) is not installed. Pick one below to replace it.</string>
     <string name="oxide_set_no_game_path">No game folder</string>
-    <string name="oxide_set_no_plugin">No native library plugin loaded</string>
-    <!-- Name of the folder a native library plugin came from; %1$s is the plugin app name -->
-    <string name="oxide_set_plugin_from">From %1$s</string>
     <string name="oxide_set_drawer_accounts">Accounts</string>
     <string name="oxide_set_drawer_java">Java &amp; runtime</string>
     <string name="oxide_set_drawer_renderer">Renderer &amp; graphics</string>
@@ -1887,6 +1884,8 @@
     <string name="oxide_set_show_menu_ball_detail">Show the in-game floating menu.</string>
     <string name="oxide_set_show_game_brand">Oxide branding</string>
     <string name="oxide_set_show_game_brand_detail">Draw a small Oxide mark in the corner of the running game.</string>
+    <string name="oxide_set_show_sponsor_tip">Show sponsor tip</string>
+    <string name="oxide_set_show_sponsor_tip_detail">Show the support reminder after the game has been launched 100 times.</string>
     <string name="oxide_set_menu_ball_opacity">Floating menu opacity</string>
     <string name="oxide_set_hotbar_rule">Hotbar hit box</string>
     <string name="oxide_set_hotbar_rule_detail">How the hotbar hit box is calculated.</string>
@@ -1929,8 +1928,8 @@
     <string name="oxide_set_action_dl_renderer_plugin_detail">Open the renderer plugin release page.</string>
     <string name="oxide_set_action_dl_driver_plugin">Get driver plugins</string>
     <string name="oxide_set_action_dl_driver_plugin_detail">Open the Vulkan driver plugin release page.</string>
-    <string name="oxide_set_action_dl_native_lib_plugin">Get native library plugins</string>
-    <string name="oxide_set_action_dl_native_lib_plugin_detail">Open the native library plugin release page.</string>
+    <!-- Label reuses settings_renderer_config_title; this is the row hint -->
+    <string name="oxide_set_renderer_env_configure_detail">Adjust the environment variables of this renderer plugin.</string>
     <string name="oxide_set_action_open_logs">Read the launcher and game logs</string>
     <string name="oxide_set_action_open_logs_detail">Open the log viewer and pick a source.</string>
     <string name="oxide_set_action_open_logs_folder">Open the logs folder</string>
@@ -2508,6 +2507,15 @@
     <string name="oxide_about_ack_driver_plugins_detail">%1$s can load Vulkan drivers from this project.</string>
     <string name="oxide_about_ack_native_lib_plugins_title">Native library plugins</string>
     <string name="oxide_about_ack_native_lib_plugins_detail">%1$s can load native graphics libraries from this project.</string>
+    <!-- Renderer sources that replace the deleted built-ins. All three are LGPL libraries:
+         the rows name the project and the licence, and the panel links the source repo.
+         None of them is public domain and none is owned by Oxide. -->
+    <string name="oxide_about_ack_copper_oxide_title">Copper Oxide (MobileGlues)</string>
+    <string name="oxide_about_ack_copper_oxide_detail">Oxide\'s tuned build of MobileGlues, the OpenGL-on-OpenGL-ES implementation by MobileGL-Dev, licensed under LGPL-2.1. Oxide does not own this project.</string>
+    <string name="oxide_about_ack_ltw_title">LTW</string>
+    <string name="oxide_about_ack_ltw_detail">The Large Thin Wrapper renderer by MojoLauncher, licensed under LGPL-3.0.</string>
+    <string name="oxide_about_ack_mojo_gl_title">MojoLauncher Zink and Holy GL4ES</string>
+    <string name="oxide_about_ack_mojo_gl_detail">The Zink and Holy GL4ES rendering back-ends by MojoLauncher, licensed under LGPL-3.0.</string>
     <string name="oxide_about_layouts_page_title">Control layouts</string>
     <string name="oxide_about_layouts_page_subtitle">Import, create, copy and delete the layouts the in-game controls use.</string>
     <string name="oxide_about_layouts_section_info">Selected layout</string>

@@ -28,6 +28,7 @@ import com.google.gson.JsonObject
 import dev.oxide.launcher.BuildConfig
 import dev.oxide.launcher.BuildKeys
 import dev.oxide.launcher.context.GlobalContext
+import dev.oxide.launcher.game.addons.modloader.ModLoader
 import dev.oxide.launcher.game.launch.LogName
 import dev.oxide.launcher.game.path.getVersionsHome
 import dev.oxide.launcher.game.support.touch_controller.VibrationHandler
@@ -223,6 +224,20 @@ class Version(
     fun getCustomInfo(): String = versionConfig.customInfo.getValueOrDefault(AllSettings.versionCustomInfo.getValue())
         .replace("[oxide_version]", BuildConfig.VERSION_NAME)
 
+    /**
+     * Resolve the versionType value sent to the game with Oxide branding applied.
+     *
+     * Automatic: the user types nothing. Loader identity comes from the existing
+     * detection ([VersionInfo.primaryLoader]) and the user value, when present, is
+     * never discarded, see [resolveBrandedVersionType] for the precedence rule.
+     */
+    fun getBrandedVersionType(manifestType: String?): String = resolveBrandedVersionType(
+        expandedCustomInfo = getCustomInfo(),
+        manifestType = manifestType,
+        loader = versionInfo?.primaryLoader?.loader,
+        brandName = BuildKeys.LAUNCHER_NAME
+    )
+
     fun getServerIp(): String? = versionConfig.serverIp.takeIf { it.isNotEmptyOrBlank() }
 
     fun getRamAllocation(context: Context = GlobalContext): Int = versionConfig.ramAllocation.takeIf { it >= 256 }?.let {
@@ -264,4 +279,51 @@ suspend fun Version.hasVulkanBackend(): Boolean {
             Logger.warning(TAG, "Unable to determine the data version of this client Jar, possibly due to an outdated version.", e)
         }.getOrDefault(false)
     }
+}
+
+/**
+ * Loader tag shown next to the Oxide brand in the versionType value, or null
+ * for vanilla-like launches that carry the brand alone.
+ *
+ * The loader comes from the existing detection ([VersionInfo.primaryLoader]), so
+ * no new detector is introduced here. The tag text is the loader display name in
+ * parentheses, which keeps working for loaders added later without touching this
+ * code. OptiFine-only installs count as vanilla, mirroring getVersionType, and an
+ * unknown or nameless loader yields no tag rather than a broken one.
+ */
+fun oxideLoaderVersionTag(loader: ModLoader?): String? {
+    if (loader == null || loader == ModLoader.OPTIFINE || loader == ModLoader.UNKNOWN) return null
+    val name = loader.displayName
+    if (name.isBlank()) return null
+    return "(" + name + ")"
+}
+
+/**
+ * Resolve the branded versionType value sent to the game.
+ *
+ * Precedence, chosen so that what the user typed is never silently discarded:
+ * a non-blank custom info is always kept verbatim as the head of the result and
+ * the loader tag plus the brand are appended after it; a blank custom info falls
+ * back to the manifest type exactly like before, so snapshots and old versions
+ * keep their type label. A value that already contains the brand is returned
+ * unchanged, which makes repeated resolution (retry, relaunch) stable. When both
+ * the custom info and the manifest type are blank, the result is the brand alone
+ * (with the loader tag when a loader is installed).
+ */
+fun resolveBrandedVersionType(
+    expandedCustomInfo: String,
+    manifestType: String?,
+    loader: ModLoader?,
+    brandName: String
+): String {
+    val base = expandedCustomInfo.takeIf { it.isNotBlank() }
+        ?: manifestType?.takeIf { it.isNotBlank() }
+        ?: ""
+    if (base.contains(brandName)) return base
+    val tag = oxideLoaderVersionTag(loader)
+    if (base.isBlank()) {
+        return if (tag == null) brandName else tag + " / " + brandName
+    }
+    val core = if (tag != null && !base.contains(tag)) base + " " + tag else base
+    return core + " / " + brandName
 }

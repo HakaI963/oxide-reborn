@@ -25,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.oxide.layercontroller.data.HideLayerWhen
 import dev.oxide.layercontroller.layout.ControlLayout
 import dev.oxide.layercontroller.observable.ObservableButtonStyle
@@ -40,7 +39,6 @@ import dev.oxide.layercontroller.observable.cloneJoystick
 import dev.oxide.layercontroller.observable.cloneNormal
 import dev.oxide.layercontroller.observable.cloneText
 import dev.oxide.layercontroller.utils.saveToFile
-import dev.oxide.launcher.R
 import dev.oxide.launcher.ui.components.MenuState
 import dev.oxide.launcher.ui.screens.main.control_editor.EditorOperation
 import dev.oxide.launcher.ui.screens.main.control_editor.EditorWarningOperation
@@ -48,13 +46,11 @@ import dev.oxide.launcher.ui.screens.main.control_editor.EditorWidgetOperation
 import dev.oxide.launcher.ui.screens.main.control_editor.PreviewScenario
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_widget.SelectedWidgetData
 import dev.oxide.launcher.ui.screens.main.control_editor.editorReconcileSelectedLayer
-import dev.oxide.launcher.ui.theme.showThemed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -368,6 +364,26 @@ class EditorViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 退出前的确认是否正摆在界面上
+     *
+     * 之前这里是 `MaterialAlertDialogBuilder` 直接弹一个 Material 弹窗：
+     * 灰卡片加鲑鱼色按钮，与编辑器的 Oxide 语言完全两套。
+     * 现在只把"要不要问"记在这里，真正的对话框由编辑器界面按
+     * `OxideConfirmDialog` 画出来，因此未修改时仍然直接退出，
+     * 改过之后才问，且问的界面与编辑器是同一套。
+     */
+    var exitConfirmVisible by mutableStateOf(false)
+        private set
+
+    /**
+     * 用户点了确认之后真正要做的那件事
+     *
+     * 直接退出与返回键两条路各有各的退出动作，因此这里留的是调用方传进来的
+     * 那一个回调，而不是写死某一条路。
+     */
+    private var pendingExitAction: (() -> Unit)? = null
+
     fun onBackPressed(
         context: Context,
         onExit: () -> Unit
@@ -401,10 +417,8 @@ class EditorViewModel : ViewModel() {
                 observableLayout.isModified()
             }
             if (isModified) {
-                showExitEditorDialogSuspend(
-                    context = context,
-                    onExit = onExit
-                )
+                pendingExitAction = onExit
+                exitConfirmVisible = true
             } else {
                 //未被修改，可以直接退出
                 onExit()
@@ -412,20 +426,22 @@ class EditorViewModel : ViewModel() {
         }
     }
 
-    private suspend fun showExitEditorDialogSuspend(
-        context: Context,
-        onExit: () -> Unit
-    ) = withContext(Dispatchers.Main) {
-        MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.generic_warning)
-            .setMessage(R.string.control_editor_exit_message)
-            .setPositiveButton(R.string.generic_cancel) { dialog, _ ->
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.control_editor_exit_confirm) { dialog, _ ->
-                dialog.dismiss()
-                onExit()
-            }
-            .showThemed()
+    /**
+     * 用户在确认框里点了确认：关框并执行调用方留下的退出动作
+     *
+     * 调用方（直接退出与返回键）各有各的退出动作，
+     * 因此这里执行的是 [showExitEditorDialog] 当时留下的那一个。
+     */
+    fun confirmPendingExit() {
+        val action = pendingExitAction
+        pendingExitAction = null
+        exitConfirmVisible = false
+        action?.invoke()
+    }
+
+    /** 用户在确认框里点了取消或返回：只关框，什么都不做 */
+    fun dismissPendingExit() {
+        pendingExitAction = null
+        exitConfirmVisible = false
     }
 }

@@ -52,6 +52,8 @@ data class TaskHistory(
     val progress: Float,
     val rateBytesPerSec: Long?,
     val outcome: TaskOutcome,
+    /** 收尾那一刻任务的类别；面板据此决定它进已完成还是历史 */
+    val kind: TaskKind = TaskKind.General,
 )
 
 /**
@@ -83,7 +85,30 @@ fun Task.toHistory(): TaskHistory = TaskHistory(
     // 协程被系统中断或网络被掐断（`submitTask` 对这两种直接 return，不写结局）。
     // 那时并没有任何人给出结论，所以记成 Cancelled —— 这是三选一里唯一不撒谎的一个。
     outcome = if (outcome.value.finished) outcome.value else TaskOutcome.Cancelled,
+    // 类别跟着任务走：下载中那一边收尾的必须落在已完成那一边，而不是历史里
+    kind = kind,
 )
+
+/**
+ * 版本安装在任务系统里登记时的 id 前缀
+ *
+ * 安装页（`OxideInstallVersionPage`）用字面量拼同一个 id（`oxide-version-install:` 加版本名），
+ * `GameInstaller` 也用下面的构造器拼同一个 id：两边先到先得，后到的那一次
+ * `trackExternalTask` 返回 null 并跳过，于是同一次安装在面板上永远只有一行，
+ * 而不是"正在安装"与"正在下载"两行说同一件事。
+ */
+const val VERSION_INSTALL_TASK_ID_PREFIX = "oxide-version-install:"
+
+/** 版本修改在任务系统里登记时的 id 前缀；目前只有 `GameInstaller` 写它 */
+const val VERSION_MODIFY_TASK_ID_PREFIX = "oxide-version-modify:"
+
+/** 同一次安装 / 修改共用同一个 id，见 [VERSION_INSTALL_TASK_ID_PREFIX] 的说明 */
+fun versionInstallTaskId(customVersionName: String): String =
+    VERSION_INSTALL_TASK_ID_PREFIX + customVersionName
+
+/** 见 [VERSION_INSTALL_TASK_ID_PREFIX] 的说明 */
+fun versionModifyTaskId(customVersionName: String): String =
+    VERSION_MODIFY_TASK_ID_PREFIX + customVersionName
 
 object TaskSystem {
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -160,20 +185,54 @@ object TaskSystem {
     }
 
     /**
+     * 提交并立即运行一个下载类任务
+     *
+     * 与 [submitTask] 是同一条路，只是先把任务标成下载类，面板此后一直把它画在
+     * 下载中 / 已完成那一边。发现页的模组与资源下载应当走这里（调用方一行改动），
+     * 届时它们会自动从排队 / 运行 / 历史搬到下载中 / 已完成。
+     */
+    fun submitDownloadTask(task: Task) {
+        task.markAsDownload()
+        submitTask(task)
+    }
+
+    /**
+     * 提交并立即运行一个下载类任务
+     * 若任务已存在，则忽略，但任务监听器会被覆盖
+     * @param onEnded 任务结束时的监听器
+     */
+    fun submitDownloadTask(task: Task, onEnded: () -> Unit) {
+        task.markAsDownload()
+        submitTask(task, onEnded)
+    }
+
+    /**
      * 登记一个**不由本系统执行**的任务
      *
      * 版本安装走的是 `TaskFlowExecutor`（`GameInstaller` 自带一个），它自己管自己的阶段列表，
-     * 因此这个任务从来不会出现在 `tasksFlow` 里——而用户要的正是在任务面板的"排队"一节里
-     * 看见"正在装 1.20.1"。这里把同一种 [Task] 挂进同一份列表，于是三节仍然是**一个**模型：
+     * 因此这个任务从来不会出现在 `tasksFlow` 里——而用户要的正是在任务面板的下载中一节里
+     * 看见"正在装 1.20.1"。这里把同一种 [Task] 挂进同一份列表，于是各节仍然是**一个**模型：
      * 跑完仍然由 [finishTrackedTask] 收进同一份历史。
      *
      * 它一开始处于 [TaskOutcome.Queued]，调用方在安装真正开始时调一次
      * [startTrackedTask] 把它推到 Running。
      *
+     * 外部登记的任务默认就是下载类（版本安装、游戏文件下载）：面板把它画在下载中那一边，
+     * 收尾后落在已完成那一边。传 `isDownload = false` 可以登记一般的外部活，
+     * 它走原来的排队 / 运行 / 历史。
+     *
      * @return 任务 id；同一个 id 已经登记过时返回 null，调用方据此跳过重复登记
      */
-    fun trackExternalTask(task: Task): String? {
+    fun trackExternalTask(task: Task): String? = trackExternalTask(task, isDownload = true)
+
+    /**
+     * 登记一个**不由本系统执行**的任务，并指定它是不是下载类
+     *
+     * @see trackExternalTask
+     */
+    fun trackExternalTask(task: Task, isDownload: Boolean): String? {
         if (containsTask(task)) return null
+        if (isDownload) task.markAsDownload()
         // 这一条不由本系统执行，所以既不持有保活也不进 allJobs：
         // 它没有 Job 可取消，取消要走它自己那条链路（调用方拿着 id 去 cancel）。
         addTask(task)

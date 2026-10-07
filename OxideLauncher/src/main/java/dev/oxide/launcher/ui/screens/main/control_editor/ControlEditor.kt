@@ -70,6 +70,7 @@ import dev.oxide.launcher.ui.screens.main.control_editor.edit_joystick.EditJoyst
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_style.EditButtonStyleDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_widget.EditWidgetDialog
 import dev.oxide.launcher.ui.screens.main.control_editor.edit_widget.SelectedWidgetData
+import dev.oxide.launcher.ui.screens.main.oxide.OxideConfirmDialog
 import dev.oxide.launcher.viewmodel.EditorViewModel
 import kotlinx.coroutines.flow.emptyFlow
 import java.io.File
@@ -229,6 +230,26 @@ fun BoxWithConstraintsScope.ControlEditor(
             },
             onLayerAttributes = { layer ->
                 viewModel.editorOperation = EditorOperation.EditLayer(layer)
+            },
+            onLayerRename = { layer, name ->
+                layer.name = name
+            },
+            onLayerDuplicate = { layer ->
+                val base = layer.pack()
+                viewModel.observableLayout.addLayer(
+                    layer = createNewLayer(defaultLayerName = defaultLayerName).copy(
+                        hide = base.hide,
+                        hideWhenMouse = base.hideWhenMouse,
+                        hideWhenGamepad = base.hideWhenGamepad,
+                        visibilityType = base.visibilityType,
+                        normalButtons = base.normalButtons,
+                        textBoxes = base.textBoxes,
+                        joystickButtons = base.joystickButtons
+                    )
+                )
+            },
+            onLayerDelete = { layer ->
+                viewModel.editorOperation = EditorOperation.DeleteLayer(layer)
             },
             onToggleLayerVisibility = { layer ->
                 layer.editorHide = layer.editorHide.not()
@@ -395,6 +416,19 @@ fun BoxWithConstraintsScope.ControlEditor(
         EditorOperationDialogs(viewModel = viewModel)
         EditorWidgetOperationDialogs(viewModel = viewModel)
         EditorWarningOperationDialogs(viewModel = viewModel)
+    }
+
+    // 退出前的确认：改过才问，没改过直接走。之前这里是 Material 的弹窗，
+    // 现在与编辑器其余确认框是同一块 Oxide 面板
+    if (viewModel.exitConfirmVisible) {
+        OxideConfirmDialog(
+            title = stringResource(R.string.generic_warning),
+            message = stringResource(R.string.control_editor_exit_message),
+            confirmText = stringResource(R.string.control_editor_exit_confirm),
+            cancelText = stringResource(R.string.generic_cancel),
+            onConfirm = { viewModel.confirmPendingExit() },
+            onDismiss = { viewModel.dismissPendingExit() },
+        )
     }
 }
 

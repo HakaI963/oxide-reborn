@@ -54,6 +54,7 @@ import dev.oxide.launcher.game.account.wardrobe.EmptyCape
 import dev.oxide.launcher.game.account.wardrobe.SkinModelType
 import dev.oxide.launcher.game.account.yggdrasil.PlayerProfile
 import dev.oxide.launcher.path.PathManager
+import dev.oxide.launcher.ui.screens.main.oxide.OxideSkinPreviewDistanceDefault
 import java.io.File
 import java.io.InputStream
 
@@ -204,6 +205,17 @@ class PlayerSkin(
     }
 
     /**
+     * 只推拉相机，不动视角
+     *
+     * 缩放按钮与双指缩放走这一格：方位角与俯仰角原样留在原地，
+     * 因此转到一半再缩放不会把模型弹回正面。JS 侧还会再夹一次，
+     * 所以这里送过去的值不需要预先夹取。
+     */
+    fun setDistance(distance: Int) {
+        webview?.evaluateJavascript("setDistance($distance)", null)
+    }
+
+    /**
      * 设置预览交互开关
      * 关闭后 WebView 不再响应触摸（视角旋转等），仅作展示
      */
@@ -254,6 +266,10 @@ enum class ModelAnimation {
  * @param animation 预览动画
  * @param azimuth 水平视角（度）
  * @param pitch 俯仰视角（度）
+ * @param distance 相机到模型的距离，见 skinview.js 的 setDistance；
+ * 缩放按钮改的就是它，拖拽旋转不会动它
+ * @param resetViewKey 变化时把视角打回 [azimuth]、[pitch] 与 [distance]；
+ * null 表示不复位，调用方按一次复位按钮就加一
  * @param interactionEnabled 是否允许触摸交互（拖拽旋转视角）；
  * 关闭时触摸不进入 WebView，交还给上层手势处理
  * @param refreshKey 变化时重新加载皮肤与披风
@@ -268,6 +284,8 @@ fun SkinPreview3D(
     animation: ModelAnimation = ModelAnimation.NewIdle,
     azimuth: Int = -35,
     pitch: Int = 10,
+    distance: Int = OxideSkinPreviewDistanceDefault,
+    resetViewKey: Any? = null,
     interactionEnabled: Boolean = true,
     refreshKey: Any? = null,
 ) {
@@ -300,10 +318,23 @@ fun SkinPreview3D(
             }
         )
 
-        LaunchedEffect(pageFinished, animation, azimuth, pitch) {
+        // 动画与视角分开写：换动画只换动作，不把用户转好的角度弹回默认；
+        // 缩放只推拉相机，不动角度；复位才把三者一起打回去
+        LaunchedEffect(pageFinished, animation) {
             if (!pageFinished) return@LaunchedEffect
             playerSkin.startAnim(animation)
-            playerSkin.setAzimuthAndPitch(azimuth, pitch)
+        }
+        LaunchedEffect(pageFinished, azimuth, pitch) {
+            if (!pageFinished) return@LaunchedEffect
+            playerSkin.setAzimuthAndPitch(azimuth, pitch, distance)
+        }
+        LaunchedEffect(pageFinished, distance) {
+            if (!pageFinished) return@LaunchedEffect
+            playerSkin.setDistance(distance)
+        }
+        LaunchedEffect(pageFinished, resetViewKey) {
+            if (!pageFinished || resetViewKey == null) return@LaunchedEffect
+            playerSkin.setAzimuthAndPitch(azimuth, pitch, distance)
         }
         LaunchedEffect(pageFinished, interactionEnabled) {
             if (!pageFinished) return@LaunchedEffect

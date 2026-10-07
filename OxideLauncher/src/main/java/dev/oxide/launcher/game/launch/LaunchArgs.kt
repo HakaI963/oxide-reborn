@@ -46,7 +46,6 @@ import dev.oxide.launcher.utils.network.ServerAddress
 import dev.oxide.launcher.utils.string.insertJSONValueList
 import dev.oxide.launcher.utils.string.isEmptyOrBlank
 import dev.oxide.launcher.utils.string.isLowerTo
-import dev.oxide.launcher.utils.string.isNotEmptyOrBlank
 import dev.oxide.launcher.utils.string.splitPreservingQuotes
 import dev.oxide.launcher.utils.string.toUnicodeEscaped
 import java.io.File
@@ -251,8 +250,15 @@ class LaunchArgs(
         }
         argsList.add("-Dlog4j.configurationFile=${configFilePath.absolutePath}")
         argsList.add("-Dminecraft.client.jar=${clientJar.absolutePath}")
-        argsList.add("-Dminecraft.launcher.brand=${BuildKeys.LAUNCHER_NAME}")
-        argsList.add("-Dminecraft.launcher.version=${BuildConfig.VERSION_NAME}")
+        // Oxide launcher brand. Vanilla reads these two system properties for the
+        // main-menu and F3 version line since the 1.6 era, and versions that do not
+        // read them simply ignore unknown -D flags, so setting them unconditionally
+        // is safe for old versions, snapshots and every loader with no mod and no
+        // jar patch. The version is the user-facing display version
+        // (BuildKeys.LAUNCHER_DISPLAY_VERSION), not the build identity, and the
+        // ensure call keeps each flag exactly once so a re-entered launch pipeline
+        // never stacks duplicates.
+        argsList.ensureOxideLauncherBrandArgs(BuildKeys.LAUNCHER_NAME, BuildKeys.LAUNCHER_DISPLAY_VERSION)
 
         return argsList
     }
@@ -405,9 +411,7 @@ class LaunchArgs(
     private fun setLauncherInfo(verArgMap: MutableMap<String, String>) {
         verArgMap["launcher_name"] = BuildKeys.LAUNCHER_NAME
         verArgMap["launcher_version"] = BuildConfig.VERSION_NAME
-        verArgMap["version_type"] = version.getCustomInfo()
-            .takeIf { it.isNotEmptyOrBlank() }
-            ?: gameManifest.type
+        verArgMap["version_type"] = version.getBrandedVersionType(gameManifest.type)
     }
 
     private fun splitAndFilterEmpty(arg: String): Array<String> {
@@ -416,6 +420,37 @@ class LaunchArgs(
             if (it.isNotEmpty()) list.add(it)
         }
         return list.toTypedArray()
+    }
+}
+
+/**
+ * Prefix of the JVM flag that tells vanilla which launcher brand started the game.
+ * The value is appended by [ensureOxideLauncherBrandArgs]; matching on the prefix
+ * (not the full flag) is what makes a re-entered pipeline idempotent.
+ */
+const val OXIDE_BRAND_ARG_PREFIX = "-Dminecraft.launcher.brand="
+
+/**
+ * Prefix of the JVM flag that tells vanilla the launcher version shown next to
+ * the brand. Same prefix-matching contract as [OXIDE_BRAND_ARG_PREFIX].
+ */
+const val OXIDE_LAUNCHER_VERSION_ARG_PREFIX = "-Dminecraft.launcher.version="
+
+/**
+ * Append the Oxide launcher brand and version JVM flags, each at most once.
+ *
+ * Each flag is added only when no entry with the same prefix is already present,
+ * so calling this twice (retry, relaunch, or a pipeline that assembles the list
+ * in more than one pass) never stacks duplicates, and a value that is already
+ * there is never overwritten. Existing entries keep their relative order; the
+ * appended flags go at the end in brand-then-version order.
+ */
+fun MutableList<String>.ensureOxideLauncherBrandArgs(brandName: String, brandVersion: String) {
+    if (none { it.startsWith(OXIDE_BRAND_ARG_PREFIX) }) {
+        add(OXIDE_BRAND_ARG_PREFIX + brandName)
+    }
+    if (none { it.startsWith(OXIDE_LAUNCHER_VERSION_ARG_PREFIX) }) {
+        add(OXIDE_LAUNCHER_VERSION_ARG_PREFIX + brandVersion)
     }
 }
 

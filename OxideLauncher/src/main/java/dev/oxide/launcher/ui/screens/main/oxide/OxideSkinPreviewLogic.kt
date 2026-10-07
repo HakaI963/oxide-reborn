@@ -75,6 +75,74 @@ const val OxideSkinPreviewMinHeightDp: Int = 150
 /** 预览的高度上限：再高就把导入行、手臂型号与 Apply 一起挤出视野 */
 const val OxideSkinPreviewMaxHeightDp: Int = 420
 
+/** 相机到模型的默认距离：与 skinview.js 里 setAzimuthAndPitch 的缺省值一致 */
+const val OxideSkinPreviewDistanceDefault: Int = 60
+
+/** 相机能推到的最近距离：与 skinview.js 里 OrbitControls 的 minDistance 一致 */
+const val OxideSkinPreviewDistanceMin: Int = 25
+
+/** 相机能拉到的最远距离：与 skinview.js 里 OrbitControls 的 maxDistance 一致 */
+const val OxideSkinPreviewDistanceMax: Int = 120
+
+/** 缩放按钮每按一次走的距离：太大一格就飞出去，太小按了像没按 */
+const val OxideSkinPreviewDistanceStep: Int = 10
+
+/**
+ * 双栏里预览格占的宽度份额
+ *
+ * 换肤菜单是固定的左右两栏：左边只放 3D 预览，右边放导入与披风。
+ * 预览格要比控制格宽，模型才有地方转。
+ */
+const val OxideSkinTwoPanePreviewWeight: Float = 0.55f
+
+/** 双栏里控制格占的宽度份额：与预览格相加正好是整行 */
+const val OxideSkinTwoPaneControlsWeight: Float = 0.45f
+
+/**
+ * 缩放距离夹取
+ *
+ * JS 侧的 setDistance 与 OrbitControls 的 min/max 是同一组数，
+ * 这里先夹一次，按了缩放按钮之后送过去的值一定合法。
+ * 纯函数，可以直接单测。
+ */
+internal fun oxideSkinPreviewDistanceClamped(distance: Int): Int =
+    distance.coerceIn(OxideSkinPreviewDistanceMin, OxideSkinPreviewDistanceMax)
+
+/**
+ * 放大一格：相机往模型跟前推一步，到头就停住而不是弹回
+ *
+ * 纯函数，可以直接单测。
+ */
+internal fun oxideSkinPreviewZoomIn(distance: Int): Int =
+    (distance - OxideSkinPreviewDistanceStep).coerceAtLeast(OxideSkinPreviewDistanceMin)
+
+/**
+ * 缩小一格：相机往后拉一步，到头就停住而不是飞出去
+ *
+ * 纯函数，可以直接单测。
+ */
+internal fun oxideSkinPreviewZoomOut(distance: Int): Int =
+    (distance + OxideSkinPreviewDistanceStep).coerceAtMost(OxideSkinPreviewDistanceMax)
+
+/**
+ * 披风在预览里画还是不画
+ *
+ * "藏起来"是预览自己的开关，不是删文件：返回 null 时调用方把
+ * capeFile 按 null 送给预览，落盘的那一份原封不动。
+ * 有没有文件还是由 `*Exists` 说了算，这里只叠加开关。
+ * 纯函数，可以直接单测。
+ */
+internal fun oxideSkinPreviewCapeFile(
+    savedCapeFile: File?,
+    savedCapeExists: Boolean,
+    capeHidden: Boolean,
+): File? =
+    if (capeHidden) {
+        null
+    } else {
+        savedCapeFile?.takeIf { savedCapeExists }
+    }
+
 /**
  * 预览该占多高
  *

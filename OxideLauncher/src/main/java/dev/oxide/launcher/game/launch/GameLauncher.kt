@@ -42,8 +42,9 @@ import dev.oxide.launcher.game.plugin.Plugin
 import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer.RendererPluginManager
 import dev.oxide.launcher.game.renderer.Renderers
-import dev.oxide.launcher.game.renderer.renderers.GL4ESRenderer
-import dev.oxide.launcher.game.renderer.renderers.NGGL4ESRenderer
+import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
+import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
+import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
 import dev.oxide.launcher.game.support.touch_controller.ControllerProxy
 import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionInfoParser
@@ -420,7 +421,10 @@ private fun setRendererEnv(envMap: MutableMap<String, String>) {
 
     if (RendererPluginManager.selectedRendererPlugin != null) return
 
-    if (renderer != GL4ESRenderer && renderer != NGGL4ESRenderer) {
+    // 只有 Mesa 系的渲染器才吃这一套 zink 环境：GL4ES 系（Holy）与两个封装层
+    // （Copper Oxide / LTW）各自带自己的 env，加 zink 变量只会添乱。
+    // MojoZink 是唯一的 Mesa/zink 后端，所以它是这里唯一走进去的新渲染器。
+    if (renderer != HolyGL4ESRenderer && renderer != CopperOxideRenderer && renderer != LTWRenderer) {
         envMap["MESA_LOADER_DRIVER_OVERRIDE"] = "zink"
         envMap["MESA_GLSL_CACHE_DIR"] = PathManager.DIR_CACHE.absolutePath
         envMap["MESA_GL_VERSION_OVERRIDE"] = "4.6"

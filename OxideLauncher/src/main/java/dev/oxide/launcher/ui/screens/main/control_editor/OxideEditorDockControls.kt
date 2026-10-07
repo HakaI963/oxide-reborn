@@ -21,9 +21,11 @@ package dev.oxide.launcher.ui.screens.main.control_editor
 import dev.oxide.launcher.ui.theme.Oxide
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,6 +39,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
@@ -414,10 +418,14 @@ internal fun EditorNudgeRow(
 /**
  * 停靠面板里的控件层条目
  *
- * 一行里三块热区：眼睛（切隐藏）、名字（选中，再点一次取消）、属性按钮。
+ * 一行里三块热区：眼睛（切隐藏）、名字（选中，再点一次取消）、"…"（更多操作）。
+ * 整行同时支持长按：单手拿着手机时大拇指不一定够得着右端那枚小按钮，
+ * 长按行内任意位置同样打开那张小页。
+ *
  * 选中态除了强调色还有左侧指示条与实心方块；隐藏态另有一行"已隐藏"的字——
  * 只在眼睛上换图标是不够的，两枚图形的差别太小，色觉差异下更难分辨。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun EditorLayerRow(
     name: String,
@@ -427,29 +435,30 @@ internal fun EditorLayerRow(
     visibilityText: String,
     visibilityOnText: String,
     onSelect: () -> Unit,
-    onAttributes: () -> Unit,
     onToggleVisibility: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    onMenu: () -> Unit,
 ) {
     val metrics = editorMetrics()
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(metrics.rowHeight)
+            .heightIn(min = metrics.rowHeight.coerceAtLeast(44.dp))
             .clip(Oxide.RadiusControl)
             .background(if (selected) Oxide.BgTabActive else Color.Transparent)
             .border(
                 BorderStroke(1.dp, if (selected) Oxide.Line2 else Oxide.Line),
                 Oxide.RadiusControl,
             )
-            .selectable(
-                selected = selected,
+            .combinedClickable(
                 enabled = enabled,
                 role = Role.Tab,
                 onClick = onSelect,
+                onLongClick = { if (enabled) onMenu() },
             )
-            .padding(start = 6.dp, end = 4.dp),
+            .semantics { this.selected = selected }
+            .padding(start = 6.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         EditorSelectedMark(selected = selected)
@@ -487,7 +496,7 @@ internal fun EditorLayerRow(
             glyph = "⋯",
             description = attributesText,
             enabled = enabled,
-            onClick = onAttributes,
+            onClick = onMenu,
         )
     }
 }

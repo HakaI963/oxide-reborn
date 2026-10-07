@@ -122,8 +122,10 @@ function startAnim(name, speed) {
 }
 
 skinViewer.controls.enableRotate = true;
-skinViewer.controls.enableZoom = false;
+skinViewer.controls.enableZoom = true;
 skinViewer.controls.enablePan = false;
+skinViewer.controls.minDistance = 25;
+skinViewer.controls.maxDistance = 120;
 
 //记录默认的相机位置和控制器目标点
 const defaultCameraPos = skinViewer.camera.position.clone();
@@ -285,9 +287,28 @@ function loadCape(capeUrl) {
     skinViewer.loadCape(capeUrl);
 }
 
+function setDistance(distance) {
+    const d = Math.max(25, Math.min(120, Number(distance) || 60));
+    const controls = skinViewer.controls;
+    const target = controls.target;
+    const cam = skinViewer.camera.position;
+    const ox = cam.x - target.x;
+    const oy = cam.y - target.y;
+    const oz = cam.z - target.z;
+    const curR = Math.sqrt(ox * ox + oy * oy + oz * oz) || 1;
+    const s = d / curR;
+    cam.x = target.x + ox * s;
+    cam.y = target.y + oy * s;
+    cam.z = target.z + oz * s;
+    controls.update();
+
+    updateDefaultCameraPosition();
+}
+
 function setInteractionEnabled(enabled) {
     const interactive = enabled !== false;
     skinViewer.controls.enableRotate = interactive;
+    skinViewer.controls.enableZoom = interactive;
     container.style.pointerEvents = interactive ? 'auto' : 'none';
 }
 

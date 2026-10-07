@@ -33,7 +33,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -105,10 +104,9 @@ import kotlin.math.roundToInt
  *
  * 1. **不做每帧的工作**。格式化按输入缓存，数字解析只发生在一次提交之前，
  *    轨道与定位板用 `Canvas` 一遍画完而不是拼一串 `Box`。
- * 2. **不抢画布的触摸**。每一行只消费自己收到的事件，[editorConsumeTouches] 只挂在
- *    遮罩这一块"整片都该吃掉"的地方（面板那一侧改由 `ControlEditorLayer` 的
- *    `interactive = false` 整体关掉画布输入），因此面板外的那一下点击仍然落到
- *    控制布局上，而不是被顺手吞掉。
+ * 2. **不抢画布的触摸**。每一行只消费自己收到的事件；面板根部不挂任何整窗
+ *    的触摸消费者，面板之外的区域根本没有面板这一层的节点，
+ *    因此不存在"谁先抢到按下事件"的问题。
  * 3. **状态不靠颜色说话**。开关用 `Role.Switch`，单选用 `Role.RadioButton`，滑杆给出
  *    `ProgressBarRangeInfo` 与 `setProgress`，选中项除了强调色还多一条指示条与
  *    一枚实心方块；行内输入的错误除了描边还另起一行文字。
@@ -1220,51 +1218,19 @@ internal fun EditorGlyphButton(
 }
 
 // ---------------------------------------------------------------------------
-// 触摸
+// 面板触摸：面板只管自己这一块
 // ---------------------------------------------------------------------------
 
 /**
- * 把落到这块面板上的触摸全部吃掉
+ * 面板根部不挂任何整窗的触摸消费者。
  *
- * 停靠面板是盖在**控制布局画布**上的：面板根部的空白处如果没有消费事件，那一下
- * 点击会同时被画布与面板看见——画布会以为玩家在游戏里按了一下控件。这里只消费，
- * 不加任何语义，也不会吞掉子行自己收到的事件（子节点先于父节点拿到事件）。
+ * 面板只是众多行组合出来的一块区域：每一行（`clickable` / `selectable` /
+ * `toggleable`）只消费落到自己身上的事件，面板之外的区域根本没有面板这一层
+ * 的节点，点下去自然落到画布上。面板开着时画布由调用方整体置为只读
+ * （`ControlEditorLayer` 的 `interactive = false`），因此也不需要一块整窗的
+ * 遮罩去"保护"画布——之前那块整窗遮罩恰恰盖在面板之前，
+ * 把落到每一行上的按下事件提前吃掉了。
  */
-internal fun Modifier.editorConsumeTouches(): Modifier = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            val event = awaitPointerEvent()
-            event.changes.forEach { change ->
-                if (!change.isConsumed) change.consume()
-            }
-        }
-    }
-}
-
-/**
- * 面板根部的遮罩：既吃掉触摸，也负责点空白关闭
- *
- * 与 [editorConsumeTouches] 分开是因为遮罩还要接点击；这一层放在面板**之下**，
- * 因此点面板本身不会落到它身上。
- */
-@Composable
-internal fun EditorScrim(onClick: () -> Unit) {
-    val description = stringResource(R.string.oxide_ce_close_dock)
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .editorConsumeTouches()
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick,
-            )
-            .semantics {
-                role = Role.Button
-                contentDescription = description
-            },
-    )
-}
 
 /**
  * 停靠面板共用的填充色：不透明的面 + 面板渐变

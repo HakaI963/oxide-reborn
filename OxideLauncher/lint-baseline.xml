@@ -1299,26 +1299,8 @@
             column="5"/>
     </issue>
 
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libEGL_mesa.so` (from `__local_aars__:/home/runner/work/oxide-reborn/oxide-reborn/OxideLauncher/libs/kopper-zink-release.aar:unspecified`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.5.0/transforms/8b99e9f78d0f615f748023ce4e5f39ae/transformed/kopper-zink-release/jni/arm64-v8a/libEGL_mesa.so"/>
-    </issue>
 
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libEGL_mesa.so` (from `__local_aars__:/home/runner/work/oxide-reborn/oxide-reborn/OxideLauncher/libs/kopper-zink-release.aar:unspecified`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.5.0/transforms/8b99e9f78d0f615f748023ce4e5f39ae/transformed/kopper-zink-release/jni/arm64-v8a/libEGL_mesa.so"/>
-    </issue>
 
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libEGL_mesa.so` (from `__local_aars__:/home/runner/work/oxide-reborn/oxide-reborn/OxideLauncher/libs/kopper-zink-release.aar:unspecified`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.5.0/transforms/8b99e9f78d0f615f748023ce4e5f39ae/transformed/kopper-zink-release/jni/arm64-v8a/libEGL_mesa.so"/>
-    </issue>
 
     <issue
         id="Aligned16KB"
@@ -1355,26 +1337,8 @@
             file="$GRADLE_USER_HOME/caches/9.5.0/transforms/fcb85d7d39f9719729e55a8827d51e15/transformed/bytehook-1.0.10/jni/arm64-v8a/libbytehook.so"/>
     </issue>
 
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libng_gl4es.so` (from `__local_aars__:/home/runner/work/oxide-reborn/oxide-reborn/OxideLauncher/libs/NG-GL4ES-release.aar:unspecified`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.5.0/transforms/cad31589733f6c745f051f287e455f80/transformed/NG-GL4ES-release/jni/arm64-v8a/libng_gl4es.so"/>
-    </issue>
 
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libng_gl4es.so` (from `__local_aars__:/home/runner/work/oxide-reborn/oxide-reborn/OxideLauncher/libs/NG-GL4ES-release.aar:unspecified`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.5.0/transforms/cad31589733f6c745f051f287e455f80/transformed/NG-GL4ES-release/jni/arm64-v8a/libng_gl4es.so"/>
-    </issue>
 
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libng_gl4es.so` (from `__local_aars__:/home/runner/work/oxide-reborn/oxide-reborn/OxideLauncher/libs/NG-GL4ES-release.aar:unspecified`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.5.0/transforms/cad31589733f6c745f051f287e455f80/transformed/NG-GL4ES-release/jni/arm64-v8a/libng_gl4es.so"/>
-    </issue>
 
     <issue
         id="Aligned16KB"

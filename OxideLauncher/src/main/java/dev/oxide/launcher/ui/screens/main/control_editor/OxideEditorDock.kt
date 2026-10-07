@@ -32,21 +32,32 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.oxide.layercontroller.data.HideLayerWhen
@@ -56,6 +67,7 @@ import dev.oxide.layercontroller.utils.snap.SnapMode
 import dev.oxide.launcher.R
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.ui.screens.main.oxide.OxideBadgeTone
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogShell
 
 /**
  * 编辑器的停靠面板
@@ -71,10 +83,14 @@ import dev.oxide.launcher.ui.screens.main.oxide.OxideBadgeTone
  *
  * 面板**开着**时，画布那一层整个变成只读的（见 `ControlEditor.kt` 里传给
  * `ControlEditorLayer` 的 `interactive`）：背景点击、控件的拖动/点选与两个缩放
- * 手柄都不再安装指针输入。面板这一侧因此**不挂** [editorConsumeTouches]——它是一
- * 个 `PointerEventPass.Main` 的消费者，挂在每一行的**祖先**上只能取消子节点的手势，
- * 挡不住下面那块画布收到同一下；把它留在遮罩上（`EditorScrim`）才有意义。
+ * 手柄都不再安装指针输入。面板这一侧不挂任何整窗的触摸消费者——
+ * 面板根部只是一块面板，面板之外的区域根本没有面板这一层的节点，
+ * 因此不存在"遮罩与行抢同一按"的竞争：每一行只消费落到自己身上的事件。
  * 面板之外的点击仍然照旧交给画布。
+ *
+ * "做决定"的动作（改名、删层、选建哪一种）各自住在自己的一张小页里
+ * （见 [EditorMenuSheet]），一次只打开一张，全部由真正的对话框窗口承载，
+ * 不在面板里叠床架屋。
  */
 @Composable
 internal fun EditorDock(
@@ -108,92 +124,98 @@ internal fun EditorDock(
     saveAndExit: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    onLayerRename: (ObservableControlLayer, String) -> Unit = { layer, name -> layer.name = name },
+    onLayerDuplicate: (ObservableControlLayer) -> Unit = {},
+    onLayerDelete: (ObservableControlLayer) -> Unit = {},
 ) {
     if (!dockOpen) return
 
     val metrics = editorMetrics()
 
-    Box(modifier = modifier.fillMaxSize()) {
-        EditorScrim(onClick = closeScreen)
-
-        EditorDockFrame(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .width(metrics.dockWidth)
-                .padding(
-                    start = metrics.dockMargin,
-                    top = metrics.dockMargin,
-                    bottom = metrics.dockMargin,
-                ),
-            header = {
-                EditorDockHeader(
-                    selectedLayerName = selectedLayer?.name,
-                    layerCount = layers.size,
-                    controlCount = widgetsInLayer.size,
-                    isPreviewMode = isPreviewMode,
+    // 根部就是面板本身，不再包一层整窗的盒子：之前那层整窗盒子里的遮罩
+    // 盖在面板之前，把落到每一行上的按下事件提前吃掉了。
+    // 面板之外的触摸这里根本没有节点去接，自然落到画布上。
+    EditorDockFrame(
+        modifier = modifier
+            .width(metrics.dockWidth)
+            .padding(
+                start = metrics.dockMargin,
+                top = metrics.dockMargin,
+                bottom = metrics.dockMargin,
+            ),
+        header = {
+            EditorDockHeader(
+                selectedLayerName = selectedLayer?.name,
+                layerCount = layers.size,
+                controlCount = widgetsInLayer.size,
+                isPreviewMode = isPreviewMode,
+                onClose = closeScreen,
+            )
+        },
+        body = {
+            EditorDockBody(
+                layers = layers,
+                selectedLayer = selectedLayer,
+                selectedWidget = selectedWidget,
+                widgetsInLayer = widgetsInLayer,
+                isPreviewMode = isPreviewMode,
+                screenWidthDp = screenWidthDp,
+                screenHeightDp = screenHeightDp,
+                onLayerSelected = onLayerSelected,
+                onLayerReorder = onLayerReorder,
+                isLayerFocus = isLayerFocus,
+                onLayerFocusChanged = onLayerFocusChanged,
+                onCreateLayer = onCreateLayer,
+                onLayerAttributes = onLayerAttributes,
+                onToggleLayerVisibility = onToggleLayerVisibility,
+                onLayerRename = onLayerRename,
+                onLayerDuplicate = onLayerDuplicate,
+                onLayerDelete = onLayerDelete,
+                onWidgetSelected = onWidgetSelected,
+                onWidgetOpened = onWidgetOpened,
+                onAddControl = onAddControl,
+                onOpenStyleList = onOpenStyleList,
+                onOpenJoystickStyleList = onOpenJoystickStyleList,
+                onPreviewChanged = onPreviewChanged,
+                previewScenario = previewScenario,
+                onPreviewScenarioChanged = onPreviewScenarioChanged,
+                previewHideLayerWhen = previewHideLayerWhen,
+                onPreviewHideLayerChanged = onPreviewHideLayerChanged,
+                onSave = onSave,
+                saveAndExit = saveAndExit,
+                onExit = onExit,
+            )
+        },
+        // 底栏永远是可见的，因此引导不挂在这里——它挂在列表末尾那个
+        // "Save" 分区上，两边指向的是同一组动作
+        footer = {
+            EditorFooterRow(modifier = Modifier.padding(horizontal = metrics.dockPadding)) {
+                EditorFooterButton(
+                    text = stringResource(R.string.generic_save),
+                    onClick = onSave,
+                    primary = true,
                 )
-            },
-            body = {
-                EditorDockBody(
-                    layers = layers,
-                    selectedLayer = selectedLayer,
-                    selectedWidget = selectedWidget,
-                    widgetsInLayer = widgetsInLayer,
-                    isPreviewMode = isPreviewMode,
-                    screenWidthDp = screenWidthDp,
-                    screenHeightDp = screenHeightDp,
-                    onLayerSelected = onLayerSelected,
-                    onLayerReorder = onLayerReorder,
-                    isLayerFocus = isLayerFocus,
-                    onLayerFocusChanged = onLayerFocusChanged,
-                    onCreateLayer = onCreateLayer,
-                    onLayerAttributes = onLayerAttributes,
-                    onToggleLayerVisibility = onToggleLayerVisibility,
-                    onWidgetSelected = onWidgetSelected,
-                    onWidgetOpened = onWidgetOpened,
-                    onAddControl = onAddControl,
-                    onOpenStyleList = onOpenStyleList,
-                    onOpenJoystickStyleList = onOpenJoystickStyleList,
-                    onPreviewChanged = onPreviewChanged,
-                    previewScenario = previewScenario,
-                    onPreviewScenarioChanged = onPreviewScenarioChanged,
-                    previewHideLayerWhen = previewHideLayerWhen,
-                    onPreviewHideLayerChanged = onPreviewHideLayerChanged,
-                    onSave = onSave,
-                    saveAndExit = saveAndExit,
-                    onExit = onExit,
+                EditorFooterButton(
+                    text = stringResource(R.string.control_editor_menu_save_and_exit),
+                    onClick = saveAndExit,
                 )
-            },
-            // 底栏永远是可见的，因此引导不挂在这里——它挂在列表末尾那个
-            // "Save" 分区上，两边指向的是同一组动作
-            footer = {
-                EditorFooterRow(modifier = Modifier.padding(horizontal = metrics.dockPadding)) {
-                    EditorFooterButton(
-                        text = stringResource(R.string.generic_save),
-                        onClick = onSave,
-                        primary = true,
-                    )
-                    EditorFooterButton(
-                        text = stringResource(R.string.control_editor_menu_save_and_exit),
-                        onClick = saveAndExit,
-                    )
-                    EditorFooterButton(
-                        text = stringResource(R.string.control_editor_exit_confirm),
-                        onClick = onExit,
-                    )
-                }
-            },
-        )
-    }
+                EditorFooterButton(
+                    text = stringResource(R.string.control_editor_exit_confirm),
+                    onClick = onExit,
+                )
+            }
+        },
+    )
 }
 
-/** 面板顶部那一行：标题 + 三个数字，外加选中层的名字 */
+/** 面板顶部那一行：标题 + 三个数字，外加选中层的名字，以及一枚收起按钮 */
 @Composable
 private fun EditorDockHeader(
     selectedLayerName: String?,
     layerCount: Int,
     controlCount: Int,
     isPreviewMode: Boolean,
+    onClose: () -> Unit,
 ) {
     val metrics = editorMetrics()
     Column(
@@ -227,6 +249,14 @@ private fun EditorDockHeader(
                     tone = OxideBadgeTone.Warn,
                 )
             }
+            Spacer(Modifier.width(4.dp))
+            // 收起面板的唯一显式出口：之前是点面板之外，现在那块整窗遮罩已经拿掉，
+            // 点外面只会落到画布上，因此这里给一枚看得见的按钮
+            EditorGlyphButton(
+                glyph = "✕",
+                description = stringResource(R.string.oxide_ce_close_dock),
+                onClick = onClose,
+            )
         }
         if (!selectedLayerName.isNullOrBlank()) {
             Text(
@@ -261,6 +291,9 @@ private fun EditorDockBody(
     onCreateLayer: () -> Unit,
     onLayerAttributes: (ObservableControlLayer) -> Unit,
     onToggleLayerVisibility: (ObservableControlLayer) -> Unit,
+    onLayerRename: (ObservableControlLayer, String) -> Unit,
+    onLayerDuplicate: (ObservableControlLayer) -> Unit,
+    onLayerDelete: (ObservableControlLayer) -> Unit,
     onWidgetSelected: (ObservableWidget, ObservableControlLayer) -> Unit,
     onWidgetOpened: (ObservableWidget, ObservableControlLayer) -> Unit,
     onAddControl: (EditorControlKind) -> Unit,
@@ -274,6 +307,20 @@ private fun EditorDockBody(
 ) {
     val metrics = editorMetrics()
     val listState = rememberLazyListState()
+
+    // 一次只打开一张小页：新建选择器与某一层的更多操作互斥，
+    // 关掉之后面板的状态原样不动
+    var sheet by remember { mutableStateOf(EditorMenuSheet.None) }
+    var sheetLayerUuid by remember { mutableStateOf<String?>(null) }
+    // 那一层在页开着时被删掉：页回到没打开，而不是对着一个旧对象
+    val liveSheetLayer = layers.firstOrNull { it.uuid == sheetLayerUuid }
+        .takeIf { sheet == EditorMenuSheet.LayerActions }
+    LaunchedEffect(layers, sheet) {
+        if (sheet == EditorMenuSheet.LayerActions && liveSheetLayer == null) {
+            sheet = EditorMenuSheet.None
+            sheetLayerUuid = null
+        }
+    }
 
     // 换了一个选中的控件就滚到它那一段：否则在长列表里选中的东西可能落在视口外，
     // 检视器也就跟着看不见
@@ -317,8 +364,13 @@ private fun EditorDockBody(
                     onSelect = {
                         onLayerSelected(if (selectedLayer === layer) null else layer)
                     },
-                    onAttributes = { onLayerAttributes(layer) },
                     onToggleVisibility = { onToggleLayerVisibility(layer) },
+                    // 点"…"与长按进的是同一张小页：改名、复制、显隐、删除都在里面，
+                    // 一次只做一件事，做完回到面板
+                    onMenu = {
+                        sheetLayerUuid = layer.uuid
+                        sheet = EditorMenuSheet.LayerActions
+                    },
                 )
             }
             // 只有选中那一层才给换序按钮：每一行都放的话，窄面板上会被按钮占满
@@ -427,6 +479,10 @@ private fun EditorDockBody(
         }
 
         // ---- 新建控件 ----------------------------------------------------
+        //
+        // 只有一行：点开是一张选择器（按键 / 文本框 / 摇杆三选一）。
+        // 建不了的时候这一行是灰的，并且原因就写在它下面——
+        // 点不动的地方必须自己说出为什么，而不是悄悄没反应。
 
         item(key = "section_add") {
             EditorGroupLabel(text = stringResource(R.string.oxide_ce_section_add))
@@ -437,11 +493,17 @@ private fun EditorDockBody(
             hasSelectedLayer = selectedLayer != null,
             isPreviewMode = isPreviewMode,
         )
+        val addAllowed = editorAllowsAddingControls(blocker)
+        if (!addAllowed) {
+            item(key = "add_blocked_reason") {
+                EditorNoteRow(text = stringResource(blocker.toStringRes()))
+            }
+        }
         item(key = "add_controls") {
-            EditorAddControlBlock(
-                blocker = blocker,
-                enabled = editorAllowsAddingControls(blocker),
-                onAdd = onAddControl,
+            EditorAddPickerRow(
+                enabled = addAllowed,
+                hint = if (addAllowed) null else stringResource(blocker.toStringRes()),
+                onClick = { sheet = EditorMenuSheet.AddPicker },
             )
         }
 
@@ -494,6 +556,50 @@ private fun EditorDockBody(
         item(key = "save") {
             EditorSaveBlock(onSave = onSave, saveAndExit = saveAndExit, onExit = onExit)
         }
+    }
+
+    // 小页一次只打开一张，全部由真正的对话框窗口承载：
+    // 对话框自己带遮罩与窗口，不存在"面板里的兄弟节点抢触摸"的问题
+    if (sheet == EditorMenuSheet.AddPicker) {
+        EditorAddPickerSheet(
+            blocker = editorAddPickerBlocker(
+                layerCount = layers.size,
+                hasSelectedLayer = selectedLayer != null,
+                isPreviewMode = isPreviewMode,
+            ),
+            onDismiss = { sheet = EditorMenuSheet.None },
+            onAdd = { kind ->
+                sheet = EditorMenuSheet.None
+                onAddControl(kind)
+            },
+        )
+    }
+    liveSheetLayer?.takeIf { sheet == EditorMenuSheet.LayerActions }?.let { layer ->
+        EditorLayerActionsSheet(
+            layer = layer,
+            isPreviewMode = isPreviewMode,
+            onDismiss = {
+                sheet = EditorMenuSheet.None
+                sheetLayerUuid = null
+            },
+            onAttributes = {
+                sheet = EditorMenuSheet.None
+                sheetLayerUuid = null
+                onLayerAttributes(layer)
+            },
+            onToggleVisibility = { onToggleLayerVisibility(layer) },
+            onRename = { name -> onLayerRename(layer, name) },
+            onDuplicate = {
+                sheet = EditorMenuSheet.None
+                sheetLayerUuid = null
+                onLayerDuplicate(layer)
+            },
+            onDelete = {
+                sheet = EditorMenuSheet.None
+                sheetLayerUuid = null
+                onLayerDelete(layer)
+            },
+        )
     }
 }
 
@@ -565,83 +671,243 @@ private fun EditorLayerActions(
     }
 }
 
-/** 新建控件的三种类型，以及为什么不能新建 */
+/**
+ * 新建控件的那一行：只有一行，点开是三选一的选择器
+ *
+ * 建不了的时候整行是灰的，并且原因就写在行里与行下——
+ * 点不动的地方必须自己说出为什么，而不是悄悄没反应。
+ */
 @Composable
-private fun EditorAddControlBlock(
-    blocker: EditorAddBlocker,
+private fun EditorAddPickerRow(
     enabled: Boolean,
-    onAdd: (EditorControlKind) -> Unit,
-) {
-    val metrics = editorMetrics()
-    Column(verticalArrangement = Arrangement.spacedBy(metrics.rowGap)) {
-        if (!enabled) {
-            EditorNoteRow(text = stringResource(blocker.toStringRes()))
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(metrics.rowGap),
-        ) {
-            AddControlButton(
-                modifier = Modifier.weight(1f),
-                glyph = "▣",
-                label = stringResource(R.string.control_editor_menu_new_widget_button),
-                enabled = enabled,
-                onClick = { onAdd(EditorControlKind.Button) },
-            )
-            AddControlButton(
-                modifier = Modifier.weight(1f),
-                glyph = "▤",
-                label = stringResource(R.string.control_editor_menu_new_widget_text),
-                enabled = enabled,
-                onClick = { onAdd(EditorControlKind.Text) },
-            )
-            AddControlButton(
-                modifier = Modifier.weight(1f),
-                glyph = "✳",
-                label = stringResource(R.string.control_editor_menu_new_widget_joystick),
-                enabled = enabled,
-                onClick = { onAdd(EditorControlKind.Joystick) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun AddControlButton(
-    glyph: String,
-    label: String,
-    enabled: Boolean,
+    hint: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val metrics = editorMetrics()
-    Box(
+    Row(
         modifier = modifier
-            .height(metrics.rowHeight * 1.7f)
+            .fillMaxWidth()
+            .heightIn(min = metrics.rowHeight.coerceAtLeast(44.dp))
             .clip(Oxide.RadiusControl)
             .background(if (enabled) Oxide.BgButton else Color.Transparent)
             .border(BorderStroke(1.dp, Oxide.Line), Oxide.RadiusControl)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = 9.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "+",
+            color = if (enabled) Oxide.Fg else Oxide.FgFaint,
+            fontSize = Oxide.Type.Body.fontSize,
+            lineHeight = Oxide.Type.Body.lineHeight,
+            maxLines = 1,
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = glyph,
+                text = stringResource(R.string.oxide_ce_section_add),
                 color = if (enabled) Oxide.Fg else Oxide.FgFaint,
                 fontSize = Oxide.Type.Body.fontSize,
                 lineHeight = Oxide.Type.Body.lineHeight,
                 maxLines = 1,
-            )
-            Text(
-                text = label,
-                color = if (enabled) Oxide.FgMuted else Oxide.FgFaint,
-                fontSize = Oxide.Type.MicroLabel.fontSize,
-                lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (!hint.isNullOrBlank()) {
+                Text(
+                    text = hint,
+                    color = Oxide.FgFaint,
+                    fontSize = Oxide.Type.MicroLabel.fontSize,
+                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
+    }
+}
+
+/**
+ * 新建控件的选择器：一张真正的对话框
+ *
+ * 三个选项共用同一道闸门：能建就三个都能点，不能建就三个一起灰，
+ * 原因写在最上面。点完一种直接落到选中的层里，页随即关掉。
+ */
+@Composable
+internal fun EditorAddPickerSheet(
+    blocker: EditorAddBlocker,
+    onDismiss: () -> Unit,
+    onAdd: (EditorControlKind) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val enabled = editorAddPickerAllows(blocker)
+    OxideDialogShell(
+        title = stringResource(R.string.oxide_ce_section_add),
+        onDismissRequest = onDismiss,
+        body = { contentMaxHeight ->
+            Column(
+                modifier = modifier
+                    .heightIn(max = contentMaxHeight)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (!enabled) {
+                    EditorNoteRow(text = stringResource(blocker.toStringRes()))
+                }
+                EditorActionRow(
+                    label = stringResource(R.string.control_editor_menu_new_widget_button),
+                    hint = stringResource(R.string.oxide_ce_kind_button),
+                    enabled = enabled,
+                    onClick = { onAdd(EditorControlKind.Button) },
+                )
+                EditorActionRow(
+                    label = stringResource(R.string.control_editor_menu_new_widget_text),
+                    hint = stringResource(R.string.oxide_ce_kind_text),
+                    enabled = enabled,
+                    onClick = { onAdd(EditorControlKind.Text) },
+                )
+                EditorActionRow(
+                    label = stringResource(R.string.control_editor_menu_new_widget_joystick),
+                    hint = stringResource(R.string.oxide_ce_kind_joystick),
+                    enabled = enabled,
+                    onClick = { onAdd(EditorControlKind.Joystick) },
+                )
+            }
+        },
+    )
+}
+
+/**
+ * 某一层的更多操作：改名、复制、显隐、完整属性、删除
+ *
+ * 改名直接在这一页里改完：点开改名行，输入框就地展开，确认即写回。
+ * 预览模式下整页只读——层在预览里不能改名换序删除，
+ * 因此除了关闭之外每一行都是灰的，并注出原因。
+ */
+@Composable
+internal fun EditorLayerActionsSheet(
+    layer: ObservableControlLayer,
+    isPreviewMode: Boolean,
+    onDismiss: () -> Unit,
+    onAttributes: () -> Unit,
+    onToggleVisibility: () -> Unit,
+    onRename: (String) -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val canEdit = editorAllowsLayerEditing(isPreviewMode)
+    var renaming by remember { mutableStateOf(false) }
+    var draft by remember(layer.uuid) { mutableStateOf(layer.name) }
+    OxideDialogShell(
+        title = layer.name.ifBlank { stringResource(R.string.control_editor_layers_title) },
+        onDismissRequest = onDismiss,
+        body = { contentMaxHeight ->
+            Column(
+                modifier = modifier
+                    .heightIn(max = contentMaxHeight)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (isPreviewMode) {
+                    EditorNoteRow(text = stringResource(R.string.oxide_ce_add_blocked_preview))
+                }
+                EditorActionRow(
+                    label = stringResource(R.string.generic_rename),
+                    hint = layer.name,
+                    enabled = canEdit,
+                    onClick = { renaming = !renaming },
+                )
+                if (renaming && canEdit) {
+                    EditorLayerRenameField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        onConfirm = {
+                            onRename(draft)
+                            renaming = false
+                        },
+                        onDismiss = { renaming = false },
+                    )
+                }
+                EditorActionRow(
+                    label = stringResource(R.string.generic_copy),
+                    hint = layer.name,
+                    enabled = canEdit,
+                    onClick = onDuplicate,
+                )
+                EditorSwitchRow(
+                    label = stringResource(
+                        if (layer.editorHide) R.string.oxide_ce_show_layer
+                        else R.string.oxide_ce_hide_layer
+                    ),
+                    hint = stringResource(R.string.oxide_ce_layer_hidden).takeIf { layer.editorHide },
+                    checked = !layer.editorHide,
+                    enabled = canEdit,
+                    onCheckedChange = { onToggleVisibility() },
+                )
+                EditorActionRow(
+                    label = stringResource(R.string.control_editor_layers_attribute),
+                    enabled = canEdit,
+                    onClick = onAttributes,
+                )
+                EditorActionRow(
+                    label = stringResource(R.string.generic_delete),
+                    enabled = canEdit,
+                    onClick = onDelete,
+                )
+            }
+        },
+    )
+}
+
+/** 改名那一行的行内输入：确认即写回，取消即收起 */
+@Composable
+private fun EditorLayerRenameField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val metrics = editorMetrics()
+    val confirmText = stringResource(R.string.generic_confirm)
+    val closeText = stringResource(R.string.generic_close)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(metrics.fieldHeight)
+                .clip(Oxide.RadiusControl)
+                .background(Oxide.BgButton)
+                .border(BorderStroke(1.dp, Oxide.Line), Oxide.RadiusControl)
+                .padding(horizontal = 7.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = Oxide.Type.Body.copy(color = Oxide.Fg),
+                cursorBrush = SolidColor(Oxide.FgMuted),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { onConfirm() }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        EditorMiniButton(text = "✓", description = confirmText, enabled = true, onClick = onConfirm)
+        Spacer(Modifier.width(4.dp))
+        EditorMiniButton(text = "✕", description = closeText, enabled = true, onClick = onDismiss)
     }
 }
 

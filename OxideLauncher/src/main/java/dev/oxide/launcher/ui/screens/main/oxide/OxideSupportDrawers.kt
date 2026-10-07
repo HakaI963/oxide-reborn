@@ -72,6 +72,7 @@ import dev.oxide.launcher.game.path.GamePath
 import dev.oxide.launcher.game.version.installed.VersionsManager
 import dev.oxide.launcher.game.path.GamePathManager
 import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
+import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.PathManager
@@ -94,6 +95,7 @@ import dev.oxide.launcher.ui.components.SimpleEditDialog
 import dev.oxide.launcher.ui.control.HotbarRule
 import dev.oxide.launcher.ui.control.gamepad.JoystickMode
 import dev.oxide.launcher.ui.resolveAndroidString
+import dev.oxide.launcher.ui.screens.content.settings.RendererV2ConfigDialog
 import dev.oxide.launcher.ui.theme.ColorThemeType
 import dev.oxide.launcher.ui.theme.Oxide
 import dev.oxide.launcher.utils.customResolutionRange
@@ -939,6 +941,18 @@ fun OxideRendererDrawer(
                 val renderers = remember(pluginToken) { Renderers.getRenderers() }
                 val drivers = remember(pluginToken) { DriverPluginManager.getDriverList() }
 
+                // 当前选中的正是新一代渲染器插件、并且它自带可配环境变量时，
+                // 才给一行"配置"入口：对话框直接复用旧渲染器设置页那一只
+                // RendererV2ConfigDialog，开关状态只活在这个抽屉里，不需要新管线。
+                // 条件不满足时这一行不存在，而不是留一枚点开空表的按钮。
+                val storedRendererId = AllSettings.renderer.state
+                val v2PluginEnvUnits = remember(storedRendererId, renderers) {
+                    renderers.filterIsInstance<RendererV2Data>()
+                        .find { it.getUniqueIdentifier() == storedRendererId }
+                        ?.env?.getConfigurableUnits()?.takeIf { it.isNotEmpty() }
+                }
+                var showV2ConfigDialog by remember { mutableStateOf(false) }
+
                 OxideSettingsGroup(
                     title = stringResource(R.string.oxide_set_section_renderer),
                     metrics = metrics,
@@ -946,7 +960,9 @@ fun OxideRendererDrawer(
                     if (renderers.isEmpty()) {
                         OxideEmptyState(title = stringResource(R.string.oxide_set_no_renderer))
                     } else {
-                        val storedRenderer = AllSettings.renderer.state
+                        // 与上面的 v2PluginEnvUnits 读的是同一个值：组合里对同一设置的
+                        // 两次 .state 读取会各自订阅，这里只读一次，下面都用它。
+                        val storedRenderer = storedRendererId
                         val rendererResolved = oxideStoredSelectionResolves(
                             storedId = storedRenderer,
                             candidates = renderers.map { it.getUniqueIdentifier() },
@@ -968,6 +984,16 @@ fun OxideRendererDrawer(
                             placeholder = storedRenderer,
                             nameOf = { it.getRendererName() },
                             onSelect = { AllSettings.renderer.save(it.getUniqueIdentifier()) },
+                        )
+                    }
+
+                    // 挂在所选渲染器名下：点的就是当前这一档插件自己的环境变量，
+                    // 而不是插件下载页。没有可配项的插件不会看到这一行。
+                    if (v2PluginEnvUnits != null) {
+                        OxideActionRow(
+                            label = stringResource(R.string.settings_renderer_config_title),
+                            hint = stringResource(R.string.oxide_set_renderer_env_configure_detail),
+                            onClick = { showV2ConfigDialog = true },
                         )
                     }
 
@@ -1023,6 +1049,15 @@ fun OxideRendererDrawer(
                             pluginToken++
                             bridge.openLink(URL_GITHUB_DRIVER_PLUGINS)
                         },
+                    )
+                }
+
+                // 新一代插件的环境变量表：与抽屉里其余对话框同一套写法，
+                // 状态收起时对话框跟着消失，不需要额外的管线。
+                if (showV2ConfigDialog && v2PluginEnvUnits != null) {
+                    RendererV2ConfigDialog(
+                        units = v2PluginEnvUnits,
+                        onDismissRequest = { showV2ConfigDialog = false },
                     )
                 }
             }

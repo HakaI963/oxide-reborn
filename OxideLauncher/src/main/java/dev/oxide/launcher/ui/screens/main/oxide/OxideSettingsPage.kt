@@ -41,7 +41,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,9 +59,6 @@ import dev.oxide.launcher.R
 import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.game.download.assets.platform.Platform
-import dev.oxide.launcher.game.plugin.natives.NativePlugin
-import dev.oxide.launcher.game.plugin.natives.NativePluginManager
-import dev.oxide.launcher.path.URL_GITHUB_NATIVE_LIB_PLUGINS
 import dev.oxide.launcher.path.URL_PROJECT
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.enums.ActionMenuSide
@@ -426,7 +422,7 @@ internal fun OxideSettingsPanel(
             OxideSettingsCategory.Game -> GameCategory(metrics, onNavigate)
             // 控制这一类整块都在面板里展开，见 OxideControlsPanel
             OxideSettingsCategory.Controls -> OxideControlsPanel(metrics = metrics, bridge = bridge)
-            OxideSettingsCategory.Downloads -> DownloadsCategory(metrics, bridge, onNavigate)
+            OxideSettingsCategory.Downloads -> DownloadsCategory(metrics, onNavigate)
             OxideSettingsCategory.Appearance -> AppearanceCategory(metrics)
             else -> {
                 val drawer = category.drawer()
@@ -565,6 +561,14 @@ private fun GeneralCategory(metrics: OxideMetrics, bridge: OxideLauncherBridge) 
             hint = stringResource(R.string.settings_launcher_festivals_effects_summary),
             checked = AllSettings.launcherFestivalEffects.state,
             onCheckedChange = { AllSettings.launcherFestivalEffects.save(it) },
+        )
+        // 游戏跑够 100 次后弹的那张支持提醒（见 MainActivity 的 showSponsorship 分支）：
+        // 关掉就是"以后都别再问"，打开就恢复提醒，没有第三种状态。
+        OxideToggleRow(
+            label = stringResource(R.string.oxide_set_show_sponsor_tip),
+            hint = stringResource(R.string.oxide_set_show_sponsor_tip_detail),
+            checked = AllSettings.showSponsorship.state,
+            onCheckedChange = { AllSettings.showSponsorship.save(it) },
         )
         OxideToggleRow(
             label = stringResource(R.string.oxide_set_task_menu_expanded),
@@ -710,14 +714,10 @@ private fun GameCategory(metrics: OxideMetrics, onNavigate: (OxidePage) -> Unit)
 @Composable
 private fun DownloadsCategory(
     metrics: OxideMetrics,
-    bridge: OxideLauncherBridge,
     onNavigate: (OxidePage) -> Unit,
 ) {
     // 镜像源只是为了改善中国大陆内陆的网络环境而存在的，境外开放反而会拖慢下载
     val isChinaMainland = remember { isChinaMainland() }
-    var pluginToken by remember { mutableIntStateOf(0) }
-    val nativePlugins = remember(pluginToken) { NativePluginManager.getPlugins() }
-    val disabledPlugins = AllSettings.disableNativeLibPlugins.state
 
     var index = 0
 
@@ -746,36 +746,9 @@ private fun DownloadsCategory(
         }
     }
 
-    Group(
-        index = index++,
-        title = stringResource(R.string.oxide_set_section_plugins),
-        metrics = metrics,
-    ) {
-        if (nativePlugins.isEmpty()) {
-            OxideEmptyState(title = stringResource(R.string.oxide_set_no_plugin))
-        } else {
-            nativePlugins.forEach { plugin ->
-                NativeLibPluginRow(
-                    plugin = plugin,
-                    disabled = plugin.packageName in disabledPlugins,
-                    onToggle = { enabled ->
-                        val current = AllSettings.disableNativeLibPlugins.state
-                        AllSettings.disableNativeLibPlugins.save(
-                            if (enabled) current - plugin.packageName else current + plugin.packageName
-                        )
-                    },
-                )
-            }
-        }
-        OxideActionRow(
-            label = stringResource(R.string.oxide_set_action_dl_native_lib_plugin),
-            hint = stringResource(R.string.oxide_set_action_dl_native_lib_plugin_detail),
-            onClick = {
-                pluginToken++
-                bridge.openLink(URL_GITHUB_NATIVE_LIB_PLUGINS)
-            },
-        )
-    }
+    // 原生库插件在这里没有分组：开关仍在旧游戏设置页里（disableNativeLibPlugins
+    // 的键与运行时读取都没动），关于面板也还列着插件项目；这里原来那一节只剩一个空态
+    // 加一个外部链接，按反馈拿掉，剩下的就是镜像、搜索默认与浏览三节。
 
     Group(
         index = index++,
@@ -829,20 +802,6 @@ private fun DownloadsCategory(
     }
 }
 
-@Composable
-private fun NativeLibPluginRow(
-    plugin: NativePlugin,
-    disabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
-    OxideToggleRow(
-        label = plugin.displayName,
-        hint = stringResource(R.string.oxide_set_plugin_from, plugin.appName),
-        checked = !disabled,
-        onCheckedChange = onToggle,
-    )
-}
-
 // ---------------------------------------------------------------------------
 // 分类：外观
 // ---------------------------------------------------------------------------
@@ -864,6 +823,12 @@ private fun NativeLibPluginRow(
  * 如果这一页连"清掉它"都没有，那张图就永远留在启动器上，而界面上再没有一处
  * 能把它拿掉——那就是把设置变成了只能进不能出的单向门。所以这一行**只在真的
  * 有壁纸时**出现（见 `oxideWallpaperClearVisible`），平时不留一枚点不动的灰行。
+ *
+ * 明确不恢复的行：v1.9.0 按用户要求从这一页拿走的那几项（`launcherColorTheme`、
+ * `launcherCustomColor`、`launcherCustomPaletteStyle`、`launcherBackgroundOpacity`、
+ * `videoBackgroundVolume`、`backgroundBlur`、`backgroundBlurType`）不再加回来——
+ * “补齐隐藏选项”的要求不覆盖那次移除。键本身仍然在 `AllSettings` 里，
+ * 随时能加回来，只是现在不加。
  */
 @Composable
 private fun AppearanceCategory(

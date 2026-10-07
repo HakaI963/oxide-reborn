@@ -130,6 +130,86 @@ fun editorAddBlocker(
 
 fun editorAllowsAddingControls(blocker: EditorAddBlocker): Boolean = blocker == EditorAddBlocker.None
 
+// ---------------------------------------------------------------------------
+// 菜单：一次只做一件事
+// ---------------------------------------------------------------------------
+
+/**
+ * 编辑器菜单里一次只能打开的一张小页
+ *
+ * 停靠面板本身只负责"选东西"：改名、删层、新建哪一种这类"做决定"的动作
+ * 各自住在自己的一张页里，一次只打开一张。关掉之后回到面板，面板的状态
+ * 原样不动，因此不存在"两张页叠在一起抢触摸"的情况。
+ */
+enum class EditorMenuSheet {
+    /** 什么都没打开 */
+    None,
+
+    /** 新建控件的选择器：按键 / 文本框 / 摇杆三选一 */
+    AddPicker,
+
+    /** 某一个控制层的更多操作：改名、复制、显隐、删除 */
+    LayerActions,
+}
+
+/**
+ * 新建选择器里三个选项各自能不能点
+ *
+ * 三个选项共用同一道闸门：[editorAddBlocker] 说能建，三个就都能点；
+ * 说不能建，三个就一起灰掉，并共用同一句原因。因此这里只返回一道结果，
+ * 而不是给每个选项各算一遍——三个选项的可用性永远是一致的。
+ */
+fun editorAddPickerBlocker(
+    layerCount: Int,
+    hasSelectedLayer: Boolean,
+    isPreviewMode: Boolean,
+): EditorAddBlocker = editorAddBlocker(
+    layerCount = layerCount,
+    hasSelectedLayer = hasSelectedLayer,
+    isPreviewMode = isPreviewMode,
+)
+
+/** 选择器打开时，当前这一步能不能真的落下一个新控件 */
+fun editorAddPickerAllows(blocker: EditorAddBlocker): Boolean =
+    editorAllowsAddingControls(blocker)
+
+// ---------------------------------------------------------------------------
+// 宏重复与按键延迟：编辑器口径的纯换算
+// ---------------------------------------------------------------------------
+
+/**
+ * 宏重复有没有打开
+ *
+ * 数据层用同一个字段同时表达开关与间隔：0 就是关，大于 0 就是开。
+ * 因此"开着"这件事不需要另立一个布尔量，读字段是否大于 0 即可。
+ */
+fun editorMacroEnabled(macroIntervalMs: Long): Boolean = macroIntervalMs > 0L
+
+/**
+ * 拨动宏重复的开关之后字段应当变成的值
+ *
+ * 打开时给下界而不是 0：0 就是"关闭"，拨到开还留在 0 等于开了一个空档。
+ * 关闭时回到 0，而不是留在上一次的间隔上。
+ *
+ * 下界与上界的数值由调用方按数据层的常量传进来，
+ * 这里只负责"开给下界、关给零"这一条分支。
+ */
+fun editorMacroToggledValue(
+    checked: Boolean,
+    minIntervalMs: Long,
+): Long = if (checked) minIntervalMs.coerceAtLeast(1L) else 0L
+
+/** 宏重复间隔的取值区间，供滑杆与输入行共用 */
+fun editorMacroIntervalRange(minIntervalMs: Long, maxIntervalMs: Long): ClosedFloatingPointRange<Float> {
+    val low = minIntervalMs.coerceAtMost(maxIntervalMs).toFloat()
+    val high = maxIntervalMs.coerceAtLeast(minIntervalMs).toFloat()
+    return low..high
+}
+
+/** 按键延迟的取值区间（毫秒），供滑杆与输入行共用 */
+fun editorClickDelayRange(maxDelayMs: Int): ClosedFloatingPointRange<Float> =
+    0f..maxDelayMs.coerceAtLeast(0).toFloat()
+
 /**
  * 把"当前选中的控制层"对齐到仍然存在的那一层，返回应当被选中的 uuid
  *

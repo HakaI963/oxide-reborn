@@ -42,6 +42,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -84,6 +86,7 @@ import dev.oxide.launcher.game.account.yggdrasil.isUsing
 import dev.oxide.launcher.path.URL_MINECRAFT_PURCHASE
 import dev.oxide.launcher.ui.androidText
 import dev.oxide.launcher.ui.components.ImePanContainer
+import dev.oxide.launcher.ui.components.ModelAnimation
 import dev.oxide.launcher.ui.components.SkinPreview3D
 import dev.oxide.launcher.ui.resolveAndroidString
 import dev.oxide.launcher.ui.screens.NormalNavKey
@@ -1038,76 +1041,95 @@ private fun OxideAccountSheetHost(
                 }
                 OxideSecDivider()
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(all = metrics.cardGap),
-                    verticalArrangement = Arrangement.spacedBy(metrics.secGroupGap),
-                ) {
-                    when (val target = sheet) {
-                        AccountSheet.None -> Unit
-
-                        AccountSheet.Menu -> OxideAccountMenuSheet(
+                // 换肤菜单是固定的左右两栏（预览在左、控制在右），整张单子不滚动：
+                // 只有右侧控制栏自己在内容超高时滚动，因此这里不能套 verticalScroll，
+                // 否则拖拽旋转模型的手势会被外层滚动吃掉。其余浮层保持原来的滚动行为。
+                val skinTarget = sheet as? AccountSheet.Skin
+                if (skinTarget != null) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(all = metrics.cardGap),
+                    ) {
+                        OxideSkinSheet(
                             metrics = metrics,
-                            authServers = authServers,
-                            onMicrosoft = onMicrosoft,
-                            onNavigate = onNavigate,
-                            onDeleteServer = onDeleteServer,
-                        )
-
-                        AccountSheet.Offline -> OxideOfflineAccountSheet(
-                            metrics = metrics,
-                            onDismiss = onDismiss,
-                            onCreate = onOffline,
-                            openLink = openLink,
-                        )
-
-                        is AccountSheet.ServerLogin -> OxideServerLoginSheet(
-                            metrics = metrics,
-                            server = target.server,
-                            onDismiss = onDismiss,
-                            onLogin = { email, password ->
-                                onServerLogin(target.server, email, password)
-                            },
-                            openLink = openLink,
-                        )
-
-                        AccountSheet.AddServer -> OxideAddServerSheet(
-                            metrics = metrics,
-                            onDismiss = onDismiss,
-                            onAdd = onAddServer,
-                        )
-
-                        is AccountSheet.PickRole -> OxidePickRoleSheet(
-                            operation = target.operation,
-                            onPick = { profile -> onPickRole(target.operation, profile) },
-                            onDismiss = onDismiss,
-                        )
-
-                        is AccountSheet.Relogin -> OxideReloginSheet(
-                            metrics = metrics,
-                            account = target.account,
-                            onDismiss = onDismiss,
-                            onRelogin = { password -> onRelogin(target.account, password) },
-                        )
-
-                        is AccountSheet.Skin -> OxideSkinSheet(
-                            metrics = metrics,
-                            account = target.account,
+                            account = skinTarget.account,
                             pendingSkin = pendingSkin,
                             importingSkin = importingSkin,
                             capes = capes,
                             onDismiss = onDismiss,
                             onSkinPicked = onSkinPicked,
                             onSkinModel = onSkinModel,
-                            onApplySkin = { file, model -> onApplySkin(target.account, file, model) },
-                            onResetSkin = { onResetSkin(target.account) },
-                            onFetchCapes = { onFetchCapes(target.account) },
-                            onApplyCape = { cape -> onApplyCape(target.account, cape) },
-                            onImportLocalCape = { uri -> onImportLocalCape(target.account, uri) },
+                            onApplySkin = { file, model ->
+                                onApplySkin(skinTarget.account, file, model)
+                            },
+                            onResetSkin = { onResetSkin(skinTarget.account) },
+                            onFetchCapes = { onFetchCapes(skinTarget.account) },
+                            onApplyCape = { cape -> onApplyCape(skinTarget.account, cape) },
+                            onImportLocalCape = { uri ->
+                                onImportLocalCape(skinTarget.account, uri)
+                            },
                         )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(all = metrics.cardGap),
+                        verticalArrangement = Arrangement.spacedBy(metrics.secGroupGap),
+                    ) {
+                        when (val target = sheet) {
+                            AccountSheet.None -> Unit
+
+                            AccountSheet.Menu -> OxideAccountMenuSheet(
+                                metrics = metrics,
+                                authServers = authServers,
+                                onMicrosoft = onMicrosoft,
+                                onNavigate = onNavigate,
+                                onDeleteServer = onDeleteServer,
+                            )
+
+                            AccountSheet.Offline -> OxideOfflineAccountSheet(
+                                metrics = metrics,
+                                onDismiss = onDismiss,
+                                onCreate = onOffline,
+                                openLink = openLink,
+                            )
+
+                            is AccountSheet.ServerLogin -> OxideServerLoginSheet(
+                                metrics = metrics,
+                                server = target.server,
+                                onDismiss = onDismiss,
+                                onLogin = { email, password ->
+                                    onServerLogin(target.server, email, password)
+                                },
+                                openLink = openLink,
+                            )
+
+                            AccountSheet.AddServer -> OxideAddServerSheet(
+                                metrics = metrics,
+                                onDismiss = onDismiss,
+                                onAdd = onAddServer,
+                            )
+
+                            is AccountSheet.PickRole -> OxidePickRoleSheet(
+                                operation = target.operation,
+                                onPick = { profile -> onPickRole(target.operation, profile) },
+                                onDismiss = onDismiss,
+                            )
+
+                            is AccountSheet.Relogin -> OxideReloginSheet(
+                                metrics = metrics,
+                                account = target.account,
+                                onDismiss = onDismiss,
+                                onRelogin = { password -> onRelogin(target.account, password) },
+                            )
+
+                            is AccountSheet.Skin -> Unit
+                        }
                     }
                 }
             }
@@ -1510,11 +1532,13 @@ private fun OxideReloginSheet(
 }
 
 /**
- * 皮肤与披风
+ * 皮肤与披风：固定的左右两栏
  *
- * 第一格是 3D 预览（皮肤与披风都在里面画），其余是导入 PNG、选手臂型号、
- * 抓取微软披风、导入本地披风、重置皮肤，全部走 [AccountManageViewModel] 的
- * 同一个意图，因此文件校验、推荐型号与上传逻辑与旧界面完全一致。
+ * 左格只放 3D 预览（皮肤与披风都在里面画），占满整格且不滚动；
+ * 右栏是导入 PNG、手臂型号、抓取微软披风、导入本地披风、重置皮肤，
+ * 内容超高时只有右栏自己滚动，左边的模型原地不动。
+ * 所有动作仍然走 [AccountManageViewModel] 的同一个意图，因此文件校验、
+ * 推荐型号与上传逻辑与旧界面完全一致。
  *
  * 预览本身是既有的 skinview3d WebView（`SkinPreview3D`），不另写一份渲染：
  * 旋转、待机动画与披风驱动它都已经有了，为同一件事写第二套模型渲染器
@@ -1589,138 +1613,56 @@ private fun OxideSkinSheet(
         savedCapeExists = wardrobe.capePresent,
     )
 
-    OxideSection(title = stringResource(R.string.account_change_skin)) {
-        OxideSurface(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(
-                horizontal = metrics.cardGap,
-                vertical = metrics.secRowGap,
-            ),
-        ) {
-            Column {
-                // 3D 预览：皮肤和披风都在这一格里看。
-                // 导入 PNG 之后、按下 Apply 之前它就跟手里那一份走（见
-                // [oxideSkinPreviewSource]），点手臂型号也立刻重画，所以"选了但
-                // 看不到"这件事在这里消失。
-                SkinPreview3D(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(oxideSkinPreviewHeight(metrics.cardMinWidth.value.toInt()).dp)
-                        .clip(Oxide.RadiusControl),
-                    skinFile = preview.skinFile,
-                    capeFile = preview.capeFile,
-                    modelType = preview.modelType,
-                    // 抽屉的内容在一个纵向滚动容器里，WebView 一旦吃下拖拽就滚不动
-                    // 这一格（TouchGateLayout 也会把触摸整个拦掉），所以这里只作展示：
-                    // 视角固定在正面偏左，看皮肤与披风已经够了
-                    interactionEnabled = false,
-                )
-                OxideSecDivider()
-                OxideSettingRow(
-                    label = if (importingSkin) {
-                        stringResource(R.string.oxide_sec_accounts_skin_importing)
-                    } else {
-                        stringResource(R.string.oxide_sec_accounts_import_skin)
-                    },
-                    hint = (pendingSkin as? ChangeSkin.ChangeSkinData)?.cacheFile?.name,
-                    enabled = !importingSkin,
-                    onClick = { skinPicker.launch(arrayOf("image/png")) },
-                )
-                if (pendingSkin is ChangeSkin.ChangeSkinData) {
-                    OxideSecDivider()
-                    Text(
-                        text = stringResource(R.string.oxide_sec_accounts_arm_style),
-                        color = Oxide.FgDim,
-                        fontSize = Oxide.Type.MicroLabel.fontSize,
-                        lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                        modifier = Modifier.padding(horizontal = metrics.secControlPadding),
-                    )
-                    OxideSecPickerRow(
-                        label = stringResource(R.string.account_change_skin_arm_wide),
-                        selected = pendingSkin.skinModel == SkinModelType.STEVE,
-                        onClick = {
-                            onSkinModel(pendingSkin.copy(skinModel = SkinModelType.STEVE))
-                        },
-                    )
-                    OxideSecPickerRow(
-                        label = stringResource(R.string.account_change_skin_arm_slim),
-                        selected = pendingSkin.skinModel == SkinModelType.ALEX,
-                        onClick = {
-                            onSkinModel(pendingSkin.copy(skinModel = SkinModelType.ALEX))
-                        },
-                    )
-                    OxideSecDivider()
-                    OxideButton(
-                        text = stringResource(R.string.oxide_sec_accounts_apply_skin),
-                        onClick = { onApplySkin(pendingSkin.cacheFile, pendingSkin.skinModel) },
-                        tone = OxideButtonTone.Primary,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (account.isLocalAccount() && account.hasSkinFile) {
-                    OxideSecDivider()
-                    OxideSettingRow(
-                        label = stringResource(R.string.oxide_sec_accounts_reset_skin),
-                        onClick = onResetSkin,
-                    )
-                }
-            }
-        }
+    // 预览自己的三个开关，换账号就回到默认视角，看的还是新账号的皮肤。
+    // 藏披风只决定送给预览的那一份是不是 null，落盘的披风文件原封不动。
+    var capeHidden by remember(account.uniqueUUID) { mutableStateOf(false) }
+    var previewAnimation by remember(account.uniqueUUID) { mutableStateOf(ModelAnimation.NewIdle) }
+    var previewDistance by remember(account.uniqueUUID) {
+        mutableStateOf(OxideSkinPreviewDistanceDefault)
     }
+    var previewResetTick by remember(account.uniqueUUID) { mutableStateOf(0) }
+    var animationPickerOpen by remember { mutableStateOf(false) }
 
-    // 披风：微软账号从服务端选；本地与 Ely.by 账号走本地文件
-    when {
-        account.isMicrosoftAccount() -> OxideSection(
-            title = stringResource(R.string.account_change_cape),
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(metrics.cardGap),
+    ) {
+        // 左格：3D 预览占满整格，不滚动。
+        // 导入 PNG 之后、按下 Apply 之前它就跟手里那一份走（见
+        // [oxideSkinPreviewSource]），点手臂型号也立刻重画，所以"选了但
+        // 看不到"这件事在这里消失。
+        OxideSurface(
+            modifier = Modifier
+                .weight(OxideSkinTwoPanePreviewWeight)
+                .fillMaxHeight(),
+            contentPadding = PaddingValues(all = metrics.secRowGap),
         ) {
-            OxideSurface(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(
-                    horizontal = metrics.cardGap,
-                    vertical = metrics.secRowGap,
-                ),
-            ) {
-                Column {
-                    OxideSettingRow(
-                        label = stringResource(R.string.oxide_sec_accounts_fetch_capes),
-                        hint = if (fetchingCapes) {
-                            stringResource(R.string.oxide_sec_accounts_capes_fetching)
-                        } else {
-                            stringResource(R.string.account_change_cape_fetch_all)
-                        },
-                        enabled = !fetchingCapes,
-                        onClick = { onFetchCapes(account) },
-                    )
-                    if (capes.isEmpty() && !fetchingCapes) {
-                        Text(
-                            text = stringResource(R.string.oxide_sec_accounts_capes_empty),
-                            color = Oxide.FgFaint,
-                            fontSize = Oxide.Type.MicroLabel.fontSize,
-                            lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = metrics.secControlPadding),
-                        )
-                    } else {
-                        OxideSecPickerRow(
-                            label = stringResource(R.string.oxide_sec_accounts_cape_none_option),
-                            selected = capes.findUsing() == null,
-                            onClick = { onApplyCape(EmptyCape) },
-                        )
-                        capes.forEach { cape ->
-                            OxideSecPickerRow(
-                                label = capeName(cape),
-                                selected = cape.isUsing(),
-                                onClick = { onApplyCape(cape) },
-                            )
-                        }
-                    }
-                }
-            }
+            SkinPreview3D(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(Oxide.RadiusControl),
+                skinFile = preview.skinFile,
+                capeFile = preview.capeFile.takeUnless { capeHidden },
+                modelType = preview.modelType,
+                animation = previewAnimation,
+                distance = previewDistance,
+                resetViewKey = previewResetTick,
+                // 外层整张单子不再滚动，这一格的手势不会被外层吃掉：
+                // 拖拽转任意角度看模型，双指缩放推拉相机
+                interactionEnabled = true,
+            )
         }
 
-        account.isLocalAccount() || account.isElyByAccount() ->
-            OxideSection(title = stringResource(R.string.account_change_cape)) {
+        // 右栏：导入、型号与披风。内容超高时只有这一栏滚动，
+        // 左边的模型原地不动，披风选项不会再被裁出视野。
+        Column(
+            modifier = Modifier
+                .weight(OxideSkinTwoPaneControlsWeight)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(metrics.secGroupGap),
+        ) {
+            OxideSection(title = stringResource(R.string.account_change_skin)) {
                 OxideSurface(
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(
@@ -1728,23 +1670,249 @@ private fun OxideSkinSheet(
                         vertical = metrics.secRowGap,
                     ),
                 ) {
-                    OxideSettingRow(
-                        label = stringResource(R.string.oxide_sec_accounts_import_cape),
-                        hint = stringResource(R.string.account_change_cape_import),
-                        onClick = { localCapePicker.launch(arrayOf("image/png")) },
-                    )
+                    Column {
+                        OxideSettingRow(
+                            label = if (importingSkin) {
+                                stringResource(R.string.oxide_sec_accounts_skin_importing)
+                            } else {
+                                stringResource(R.string.oxide_sec_accounts_import_skin)
+                            },
+                            hint = (pendingSkin as? ChangeSkin.ChangeSkinData)?.cacheFile?.name,
+                            enabled = !importingSkin,
+                            onClick = { skinPicker.launch(arrayOf("image/png")) },
+                        )
+                        if (pendingSkin is ChangeSkin.ChangeSkinData) {
+                            OxideSecDivider()
+                            Text(
+                                text = stringResource(R.string.oxide_sec_accounts_arm_style),
+                                color = Oxide.FgDim,
+                                fontSize = Oxide.Type.MicroLabel.fontSize,
+                                lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                                modifier = Modifier.padding(
+                                    horizontal = metrics.secControlPadding
+                                ),
+                            )
+                            OxideSecPickerRow(
+                                label = stringResource(R.string.account_change_skin_arm_wide),
+                                selected = pendingSkin.skinModel == SkinModelType.STEVE,
+                                onClick = {
+                                    onSkinModel(
+                                        pendingSkin.copy(skinModel = SkinModelType.STEVE)
+                                    )
+                                },
+                            )
+                            OxideSecPickerRow(
+                                label = stringResource(R.string.account_change_skin_arm_slim),
+                                selected = pendingSkin.skinModel == SkinModelType.ALEX,
+                                onClick = {
+                                    onSkinModel(
+                                        pendingSkin.copy(skinModel = SkinModelType.ALEX)
+                                    )
+                                },
+                            )
+                            OxideSecDivider()
+                            OxideButton(
+                                text = stringResource(R.string.oxide_sec_accounts_apply_skin),
+                                onClick = {
+                                    onApplySkin(pendingSkin.cacheFile, pendingSkin.skinModel)
+                                },
+                                tone = OxideButtonTone.Primary,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        if (account.isLocalAccount() && account.hasSkinFile) {
+                            OxideSecDivider()
+                            OxideSettingRow(
+                                label = stringResource(R.string.oxide_sec_accounts_reset_skin),
+                                onClick = onResetSkin,
+                            )
+                        }
+                    }
                 }
             }
 
-        else -> Unit
-    }
+            // 披风：微软账号从服务端选；本地与 Ely.by 账号走本地文件
+            when {
+                account.isMicrosoftAccount() -> OxideSection(
+                    title = stringResource(R.string.account_change_cape),
+                ) {
+                    OxideSurface(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(
+                            horizontal = metrics.cardGap,
+                            vertical = metrics.secRowGap,
+                        ),
+                    ) {
+                        Column {
+                            OxideSettingRow(
+                                label = stringResource(
+                                    R.string.oxide_sec_accounts_fetch_capes
+                                ),
+                                hint = if (fetchingCapes) {
+                                    stringResource(
+                                        R.string.oxide_sec_accounts_capes_fetching
+                                    )
+                                } else {
+                                    stringResource(R.string.account_change_cape_fetch_all)
+                                },
+                                enabled = !fetchingCapes,
+                                onClick = { onFetchCapes(account) },
+                            )
+                            if (capes.isEmpty() && !fetchingCapes) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.oxide_sec_accounts_capes_empty
+                                    ),
+                                    color = Oxide.FgFaint,
+                                    fontSize = Oxide.Type.MicroLabel.fontSize,
+                                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(
+                                        horizontal = metrics.secControlPadding
+                                    ),
+                                )
+                            } else {
+                                OxideSecPickerRow(
+                                    label = stringResource(
+                                        R.string.oxide_sec_accounts_cape_none_option
+                                    ),
+                                    selected = capes.findUsing() == null,
+                                    onClick = { onApplyCape(EmptyCape) },
+                                )
+                                capes.forEach { cape ->
+                                    OxideSecPickerRow(
+                                        label = capeName(cape),
+                                        selected = cape.isUsing(),
+                                        onClick = { onApplyCape(cape) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
-    OxideButton(
-        text = stringResource(R.string.generic_close),
-        onClick = onDismiss,
-        tone = OxideButtonTone.Ghost,
-        modifier = Modifier.fillMaxWidth(),
-    )
+                account.isLocalAccount() || account.isElyByAccount() ->
+                    OxideSection(title = stringResource(R.string.account_change_cape)) {
+                        OxideSurface(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(
+                                horizontal = metrics.cardGap,
+                                vertical = metrics.secRowGap,
+                            ),
+                        ) {
+                            OxideSettingRow(
+                                label = stringResource(
+                                    R.string.oxide_sec_accounts_import_cape
+                                ),
+                                hint = stringResource(R.string.account_change_cape_import),
+                                onClick = {
+                                    localCapePicker.launch(arrayOf("image/png"))
+                                },
+                            )
+                        }
+                    }
+
+                else -> Unit
+            }
+
+            // 藏披风：只决定预览里画不画这一份，落盘文件与服务端的选择原封不动，
+            // 关掉开关披风立刻回来，不需要重新导入或重新抓取。
+            OxideSurface(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(
+                    horizontal = metrics.cardGap,
+                    vertical = metrics.secRowGap,
+                ),
+            ) {
+                OxideSettingRow(
+                    label = stringResource(R.string.oxide_sec_accounts_cape_none_option),
+                    trailing = {
+                        OxideToggle(
+                            checked = capeHidden,
+                            onCheckedChange = { capeHidden = it },
+                        )
+                    },
+                    onClick = { capeHidden = !capeHidden },
+                )
+            }
+
+            // 更多：待机动画、缩放与视角复位。改的都是预览自己的状态，
+            // 不碰皮肤与披风文件，也不发任何账号意图。
+            OxideSection(title = stringResource(R.string.generic_more)) {
+                OxideSurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(
+                        horizontal = metrics.cardGap,
+                        vertical = metrics.secRowGap,
+                    ),
+                ) {
+                    Column {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OxideSettingRow(
+                                label = stringResource(
+                                    R.string.download_assets_category_animated
+                                ),
+                                value = previewAnimation.name,
+                                onClick = { animationPickerOpen = true },
+                            )
+                            DropdownMenu(
+                                expanded = animationPickerOpen,
+                                onDismissRequest = { animationPickerOpen = false },
+                            ) {
+                                ModelAnimation.entries.forEach { entry ->
+                                    DropdownMenuItem(
+                                        text = { Text(entry.name) },
+                                        onClick = {
+                                            previewAnimation = entry
+                                            animationPickerOpen = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        OxideSecDivider()
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(metrics.secRowGap),
+                        ) {
+                            OxideButton(
+                                text = "+",
+                                onClick = {
+                                    previewDistance =
+                                        oxideSkinPreviewZoomIn(previewDistance)
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                            OxideButton(
+                                text = "−",
+                                onClick = {
+                                    previewDistance =
+                                        oxideSkinPreviewZoomOut(previewDistance)
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        OxideSecDivider()
+                        OxideButton(
+                            text = stringResource(R.string.generic_reset),
+                            onClick = {
+                                previewDistance = OxideSkinPreviewDistanceDefault
+                                previewResetTick += 1
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            OxideButton(
+                text = stringResource(R.string.generic_close),
+                onClick = onDismiss,
+                tone = OxideButtonTone.Ghost,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }
 
 /** 披风名称：能对上内置资源就用内置资源，否则用服务端给的别名 */

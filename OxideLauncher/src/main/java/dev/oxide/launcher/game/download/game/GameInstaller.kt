@@ -25,9 +25,13 @@ import dev.oxide.launcher.context.GlobalContext
 import dev.oxide.launcher.coroutine.Task
 import dev.oxide.launcher.coroutine.TaskFlowExecutor
 import dev.oxide.launcher.coroutine.TaskLogOutput
+import dev.oxide.launcher.coroutine.TaskOutcome
+import dev.oxide.launcher.coroutine.TaskSystem
 import dev.oxide.launcher.coroutine.TitledTask
 import dev.oxide.launcher.coroutine.addTask
 import dev.oxide.launcher.coroutine.buildPhase
+import dev.oxide.launcher.coroutine.versionInstallTaskId
+import dev.oxide.launcher.coroutine.versionModifyTaskId
 import dev.oxide.launcher.game.addons.modloader.ModLoader
 import dev.oxide.launcher.game.addons.modloader.cleanroom.CleanroomVersion
 import dev.oxide.launcher.game.addons.modloader.fabriclike.FabricLikeVersion
@@ -99,6 +103,18 @@ class GameInstaller(
     val tasksFlow: StateFlow<List<TitledTask>> = taskExecutor.tasksFlow
 
     /**
+     * 这一次安装 / 修改在任务系统里登记到的 id
+     *
+     * 安装流程走的是自带的 `TaskFlowExecutor`，**不经过** `TaskSystem.submitTask`，
+     * 因此里面的原版下载、加载器下载、模组下载默认都不会出现在任务面板里。
+     * 这里按安装页的同一套路登记一行（Queued → Running → 收尾进历史），面板把它画在
+     * 下载中 / 已完成那一边。安装页已经为同一次安装登记过时 `trackExternalTask`
+     * 返回 null（同一个 id），此时这一行是 null，自家的 start/finish 全部跳过，
+     * 同一次安装在面板上永远只有一行。
+     */
+    private var trackedDownloadId: String? = null
+
+    /**
      * 安装 JVM 实时日志输出，仅在执行前台安装任务期间存在
      */
     val logOutput: StateFlow<TaskLogOutput?> = logOutputHolder.asStateFlow()
@@ -116,6 +132,11 @@ class GameInstaller(
 
     /**
      * 安装 Minecraft 游戏
+     *
+     * 登记进任务系统的那一行在真正开跑前就先占好（Queued，落在下载中），
+     * 阶段建好后推成 Running，装完 / 炸掉 / 发现已装过分别收尾。
+     * 下载行为本身一个字没动：这里只有登记、推进、收尾三个调用。
+     *
      * @param isRunning 正在运行中，阻止此次安装时
      * @param onInstalled 游戏已完成安装
      * @param onError 游戏安装失败
@@ -133,27 +154,47 @@ class GameInstaller(
             return
         }
 
+        trackedDownloadId = TaskSystem.trackExternalTask(
+            Task.runTask(
+                id = versionInstallTaskId(info.customVersionName),
+                // 这条任务不由任务系统执行（走的是自带的 TaskFlowExecutor），
+                // 所以这里只有一个空挂起函数；它永远不会被调用。
+                task = {},
+            ).apply {
+                updateTitle(androidText(R.string.oxide_tasks_version_install_title, info.customVersionName))
+            }
+        )
+
         taskExecutor.executePhasesAsync(
             onStart = {
+                trackedDownloadId?.let { TaskSystem.startTrackedTask(it) }
                 val tasks = try {
                     getTaskPhase()
                 } catch (_: GameAlreadyInstalledException) {
+                    finishTrackedDownload(TaskOutcome.Succeeded)
                     onGameAlreadyInstalled()
                     return@executePhasesAsync
                 }
                 taskExecutor.addPhases(tasks)
             },
             onComplete = {
+                finishTrackedDownload(TaskOutcome.Succeeded)
                 onInstalled(info.customVersionName)
             },
             onError = {
+                finishTrackedDownload(TaskOutcome.Failed)
                 onError(it)
+            },
+            onCancel = {
+                finishTrackedDownload(TaskOutcome.Cancelled)
             }
         )
     }
 
     /**
      * 修改已安装的版本：按当前 info 描述的 Minecraft 版本与加载器组合，原地重建该版本
+     *
+     * 与 [installGame] 同一套登记：先占 Queued，建好阶段推 Running，改完 / 炸掉收尾。
      * @param isRunning 正在运行中，阻止此次修改时
      * @param onModified 版本已完成修改
      * @param onError 版本修改失败
@@ -169,16 +210,31 @@ class GameInstaller(
             return
         }
 
+        trackedDownloadId = TaskSystem.trackExternalTask(
+            Task.runTask(
+                id = versionModifyTaskId(info.customVersionName),
+                task = {},
+            ).apply {
+                updateTitle(androidText(R.string.oxide_tasks_version_install_title, info.customVersionName))
+            }
+        )
+
         taskExecutor.executePhasesAsync(
             onStart = {
+                trackedDownloadId?.let { TaskSystem.startTrackedTask(it) }
                 val tasks = getModifyTaskPhase()
                 taskExecutor.addPhases(tasks)
             },
             onComplete = {
+                finishTrackedDownload(TaskOutcome.Succeeded)
                 onModified()
             },
             onError = {
+                finishTrackedDownload(TaskOutcome.Failed)
                 onError(it)
+            },
+            onCancel = {
+                finishTrackedDownload(TaskOutcome.Cancelled)
             }
         )
     }
@@ -589,6 +645,9 @@ class GameInstaller(
         clearTarget: Boolean = true
     ) {
         taskExecutor.cancel()
+        // 取消同样要收尾，否则这一条会永远停在下载中里；已经收尾过的 id 这里是 null，
+        // 安装页那一行（我们没登记过）也不动
+        finishTrackedDownload(TaskOutcome.Cancelled)
 
         if (clearTarget) {
             clearTargetClient()
@@ -600,6 +659,18 @@ class GameInstaller(
             GlobalContext.applicationContext.stopService(intent)
             JVMSocketServer.stop()
         }
+    }
+
+    /**
+     * 自家登记的那一行收尾，并把 id 置空
+     *
+     * 只有 `trackExternalTask` 真正登记成功（返回非 null）时这一行才是自家的；
+     * 安装页那一行我们碰都不碰。`finishTrackedTask` 对已经不在列表里的 id 本来就是
+     * no-op，这里的判空只是为了把 id 置空，避免下一次安装误收上一行的尾。
+     */
+    private fun finishTrackedDownload(outcome: TaskOutcome) {
+        trackedDownloadId?.let { TaskSystem.finishTrackedTask(it, outcome) }
+        trackedDownloadId = null
     }
 
     /**

@@ -18,12 +18,10 @@
 
 package dev.oxide.launcher.game.renderer
 
-import dev.oxide.launcher.game.renderer.renderers.FreedrenoRenderer
-import dev.oxide.launcher.game.renderer.renderers.GL4ESRenderer
-import dev.oxide.launcher.game.renderer.renderers.KopperZinkRenderer
-import dev.oxide.launcher.game.renderer.renderers.NGGL4ESRenderer
-import dev.oxide.launcher.game.renderer.renderers.PanfrostRenderer
-import dev.oxide.launcher.game.renderer.renderers.VirGLRenderer
+import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
+import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
+import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
+import dev.oxide.launcher.game.renderer.renderers.MojoZinkRenderer
 import dev.oxide.launcher.utils.logging.Logger
 
 private const val TAG = "Renderers"
@@ -48,12 +46,10 @@ object Renderers {
         }
 
         addRenderers(
-            NGGL4ESRenderer,
-            GL4ESRenderer,
-            KopperZinkRenderer,
-            VirGLRenderer,
-            FreedrenoRenderer,
-            PanfrostRenderer
+            CopperOxideRenderer,
+            LTWRenderer,
+            HolyGL4ESRenderer,
+            MojoZinkRenderer
         )
     }
 

@@ -17,8 +17,8 @@ handling, and a full instance/multiplayer tooling set.
   driver, Java runtime, isolation, custom info, and complete control layouts.
 * **Runtimes** — bundled OpenJDK 8 / 17 / 21 / 25 packs per ABI, plus external runtime import and
   automatic version picking.
-* **Renderers** — Krypton Wrapper (NG-GL4ES), GL4ES, Kopper Zink, VirGL, Freedreno (Adreno),
-  Panfrost (Mali) and downloadable renderer / driver / native plugins.
+* **Renderers** — Copper Oxide (MobileGlues, default), LTW, Mojo Zink, Holy GL4ES
+  and downloadable renderer / driver / native plugins.
 * **Input** — touch controls with an in-app editor, physical keyboard and mouse, gamepads
   (including SDL direct input), joysticks, gyroscope, and the in-game hotbar.
 * **Accounts** — Microsoft accounts (device-code login, token refresh, entitlement check),

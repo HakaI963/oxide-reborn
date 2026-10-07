@@ -18,109 +18,96 @@
 
 package dev.oxide.launcher.ui.screens.main.control_editor.edit_widget
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.navigation3.runtime.NavBackStack
-import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.ui.NavDisplay
+import dev.oxide.inputmap.keycodes.ControlEventKeyName
+import dev.oxide.inputmap.keycodes.ControlEventKeycode
+import dev.oxide.layercontroller.data.JOYSTICK_DEAD_ZONE_RANGE
+import dev.oxide.layercontroller.data.JOYSTICK_LOCK_THRESHOLD_RANGE
+import dev.oxide.layercontroller.data.JoystickTriggerMode
+import dev.oxide.layercontroller.data.MACRO_MAX_INTERVAL_MS
+import dev.oxide.layercontroller.data.MACRO_MIN_INTERVAL_MS
+import dev.oxide.layercontroller.data.TextAlignment
+import dev.oxide.layercontroller.data.VisibilityType
+import dev.oxide.layercontroller.data.clampMacroIntervalMs
 import dev.oxide.layercontroller.event.ClickEvent
+import dev.oxide.layercontroller.event.MAX_CLICK_EVENT_DELAY_MS
+import dev.oxide.layercontroller.event.MAX_KEY_COMBO_EVENTS
+import dev.oxide.layercontroller.event.clampClickEventDelayMs
 import dev.oxide.layercontroller.observable.ObservableButtonStyle
 import dev.oxide.layercontroller.observable.ObservableClickEventsProvider
 import dev.oxide.layercontroller.observable.ObservableControlLayer
 import dev.oxide.layercontroller.observable.ObservableJoystickData
 import dev.oxide.layercontroller.observable.ObservableJoystickStyle
 import dev.oxide.layercontroller.observable.ObservableNormalData
+import dev.oxide.layercontroller.observable.ObservableTextData
 import dev.oxide.layercontroller.observable.ObservableTranslatableString
 import dev.oxide.layercontroller.observable.ObservableWidget
+import dev.oxide.layercontroller.observable.clickEventsProvider
 import dev.oxide.launcher.R
-import dev.oxide.launcher.ui.components.EdgeDirection
-import dev.oxide.launcher.ui.components.fadeEdge
-import dev.oxide.launcher.ui.screens.TitledNavKey
-import dev.oxide.launcher.ui.screens.clearWith
-import dev.oxide.launcher.ui.screens.content.elements.CategoryItem
-import dev.oxide.launcher.ui.screens.main.control_editor.editorMetrics
-import dev.oxide.launcher.ui.screens.main.control_editor.editorPanelBackground
+import dev.oxide.launcher.ui.control.Keyboard
+import dev.oxide.launcher.ui.control.event.LAUNCHER_EVENT_SCROLL_DOWN
+import dev.oxide.launcher.ui.control.event.LAUNCHER_EVENT_SCROLL_DOWN_SINGLE
+import dev.oxide.launcher.ui.control.event.LAUNCHER_EVENT_SCROLL_UP
+import dev.oxide.launcher.ui.control.event.LAUNCHER_EVENT_SCROLL_UP_SINGLE
+import dev.oxide.launcher.ui.control.event.LAUNCHER_EVENT_SWITCH_IME
+import dev.oxide.launcher.ui.control.event.LAUNCHER_EVENT_SWITCH_MENU
+import dev.oxide.launcher.ui.screens.main.control_editor.EditorChevron
+import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutItem
+import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutListItem
+import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSelectItem
+import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSliderItem
+import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutSwitchItem
+import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutTextItem
+import dev.oxide.launcher.ui.screens.main.control_editor.editorCellName
+import dev.oxide.launcher.ui.screens.main.control_editor.getTriggerModeText
+import dev.oxide.launcher.ui.screens.main.control_editor.getVisibilityText
 import dev.oxide.launcher.ui.screens.main.oxide.OxideButton
 import dev.oxide.launcher.ui.screens.main.oxide.OxideButtonTone
-import dev.oxide.launcher.ui.screens.rememberSwapTween
-import dev.oxide.launcher.ui.screens.rememberTitledNavBackStack
-import dev.oxide.launcher.ui.screens.rememberTransitionSpec
+import dev.oxide.launcher.ui.screens.main.oxide.OxideDialogShell
+import dev.oxide.launcher.ui.screens.main.oxide.OxideIconButton
 import dev.oxide.launcher.ui.theme.Oxide
 
-private enum class EditWidgetDialogState(val alpha: Float, val buttonText: Int) {
-    /** 完全不透明 */
-    OPAQUE(1.0f, R.string.control_editor_edit_dialog_open_preview) {
-        override fun nextByUser(): EditWidgetDialogState = SEMI_TRANSPARENT_USER
-    },
-    /** 半透明 */
-    SEMI_TRANSPARENT(0.3f, R.string.control_editor_edit_dialog_close_preview) {
-        override fun nextByUser(): EditWidgetDialogState = OPAQUE
-    },
-    /** 半透明（用户主动选择） */
-    SEMI_TRANSPARENT_USER(0.3f, R.string.control_editor_edit_dialog_close_preview){
-        override fun nextByUser(): EditWidgetDialogState = OPAQUE
-    };
-
-    abstract fun nextByUser(): EditWidgetDialogState
-}
-
 /**
- * 控件编辑对话框
+ * 控件编辑页：一张真正的对话框，里面是一份从上到下直接滚完的表单
  *
- * **仍然不是 Dialog**：这一块一直是整屏 `AnimatedVisibility` 覆盖层（外面那句"不再
- * 真正使用 Dialog"说的是它自己的历史包袱——真开一个 Dialog 窗口确实有性能问题），
- * 所以它也不能换成 `OxideDialogShell`，那会凭空多出一层自己的窗口。改的只是外面
- * 那一层壳：Material 的 `Surface` 卡片换成 Oxide 面板同一套不透明底色、圆角与
- * 1px 描边，`Button`/`FilledTonalButton` 换成 `OxideButton`，`NavigationRailItem`
- * 换成一条 Oxide 的标签列。
+ * 之前那一版是整屏覆盖层里再摆一个横向的标签列加导航：标签列的每一行都写了
+ * 整行宽，导航那一块按权重只分到零宽，于是四个分类看得见、每一页的内容区
+ * 都是黑的；盖在前面的那块整屏透明点击层还把点面板的手势提前吃掉了。
  *
- * 行为与字符串一字未改：
+ * 这一版把分类改成一份表单里的折叠分区（标题仍是原来那几个分类的文案），
+ * 载体换成真正的对话框窗口：对话框自己带窗口与遮罩，
+ * 不存在兄弟节点抢触摸的问题。
  *
- * - 半透明预览的那三档（`OPAQUE` / `SEMI_TRANSPARENT` / `SEMI_TRANSPARENT_USER`）
- *   以及"用户主动切成半透明之后预览键不再切回去"的那两条早退，原样保留；
- * - 底部仍然是删除、复制、关闭三枚加一枚预览键，顺序与语气不变；
- * - 标签列仍然是 `categories` 里那几项，仍按 `backStack` 里的当前项标选中；
- * - 导航仍然是 Navigation3 的 `backStack.clearWith(key)`，`onBack` 依旧被忽略。
+ * 宏重复与按键延迟都住在"点击事件"分区里：宏是开关加间隔滑杆，
+ * 延迟是每个按键各自的滑杆，用的都是数据层同一套夹紧与校验。
  */
 @Composable
 fun EditWidgetDialog(
@@ -137,303 +124,649 @@ fun EditWidgetDialog(
     openStyleList: () -> Unit,
     openJoystickStyleList: () -> Unit,
 ) {
-    val tween = rememberSwapTween()
+    if (!visible || data == null) return
+    val widget = data.data
+    val layer = data.layer
 
-    AnimatedVisibility(
-        modifier = Modifier.fillMaxSize(),
-        visible = visible,
-        enter = fadeIn(animationSpec = tween),
-        exit = fadeOut(animationSpec = tween)
-    ) {
-        val backStack = rememberTitledNavBackStack(EditWidgetCategory.Info)
-        var dialogTransparent by remember { mutableStateOf(EditWidgetDialogState.OPAQUE) }
-
-        val alpha by animateFloatAsState(
-            dialogTransparent.alpha
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(alpha),
-            contentAlignment = Alignment.Center
-        ) {
-            //防止底下的控件被点击
-            if (visible) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(0f)
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() },
-                            onClick = onDismissRequest
-                        )
-                )
-            }
-
-            if (data != null) {
-                val categories = remember(data) {
-                    when (data.data) {
-                        is ObservableNormalData -> editWidgetCategories
-                        is ObservableJoystickData -> editJoystickCategories
-                        else -> editWidgetCategories.filterNot { it.key == EditWidgetCategory.ClickEvent }
-                    }
-                }
-
-                // 这一块过去是 Material 的 Surface 卡片（cardColor + extraLarge 圆角
-                // + shadowElevation）。它不是 Dialog 窗口——下面那句"不再真正使用
-                // Dialog"是有原因的——所以换成 Oxide 面板时**不能**用
-                // OxideDialogShell（那会多出一层自己的窗口），而是把同一套不透明
-                // 底色、圆角与 1px 描边直接画在这一层上。
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth(0.75f)
-                        .fillMaxHeight()
-                        .padding(all = 16.dp)
-                        .clip(Oxide.RadiusDrawer)
-                        .editorPanelBackground()
-                        .border(BorderStroke(1.dp, Oxide.Line2), Oxide.RadiusDrawer),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        EditWidgetTabLayout(
-                            modifier = Modifier.fillMaxHeight(),
-                            items = categories,
-                            currentKey = backStack.lastOrNull(),
-                            navigateTo = { key ->
-                                backStack.clearWith(key)
-                            }
-                        )
-
-                        EditWidgetNavigation(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            backStack = backStack,
-                            data = data.data,
-                            styles = styles,
-                            joystickStyles = joystickStyles,
+    OxideDialogShell(
+        title = widget.editorCellName(),
+        onDismissRequest = onDismissRequest,
+        body = { contentMaxHeight ->
+            Column(
+                modifier = Modifier
+                    .heightIn(max = contentMaxHeight)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                when (widget) {
+                    is ObservableNormalData -> {
+                        NormalInfoSection(widget = widget)
+                        NormalClickEventSection(
+                            widget = widget,
                             switchControlLayers = switchControlLayers,
                             sendText = sendText,
+                        )
+                        TextStyleSection(
+                            onEditWidgetText = { onEditWidgetText(widget.text) },
+                            textAlignment = widget.textAlignment,
+                            onTextAlignmentChanged = { widget.textAlignment = it },
+                            textBold = widget.textBold,
+                            onTextBoldChanged = { widget.textBold = it },
+                            textItalic = widget.textItalic,
+                            onTextItalicChanged = { widget.textItalic = it },
+                            textUnderline = widget.textUnderline,
+                            onTextUnderlineChanged = { widget.textUnderline = it },
+                        )
+                        ButtonStyleSection(
+                            styles = styles,
+                            buttonStyle = widget.buttonStyle,
+                            onButtonStyleChanged = { widget.buttonStyle = it },
                             openStyleList = openStyleList,
-                            openJoystickStyleList = openJoystickStyleList,
-                            onEditWidgetText = onEditWidgetText,
-                            onPreviewRequested = {
-                                if (dialogTransparent == EditWidgetDialogState.SEMI_TRANSPARENT_USER) return@EditWidgetNavigation
-                                dialogTransparent = EditWidgetDialogState.SEMI_TRANSPARENT
-                            },
-                            onDismissRequested = {
-                                if (dialogTransparent == EditWidgetDialogState.SEMI_TRANSPARENT_USER) return@EditWidgetNavigation
-                                dialogTransparent = EditWidgetDialogState.OPAQUE
-                            }
                         )
                     }
-                    //底部操作栏
-                    Row(
-                        modifier = Modifier
-                            .padding(all = 8.dp)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (dialogTransparent != EditWidgetDialogState.SEMI_TRANSPARENT) {
-                            OxideButton(
-                                text = stringResource(dialogTransparent.buttonText),
-                                onClick = {
-                                    dialogTransparent = dialogTransparent.nextByUser()
-                                },
-                                tone = OxideButtonTone.Secondary,
-                            )
-                            Spacer(Modifier.width(16.dp))
-                        } else {
-                            //占位用，防止右侧按钮向左靠齐
-                            Spacer(Modifier)
-                        }
 
-                        val scrollState = rememberScrollState()
-                        LaunchedEffect(Unit) {
-                            scrollState.scrollTo(scrollState.maxValue)
-                        }
-                        Row(
-                            modifier = Modifier
-                                .fadeEdge(
-                                    state = scrollState,
-                                    direction = EdgeDirection.Horizontal
-                                )
-                                .horizontalScroll(state = scrollState),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OxideButton(
-                                text = stringResource(R.string.generic_delete),
-                                onClick = {
-                                    onDelete(data.data, data.layer)
-                                },
-                                tone = OxideButtonTone.Secondary,
-                            )
+                    is ObservableTextData -> {
+                        VisibilitySection(
+                            visibilityType = widget.visibilityType,
+                            onVisibilityTypeChanged = { widget.visibilityType = it },
+                        )
+                        TextStyleSection(
+                            onEditWidgetText = { onEditWidgetText(widget.text) },
+                            textAlignment = widget.textAlignment,
+                            onTextAlignmentChanged = { widget.textAlignment = it },
+                            textBold = widget.textBold,
+                            onTextBoldChanged = { widget.textBold = it },
+                            textItalic = widget.textItalic,
+                            onTextItalicChanged = { widget.textItalic = it },
+                            textUnderline = widget.textUnderline,
+                            onTextUnderlineChanged = { widget.textUnderline = it },
+                        )
+                        ButtonStyleSection(
+                            styles = styles,
+                            buttonStyle = widget.buttonStyle,
+                            onButtonStyleChanged = { widget.buttonStyle = it },
+                            openStyleList = openStyleList,
+                        )
+                    }
 
-                            OxideButton(
-                                text = stringResource(R.string.control_editor_edit_dialog_clone_widget),
-                                onClick = {
-                                    onClone(data.data, data.layer)
-                                },
-                                tone = OxideButtonTone.Secondary,
-                            )
-
-                            OxideButton(
-                                text = stringResource(R.string.generic_close),
-                                onClick = onDismissRequest,
-                                tone = OxideButtonTone.Primary,
-                            )
-                        }
+                    is ObservableJoystickData -> {
+                        VisibilitySection(
+                            visibilityType = widget.visibilityType,
+                            onVisibilityTypeChanged = { widget.visibilityType = it },
+                        )
+                        JoystickConfigSection(data = widget)
+                        JoystickEventsSection(
+                            data = widget,
+                            switchControlLayers = switchControlLayers,
+                            sendText = sendText,
+                        )
+                        JoystickStyleSection(
+                            data = widget,
+                            joystickStyles = joystickStyles,
+                            openJoystickStyleList = openJoystickStyleList,
+                        )
                     }
                 }
             }
-        }
-    }
+        },
+        actions = {
+            OxideButton(
+                text = stringResource(R.string.generic_delete),
+                onClick = { onDelete(widget, layer) },
+                tone = OxideButtonTone.Secondary,
+            )
+            OxideButton(
+                text = stringResource(R.string.control_editor_edit_dialog_clone_widget),
+                onClick = { onClone(widget, layer) },
+                tone = OxideButtonTone.Secondary,
+            )
+            OxideButton(
+                text = stringResource(R.string.generic_close),
+                onClick = onDismissRequest,
+                tone = OxideButtonTone.Primary,
+            )
+        },
+    )
 }
 
+/**
+ * 表单里的一个折叠分区
+ *
+ * 标题就是原来分类页的文案，因此原来四个分类的键与字符串一个没动：
+ * 只是不再按标签切页，而是按分区上下铺开。
+ */
 @Composable
-private fun EditWidgetTabLayout(
+private fun EditSheetSection(
+    title: String,
+    open: Boolean,
+    onToggle: () -> Unit,
     modifier: Modifier = Modifier,
-    items: List<CategoryItem>,
-    currentKey: TitledNavKey?,
-    navigateTo: (TitledNavKey) -> Unit
+    content: @Composable () -> Unit,
 ) {
-    val metrics = editorMetrics()
-
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Spacer(modifier = Modifier.height(12.dp))
-        items.forEach { item ->
-            val selected = currentKey == item.key
-            Row(
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(Oxide.RadiusControl)
+                .clickable(role = Role.Tab, onClick = onToggle)
+                .padding(horizontal = 9.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                color = Oxide.Fg,
+                fontSize = Oxide.Type.Body.fontSize,
+                lineHeight = Oxide.Type.Body.lineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            EditorChevron(expanded = open)
+        }
+        if (open) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(metrics.rowHeight.coerceAtLeast(26.dp))
-                    .clip(Oxide.RadiusControl)
-                    .background(if (selected) Oxide.BgTabActive else Color.Transparent)
-                    .border(
-                        BorderStroke(1.dp, if (selected) Oxide.Line2 else Oxide.Line),
-                        Oxide.RadiusControl,
-                    )
-                    .selectable(
-                        selected = selected,
-                        role = Role.Tab,
-                        onClick = { navigateTo(item.key) },
-                    )
-                    .padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    .padding(start = 4.dp, end = 4.dp, bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                CompositionLocalProvider(LocalContentColor provides if (selected) Oxide.Fg else Oxide.FgMuted) {
-                    item.icon()
-                }
-                Text(
-                    modifier = Modifier.weight(1f),
-                    text = stringResource(item.textRes),
-                    color = if (selected) Oxide.Fg else Oxide.FgMuted,
-                    fontSize = Oxide.Type.MicroLabel.fontSize,
-                    lineHeight = Oxide.Type.MicroLabel.lineHeight,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                content()
             }
         }
     }
 }
 
-@Composable
-private fun EditWidgetNavigation(
-    modifier: Modifier = Modifier,
-    backStack: NavBackStack<TitledNavKey>,
-    data: ObservableWidget,
-    styles: List<ObservableButtonStyle>,
-    joystickStyles: List<ObservableJoystickStyle>,
-    onEditWidgetText: (ObservableTranslatableString) -> Unit,
-    switchControlLayers: (ObservableClickEventsProvider, ClickEvent.Type) -> Unit,
-    sendText: (ObservableClickEventsProvider) -> Unit,
-    openStyleList: () -> Unit,
-    openJoystickStyleList: () -> Unit,
-    onPreviewRequested: () -> Unit,
-    onDismissRequested: () -> Unit
-) {
-    val currentKey = backStack.lastOrNull()
+// ---------------------------------------------------------------------------
+// 基本信息
+// ---------------------------------------------------------------------------
 
-    if (backStack.isNotEmpty()) {
-        NavDisplay(
-            modifier = modifier,
-            backStack = backStack,
-            onBack = { /* 忽略 */ },
-            transitionSpec = rememberTransitionSpec(),
-            popTransitionSpec = rememberTransitionSpec(),
-            entryProvider = entryProvider {
-                entry<EditWidgetCategory.Info> { key ->
-                    EditWidgetInfo(
-                        screenKey = key,
-                        currentKey = currentKey,
-                        data = data,
-                        onPreviewRequested = onPreviewRequested,
-                        onDismissRequested = onDismissRequested
-                    )
-                }
-                entry<EditWidgetCategory.TextStyle> { key ->
-                    EditTextStyle(
-                        screenKey = key,
-                        currentKey = currentKey,
-                        data = data,
-                        onEditWidgetText = onEditWidgetText
-                    )
-                }
-                entry<EditWidgetCategory.ClickEvent> { key ->
-                    EditWidgetClickEvent(
-                        screenKey = key,
-                        currentKey = currentKey,
-                        data = data as ObservableNormalData,
-                        switchControlLayers = switchControlLayers,
-                        sendText = sendText
-                    )
-                }
-                entry<EditWidgetCategory.Style> { key ->
-                    EditWidgetStyle(
-                        screenKey = key,
-                        currentKey = currentKey,
-                        data = data,
-                        styles = styles,
-                        openStyleList = openStyleList
-                    )
-                }
-                entry<EditWidgetCategory.JoystickConfig> { key ->
-                    EditJoystickConfig(
-                        screenKey = key,
-                        currentKey = currentKey,
-                        data = data as ObservableJoystickData
-                    )
-                }
-                entry<EditWidgetCategory.DirectionEvents> { key ->
-                    EditJoystickEvents(
-                        data = data as ObservableJoystickData,
-                        switchControlLayers = switchControlLayers,
-                        sendText = sendText,
-                    )
-                }
-                entry<EditWidgetCategory.JoystickStyle> { key ->
-                    EditJoystickStyle(
-                        screenKey = key,
-                        currentKey = currentKey,
-                        data = data as ObservableJoystickData,
-                        joystickStyles = joystickStyles,
-                        openJoystickStyleList = openJoystickStyleList,
-                    )
-                }
-            }
+/** 可见场景：三种控件都有，因此单独一份 */
+@Composable
+private fun VisibilitySection(
+    visibilityType: VisibilityType,
+    onVisibilityTypeChanged: (VisibilityType) -> Unit,
+) {
+    var open by remember { mutableStateOf(true) }
+    EditSheetSection(
+        title = stringResource(EditWidgetCategory.Info.titleRes),
+        open = open,
+        onToggle = { open = !open },
+    ) {
+        InfoLayoutListItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_visibility),
+            items = VisibilityType.entries,
+            selectedItem = visibilityType,
+            onItemSelected = onVisibilityTypeChanged,
+            getItemText = { it.getVisibilityText() },
         )
     }
 }
+
+/**
+ * 普通按键的基本信息：可见场景加宏重复
+ *
+ * 宏的开关与间隔是同一个字段：0 就是关，大于 0 就是开。
+ * 打开时给下界而不是 0，关闭时回到 0；间隔走数据层同一套夹紧。
+ */
+@Composable
+private fun NormalInfoSection(widget: ObservableNormalData) {
+    var open by remember(widget) { mutableStateOf(true) }
+    EditSheetSection(
+        title = stringResource(EditWidgetCategory.Info.titleRes),
+        open = open,
+        onToggle = { open = !open },
+    ) {
+        InfoLayoutListItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_visibility),
+            items = VisibilityType.entries,
+            selectedItem = widget.visibilityType,
+            onItemSelected = { widget.visibilityType = it },
+            getItemText = { it.getVisibilityText() },
+        )
+        val macroOn = widget.macroIntervalMs > 0L
+        InfoLayoutSwitchItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_event_macro),
+            value = macroOn,
+            onValueChange = { checked ->
+                widget.macroIntervalMs = if (checked) MACRO_MIN_INTERVAL_MS else 0L
+            },
+        )
+        if (macroOn) {
+            InfoLayoutSliderItem(
+                modifier = Modifier.fillMaxWidth(),
+                title = stringResource(R.string.control_editor_edit_event_macro_interval),
+                value = widget.macroIntervalMs.toFloat(),
+                onValueChange = { widget.macroIntervalMs = clampMacroIntervalMs(it) },
+                valueRange = MACRO_MIN_INTERVAL_MS.toFloat()..MACRO_MAX_INTERVAL_MS.toFloat(),
+                decimalFormat = "#0",
+                suffix = "ms",
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 点击事件：开关、按键加延迟、启动器事件、切层
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun NormalClickEventSection(
+    widget: ObservableNormalData,
+    switchControlLayers: (ObservableClickEventsProvider, ClickEvent.Type) -> Unit,
+    sendText: (ObservableClickEventsProvider) -> Unit,
+) {
+    var open by remember(widget) { mutableStateOf(false) }
+    val provider = remember(widget) { clickEventsProvider(widget) }
+    EditSheetSection(
+        title = stringResource(EditWidgetCategory.ClickEvent.titleRes),
+        open = open,
+        onToggle = { open = !open },
+    ) {
+        InfoLayoutSwitchItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_event_swipple),
+            value = widget.isSwipple,
+            onValueChange = { widget.isSwipple = it },
+        )
+        InfoLayoutSwitchItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_event_penetrable),
+            value = widget.isPenetrable,
+            onValueChange = { widget.isPenetrable = it },
+        )
+        InfoLayoutSwitchItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_event_toggleable),
+            value = widget.isToggleable,
+            onValueChange = { widget.isToggleable = it },
+        )
+        KeyEventsBlock(provider = provider)
+        LauncherEventsBlock(provider = provider, onSendText = { sendText(provider) })
+        InfoLayoutTextItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_switch_layers),
+            onClick = { switchControlLayers(provider, ClickEvent.Type.SwitchLayer) },
+        )
+        InfoLayoutTextItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_show_layers),
+            onClick = { switchControlLayers(provider, ClickEvent.Type.ShowLayer) },
+        )
+        InfoLayoutTextItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_hide_layers),
+            onClick = { switchControlLayers(provider, ClickEvent.Type.HideLayer) },
+        )
+    }
+}
+
+/**
+ * 按键绑定：每个键各自带一条延迟
+ *
+ * 延迟是这一条自己的属性，因此滑杆就跟在它下面，
+ * 而不是整页一个总延迟：组合键里先按后按的间隔正是这样一项一项排出来的。
+ * 范围与夹紧走数据层同一套：0 表示立即派发，上限 5000 毫秒。
+ */
+@Composable
+private fun KeyEventsBlock(provider: ObservableClickEventsProvider) {
+    var showKeyboard by remember { mutableStateOf(false) }
+    val keyEvents = provider.clickEvents.filter { it.type == ClickEvent.Type.Key }
+    val canAddKey = keyEvents.size < MAX_KEY_COMBO_EVENTS
+    InfoLayoutTextItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_key_new) +
+            " (${keyEvents.size}/$MAX_KEY_COMBO_EVENTS)",
+        onClick = { if (canAddKey) showKeyboard = true },
+        enabled = canAddKey,
+        showArrow = false,
+    )
+    keyEvents.forEach { event ->
+        val name = remember(event.key) { ControlEventKeyName.getNameByKey(event.key) }
+        InfoLayoutItem(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {},
+        ) {
+            Text(
+                modifier = Modifier.weight(1f),
+                text = stringResource(R.string.control_editor_edit_event_key_value, name ?: event.key),
+                color = Oxide.Fg,
+                fontSize = Oxide.Type.Body.fontSize,
+                lineHeight = Oxide.Type.Body.lineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            OxideIconButton(
+                onClick = { provider.onRemoveEvent(event) },
+                glyph = "✕",
+                contentDescription = stringResource(R.string.generic_delete),
+            )
+        }
+        InfoLayoutSliderItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_event_key_delay),
+            value = event.delayMs.toFloat(),
+            onValueChange = { provider.onReplaceEvent(event.copy(delayMs = clampClickEventDelayMs(it.toInt()))) },
+            valueRange = 0f..MAX_CLICK_EVENT_DELAY_MS.toFloat(),
+            decimalFormat = "#0",
+            suffix = "ms",
+        )
+    }
+    if (showKeyboard) {
+        Keyboard(
+            onDismissRequest = { showKeyboard = false },
+            isTapMode = true,
+            onTap = { selectedKey ->
+                val current = provider.clickEvents.count { it.type == ClickEvent.Type.Key }
+                if (current >= MAX_KEY_COMBO_EVENTS) {
+                    showKeyboard = false
+                    return@Keyboard
+                }
+                provider.onAddEvent(ClickEvent(type = ClickEvent.Type.Key, key = selectedKey))
+                showKeyboard = false
+            },
+        )
+    }
+}
+
+/** 启动器事件：一组开关加一个发送文本的出口，没有自己的滚动 */
+@Composable
+private fun LauncherEventsBlock(
+    provider: ObservableClickEventsProvider,
+    onSendText: () -> Unit,
+) {
+    val events = provider.clickEvents
+    fun has(key: String): Boolean = events.any { it.type == ClickEvent.Type.LauncherEvent && it.key == key }
+    fun toggle(value: Boolean, event: ClickEvent) {
+        if (value) provider.onAddEvent(event) else provider.onRemoveEvent(event)
+    }
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.game_menu_option_input_method),
+        value = has(LAUNCHER_EVENT_SWITCH_IME),
+        onValueChange = { toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, LAUNCHER_EVENT_SWITCH_IME)) },
+    )
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_switch_menu),
+        value = has(LAUNCHER_EVENT_SWITCH_MENU),
+        onValueChange = { toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, LAUNCHER_EVENT_SWITCH_MENU)) },
+    )
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_mouse_left),
+        value = has(ControlEventKeycode.GLFW_MOUSE_BUTTON_LEFT),
+        onValueChange = {
+            toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, ControlEventKeycode.GLFW_MOUSE_BUTTON_LEFT))
+        },
+    )
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_mouse_middle),
+        value = has(ControlEventKeycode.GLFW_MOUSE_BUTTON_MIDDLE),
+        onValueChange = {
+            toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, ControlEventKeycode.GLFW_MOUSE_BUTTON_MIDDLE))
+        },
+    )
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_mouse_right),
+        value = has(ControlEventKeycode.GLFW_MOUSE_BUTTON_RIGHT),
+        onValueChange = {
+            toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, ControlEventKeycode.GLFW_MOUSE_BUTTON_RIGHT))
+        },
+    )
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_mouse_scroll_up),
+        value = has(LAUNCHER_EVENT_SCROLL_UP),
+        onValueChange = { toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, LAUNCHER_EVENT_SCROLL_UP)) },
+    )
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_mouse_scroll_up_single),
+        value = has(LAUNCHER_EVENT_SCROLL_UP_SINGLE),
+        onValueChange = { toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, LAUNCHER_EVENT_SCROLL_UP_SINGLE)) },
+    )
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_mouse_scroll_down),
+        value = has(LAUNCHER_EVENT_SCROLL_DOWN),
+        onValueChange = { toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, LAUNCHER_EVENT_SCROLL_DOWN)) },
+    )
+    InfoLayoutSwitchItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_mouse_scroll_down_single),
+        value = has(LAUNCHER_EVENT_SCROLL_DOWN_SINGLE),
+        onValueChange = { toggle(it, ClickEvent(ClickEvent.Type.LauncherEvent, LAUNCHER_EVENT_SCROLL_DOWN_SINGLE)) },
+    )
+    InfoLayoutTextItem(
+        modifier = Modifier.fillMaxWidth(),
+        title = stringResource(R.string.control_editor_edit_event_launcher_send_text),
+        onClick = onSendText,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// 文本与外观
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun TextStyleSection(
+    onEditWidgetText: () -> Unit,
+    textAlignment: TextAlignment,
+    onTextAlignmentChanged: (TextAlignment) -> Unit,
+    textBold: Boolean,
+    onTextBoldChanged: (Boolean) -> Unit,
+    textItalic: Boolean,
+    onTextItalicChanged: (Boolean) -> Unit,
+    textUnderline: Boolean,
+    onTextUnderlineChanged: (Boolean) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    EditSheetSection(
+        title = stringResource(R.string.control_editor_edit_text),
+        open = open,
+        onToggle = { open = !open },
+    ) {
+        InfoLayoutTextItem(
+            title = stringResource(R.string.control_editor_edit_text),
+            onClick = onEditWidgetText,
+        )
+        InfoLayoutSelectItem(
+            title = stringResource(R.string.control_editor_edit_text_alignment),
+            options = TextAlignment.entries,
+            current = textAlignment,
+            onClick = { value -> if (textAlignment != value) onTextAlignmentChanged(value) },
+            label = { item ->
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    val icon = when (item) {
+                        TextAlignment.Left -> R.drawable.ic_format_align_left
+                        TextAlignment.Center -> R.drawable.ic_format_align_center
+                        TextAlignment.Right -> R.drawable.ic_format_align_right
+                    }
+                    Icon(painter = painterResource(icon), contentDescription = null)
+                }
+            },
+        )
+        InfoLayoutSwitchItem(
+            title = stringResource(R.string.control_editor_edit_text_bold),
+            value = textBold,
+            onValueChange = onTextBoldChanged,
+        )
+        InfoLayoutSwitchItem(
+            title = stringResource(R.string.control_editor_edit_text_italic),
+            value = textItalic,
+            onValueChange = onTextItalicChanged,
+        )
+        InfoLayoutSwitchItem(
+            title = stringResource(R.string.control_editor_edit_text_underline),
+            value = textUnderline,
+            onValueChange = onTextUnderlineChanged,
+        )
+    }
+}
+
+/** 控件外观：就地单选，完整列表仍走原来的外观页 */
+@Composable
+private fun ButtonStyleSection(
+    styles: List<ObservableButtonStyle>,
+    buttonStyle: String?,
+    onButtonStyleChanged: (String?) -> Unit,
+    openStyleList: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    EditSheetSection(
+        title = stringResource(EditWidgetCategory.Style.titleRes),
+        open = open,
+        onToggle = { open = !open },
+    ) {
+        val options = remember(styles) { listOf(null) + styles }
+        val selected = remember(styles, buttonStyle) { styles.find { it.uuid == buttonStyle } }
+        InfoLayoutListItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_category_style),
+            items = options,
+            selectedItem = selected,
+            onItemSelected = { onButtonStyleChanged(it?.uuid) },
+            getItemText = { item ->
+                item?.name?.takeIf { it.isNotBlank() }
+                    ?: stringResource(R.string.generic_unspecified)
+            },
+        )
+        InfoLayoutTextItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_style_config),
+            onClick = openStyleList,
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 摇杆：配置、方向事件、外观
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun JoystickConfigSection(data: ObservableJoystickData) {
+    var open by remember(data) { mutableStateOf(true) }
+    EditSheetSection(
+        title = stringResource(EditWidgetCategory.JoystickConfig.titleRes),
+        open = open,
+        onToggle = { open = !open },
+    ) {
+        InfoLayoutSliderItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_joystick_dead_zone),
+            value = data.deadZoneRatio,
+            onValueChange = { data.deadZoneRatio = it },
+            valueRange = JOYSTICK_DEAD_ZONE_RANGE,
+            decimalFormat = "#0.00",
+        )
+        InfoLayoutListItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_joystick_trigger_mode),
+            items = JoystickTriggerMode.entries,
+            selectedItem = data.triggerMode,
+            onItemSelected = { data.triggerMode = it },
+            getItemText = { it.getTriggerModeText() },
+        )
+        InfoLayoutSwitchItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_joystick_can_lock),
+            value = data.canLock,
+            onValueChange = { data.canLock = it },
+        )
+        if (data.canLock) {
+            InfoLayoutSliderItem(
+                modifier = Modifier.fillMaxWidth(),
+                title = stringResource(R.string.control_editor_edit_joystick_lock_threshold),
+                value = data.lockThreshold,
+                onValueChange = { data.lockThreshold = it },
+                valueRange = JOYSTICK_LOCK_THRESHOLD_RANGE,
+                decimalFormat = "#0.00",
+            )
+        }
+    }
+}
+
+/**
+ * 方向事件：沿用原来的方向盘入口
+ *
+ * 它自己要一块固定高度：方向盘是按宽高比铺开的九宫格，
+ * 在无限高的表单里量不到尺寸，因此这里给它一块固定高度。
+ */
+@Composable
+private fun JoystickEventsSection(
+    data: ObservableJoystickData,
+    switchControlLayers: (ObservableClickEventsProvider, ClickEvent.Type) -> Unit,
+    sendText: (ObservableClickEventsProvider) -> Unit,
+) {
+    var open by remember(data) { mutableStateOf(false) }
+    EditSheetSection(
+        title = stringResource(EditWidgetCategory.DirectionEvents.titleRes),
+        open = open,
+        onToggle = { open = !open },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(360.dp),
+        ) {
+            EditJoystickEvents(
+                data = data,
+                switchControlLayers = switchControlLayers,
+                sendText = sendText,
+            )
+        }
+    }
+}
+
+@Composable
+private fun JoystickStyleSection(
+    data: ObservableJoystickData,
+    joystickStyles: List<ObservableJoystickStyle>,
+    openJoystickStyleList: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    EditSheetSection(
+        title = stringResource(EditWidgetCategory.JoystickStyle.titleRes),
+        open = open,
+        onToggle = { open = !open },
+    ) {
+        val options = remember(joystickStyles) { listOf(null) + joystickStyles }
+        val selected = remember(joystickStyles, data.joystickStyleId) {
+            joystickStyles.find { it.uuid == data.joystickStyleId }
+        }
+        InfoLayoutListItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_category_joystick_style),
+            items = options,
+            selectedItem = selected,
+            onItemSelected = { data.joystickStyleId = it?.uuid },
+            getItemText = { item ->
+                item?.name?.takeIf { it.isNotBlank() }
+                    ?: stringResource(R.string.generic_unspecified)
+            },
+        )
+        InfoLayoutTextItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = stringResource(R.string.control_editor_edit_joystick_style_list),
+            onClick = openJoystickStyleList,
+        )
+    }
+}
+
+/** 分类键自带的标题：表单分区沿用原来四个分类的文案 */
+private val EditWidgetCategory.titleRes: Int
+    get() = when (this) {
+        EditWidgetCategory.Info -> R.string.control_editor_edit_category_info
+        EditWidgetCategory.TextStyle -> R.string.control_editor_edit_text
+        EditWidgetCategory.ClickEvent -> R.string.control_editor_edit_category_event
+        EditWidgetCategory.Style -> R.string.control_editor_edit_category_style
+        EditWidgetCategory.JoystickConfig -> R.string.control_editor_edit_category_joystick_config
+        EditWidgetCategory.DirectionEvents -> R.string.control_editor_edit_category_joystick_events
+        EditWidgetCategory.JoystickStyle -> R.string.control_editor_edit_category_joystick_style
+    }

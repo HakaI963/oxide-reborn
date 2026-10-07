@@ -18,102 +18,172 @@
 
 package dev.oxide.launcher.game.renderer
 
-import dev.oxide.launcher.game.renderer.renderers.FreedrenoRenderer
-import dev.oxide.launcher.game.renderer.renderers.KopperZinkRenderer
-import dev.oxide.launcher.game.renderer.renderers.NGGL4ESRenderer
-import dev.oxide.launcher.game.renderer.renderers.VirGLRenderer
+import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
+import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
+import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
+import dev.oxide.launcher.game.renderer.renderers.MojoZinkRenderer
 import dev.oxide.launcher.game.version.installed.utils.isBiggerVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerOrEqualVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerVer
 import dev.oxide.launcher.game.versioninfo.popularVersions
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
- * 启动游戏前的渲染器版本闸门回归测试。
+ * 启动游戏前的渲染器版本闸门回归测试，外加新渲染器注册表的接线测试。
  *
  * 闸门在 `ui/screens/content/elements/LauncherElements.kt` 里就是两行：
  *
  *     (currentRenderer.getMinMCVersion()?.let { mcVer.isLowerVer(it) } ?: false) ||
  *         (currentRenderer.getMaxMCVersion()?.let { mcVer.isBiggerVer(it) } ?: false)
  *
- * 也就是**选中的 MC 版本严格大于渲染器上限时，渲染器会被直接拒绝**。而
+ * 也就是选中的 MC 版本严格大于渲染器上限时，渲染器会被直接拒绝。而
  * `GameVersionNumber` 的 ReleaseType 顺序是 `SNAPSHOT < PRE_RELEASE < RC < GA`，
- * 于是把上限写成 "26.3-snapshot-3" 会让 "26.3" 被判为更大——四个现代渲染器
- * （Freedreno、Kopper Zink、Krypton Wrapper、VirGL）在 26.3 上**同时**被拒绝，
- * 表现就是"26.3 上任何渲染器都不工作"。本测试钉住这件事。
+ * 于是把上限写成 "26.3-snapshot-3" 会让 "26.3" 被判为更大——本测试钉住四台新
+ * 渲染器（Copper Oxide、LTW、Mojo Zink、Holy GL4ES）的上限必须是正式版号 "26.3"。
  *
- * 为什么可以直接 new 这些 object：它们都是无参的 `object`，`getMaxMCVersion()`
- * 只是返回常量字符串；唯一碰到外部状态的地方（VirGLRenderer 的 PathManager）被关在
- * `lazy {}` 里，取上限不会触发。所以这里不需要 Activity/Context，也不需要 Robolectric，
- * 只有 JUnit4 就够（`build.gradle.kts` 里 testImplementation 只有 junit / mockwebserver3 /
- * paparazzi，没有 Robolectric）。
+ * 注册表部分钉住：`Renderers.init()` 之后表里恰好是这四个 id，默认回退（未知 id）
+ * 落到 Copper Oxide。源码守卫钉住：渲染器自有源码里不再引用六台被删的旧渲染器。
  *
- * 注意 GL4ESRenderer 与 PanfrostRenderer 不在这份集合里：它们的上限是 "1.21.4"，
- * 是**真的**停在那里，不是被写错了，所以本测试不约束它们，也不该约束它们。
+ * 为什么可以直接 new 这些 object：它们都是无参的 `object`，版本上下限只是返回
+ * 常量字符串；唯一碰到外部状态的地方（MojoZinkRenderer 的 PathManager）被关在
+ * `lazy {}` 里，取版本与注册信息不会触发。所以这里不需要 Activity/Context，也不需要
+ * Robolectric，只有 JUnit4 就够。
  */
 class RendererVersionGateTest {
 
-    /**
-     * 走的是启动页真正使用的那四个渲染器（对应 `Renderers.init()` 里的现代渲染器）。
-     */
-    private val modernRenderers: List<RendererInterface> = listOf(
-        NGGL4ESRenderer,
-        KopperZinkRenderer,
-        VirGLRenderer,
-        FreedrenoRenderer
+    private val builtinRenderers: List<RendererInterface> = listOf(
+        CopperOxideRenderer,
+        LTWRenderer,
+        MojoZinkRenderer,
+        HolyGL4ESRenderer
     )
 
+    private val expectedRendererIds: Set<String> = setOf(
+        "opengles3_oxide_copper",
+        "opengles3_oxide_ltw",
+        "oxide_vulkan_zink",
+        "opengles2_oxide_holy"
+    )
+
+    private val deletedRendererMarkers: List<String> by lazy {
+        listOf(
+            "opengles3_desktopgl_zink_kopper",
+            "gallium_virgl",
+            "gallium_freedreno",
+            "gallium_panfrost",
+            "\"opengles3\"",
+            "\"opengles2\"",
+            "libng_gl4es.so",
+            "libgl4es_114.so",
+            "libglxshim.so",
+            "libOSMesa_2121.so",
+            "libOSMesa_8.so",
+            "libOSMesa_2300d.so",
+            "object NGGL4ESRenderer",
+            "object GL4ESRenderer",
+            "object KopperZinkRenderer",
+            "object VirGLRenderer",
+            "object FreedrenoRenderer",
+            "object PanfrostRenderer",
+            "VirGLRenderer",
+            "Krypton",
+            "Kopper Zink",
+            "Freedreno (Adreno)",
+            "Panfrost (Mali)"
+        )
+    }
+
+    private fun ownedRendererSources(): List<File> {
+        val root = locateMainRoot()
+        val owned = listOf(
+            "java/dev/oxide/launcher/game/renderer",
+            "java/dev/oxide/launcher/game/plugin/renderer",
+            "java/dev/oxide/launcher/game/plugin/renderer_v2"
+        )
+        return owned.map { root.resolve(it) }.filter { it.isDirectory }
+            .flatMap { it.walkTopDown().filter { file -> file.isFile }.toList() }
+    }
+
+    private fun locateMainRoot(): File {
+        var dir: File? = File("").absoluteFile
+        repeat(8) {
+            val candidate = dir?.resolve("src/main")
+            if (candidate != null && candidate.isDirectory) return candidate
+            dir = dir?.parentFile
+        }
+        error("could not locate src/main from " + File("").absolutePath)
+    }
+
     @Test
-    fun modernRenderersAdmitThe26_3Release() {
-        modernRenderers.forEach { renderer ->
+    fun newRenderersAdmitThe26_3Release() {
+        builtinRenderers.forEach { renderer ->
             val max = requireNotNull(renderer.getMaxMCVersion()) {
-                "${renderer.getRendererName()} 没有声明上限版本，无法参与版本闸门"
+                renderer.getRendererName() + " has no max version, cannot join the gate"
             }
             assertTrue(
-                "${renderer.getRendererName()} 的上限是 $max，26.3 正式版比它更新，会被闸门拒绝",
+                renderer.getRendererName() + " caps at " + max + ", 26.3 would be rejected",
                 "26.3".isLowerOrEqualVer(max)
             )
         }
     }
 
     @Test
-    fun modernRenderersDeclareTheReleaseNotASnapshot() {
-        // 触发这次回归的那条规则：ReleaseType 中 SNAPSHOT 排在 GA 之前，
-        // 所以 "26.3-snapshot-3" 严格小于 "26.3"。这正是旧上限把 26.3 挡在门外的原因。
+    fun newRendererMaximaAreReleasesNotSnapshots() {
+        // ReleaseType 中 SNAPSHOT 排在 GA 之前，所以 "26.3-snapshot-3" 严格小于
+        // "26.3"：上限一旦写成快照串，同版本的正式版就会被闸门挡在门外。
         assertTrue("26.3-snapshot-3".isLowerVer("26.3"))
 
-        modernRenderers.forEach { renderer ->
+        builtinRenderers.forEach { renderer ->
             val max = requireNotNull(renderer.getMaxMCVersion())
-            assertFalse(
-                "${renderer.getRendererName()} 的上限 $max 是快照串，快照号永远比同版本的正式版小，" +
-                        "等于把同版本的正式版挡在闸门外",
-                max.contains("-snapshot-")
+            assertEquals(
+                renderer.getRendererName() + " must pin the release, got " + max,
+                "26.3",
+                max
             )
             assertFalse(
-                "${renderer.getRendererName()} 的上限 $max 仍是快照串",
-                "26.3".isBiggerVer(max)
-            )
-        }
-    }
-
-    @Test
-    fun modernRendererMaximaStillGateNewerReleases() {
-        // 反向护栏：把上限抬到 26.3 之后不能变成"无限制"，26.4 仍然必须被拒绝。
-        modernRenderers.forEach { renderer ->
-            val max = requireNotNull(renderer.getMaxMCVersion())
-            assertFalse(
-                "${renderer.getRendererName()} 的上限 $max 没有拦住比它更新的 26.4",
+                renderer.getRendererName() + " admits 26.4, the cap no longer gates anything",
                 "26.4".isLowerOrEqualVer(max)
             )
         }
     }
 
     @Test
+    fun registryContainsExactlyTheFourNewRenderers() {
+        Renderers.init(reset = true)
+        val ids = Renderers.getRenderers().map { it.getRendererId() }.toSet()
+        assertEquals(expectedRendererIds, ids)
+    }
+
+    @Test
+    fun unknownRendererFallsBackToCopperOxide() {
+        Renderers.init(reset = true)
+        Renderers.setCurrentRenderer("00000000-0000-0000-0000-000000000000")
+        val current = Renderers.getCurrentRenderer()
+        assertEquals(CopperOxideRenderer.getUniqueIdentifier(), current.getUniqueIdentifier())
+        assertEquals("opengles3_oxide_copper", current.getRendererId())
+    }
+
+    @Test
+    fun ownedRendererSourcesNameNoDeletedBuiltin() {
+        val offenders = ownedRendererSources().flatMap { file ->
+            val text = file.readText()
+            deletedRendererMarkers.filter { marker -> text.contains(marker) }
+                .map { marker -> file.path + " still names " + marker }
+        }
+        assertTrue(
+            "deleted builtins are still referenced: " + offenders.joinToString("; "),
+            offenders.isEmpty()
+        )
+    }
+
+    @Test
     fun popularVersionsContains26_3() {
         assertTrue(
-            "热门版本列表里没有 26.3，26.3 不会出现在安装/搜索的默认版本筛选中",
+            "popularVersions has no 26.3: " + popularVersions,
             popularVersions.contains("26.3")
         )
     }
@@ -124,7 +194,7 @@ class RendererVersionGateTest {
             if (a.isBiggerVer(b)) -1 else if (b.isBiggerVer(a)) 1 else 0
         }
         assertTrue(
-            "热门版本列表必须是降序的，实际为 $popularVersions",
+            "popularVersions must be newest first, got " + popularVersions,
             sorted == popularVersions
         )
     }

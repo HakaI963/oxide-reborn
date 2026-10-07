@@ -27,13 +27,32 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.UUID
 
+/**
+ * 一条任务是哪一类活
+ *
+ * 任务面板要把"下载"与"别的活"画进不同的小节（下载中 / 已完成 vs 排队 / 运行 / 历史），
+ * 而阶段与结局都答不了这个问题：一次版本安装与一次账号刷新在阶段上长得一模一样。
+ * 因此另立这一个轴，而不是复用其中任何一个。
+ *
+ * 默认是 [General]：调用方不填时行为与以前完全一致，只有明确知道自己在下载的
+ * 提交方（版本安装、游戏文件下载）才把它标成 [Download]。
+ */
+enum class TaskKind {
+    /** 一般任务：账号、Java、导入导出等 */
+    General,
+
+    /** 下载类任务：版本安装、游戏文件、模组与资源下载 */
+    Download,
+}
+
 class Task private constructor(
     val id: String,
     val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     val task: suspend CoroutineScope.(Task) -> Unit,
     val onError: suspend (Throwable) -> Unit = {},
     val onFinally: () -> Unit = {},
-    val onCancel: () -> Unit = {}
+    val onCancel: () -> Unit = {},
+    kind: TaskKind = TaskKind.General,
 ) {
     private val _stage = MutableStateFlow(TaskStage.PREPARING)
     /**
@@ -68,6 +87,26 @@ class Task private constructor(
     private val _rateBytesPerSec = MutableStateFlow<Long?>(null)
     /** 当前速率 Bytes */
     val rateBytesPerSec = _rateBytesPerSec.asStateFlow()
+
+    /**
+     * 这条任务是哪一类活
+     *
+     * 普通字段而不是流：它在提交之前就定下来（构造参数、[markAsDownload]），
+     * 此后只升不降，因此分节这个纯函数可以直接读它，不需要订阅。
+     */
+    var kind: TaskKind = kind
+        private set
+
+    /**
+     * 把这条任务标成下载类
+     *
+     * 只升不降，没有反向操作：一条任务不会"下着下着变成不是下载"。
+     * 提交方在任务进任务系统之前调一次（见 `TaskSystem.submitDownloadTask` 与
+     * `TaskSystem.trackExternalTask`），面板此后一直把它画在下载那一边。
+     */
+    fun markAsDownload() {
+        kind = TaskKind.Download
+    }
 
     /**
      * 更新任务阶段
@@ -140,7 +179,8 @@ class Task private constructor(
             task: suspend CoroutineScope.(Task) -> Unit,
             onError: suspend (Throwable) -> Unit = {},
             onFinally: () -> Unit = {},
-            onCancel: () -> Unit = {}
+            onCancel: () -> Unit = {},
+            kind: TaskKind = TaskKind.General
         ): Task =
             Task(
                 id = id ?: getRandomID(),
@@ -148,7 +188,8 @@ class Task private constructor(
                 task = task,
                 onError = onError,
                 onFinally = onFinally,
-                onCancel = onCancel
+                onCancel = onCancel,
+                kind = kind,
             )
 
         private fun getRandomID(): String = UUID.randomUUID().toString()
