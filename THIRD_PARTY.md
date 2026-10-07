@@ -97,6 +97,21 @@ renamed.
    transfer, the offline Yggdrasil server binds to loopback only, `Account.toString()` no longer
    prints credentials, server-controlled error text is redacted and length-limited, and
    `SettingsRegistry.allSettings` was exposed for the backup feature.
+9. **Copper Oxide native renderer** — the MobileGlues first-party source
+   (`MobileGlues-cpp/**` minus submodule contents, plus upstream `LICENSE`) is vendored
+   under `OxideLauncher/src/main/cpp/copperoxide/upstream/` at upstream commit
+   `97558a6` (see `cpp/copperoxide/README.md` for the pinned third-party SHAs).
+   `.github/workflows/copperoxide.yml` builds it in GitHub Actions (NDK 27.3,
+   CMake 3.22.1, Release) into `libcopperoxide.so`, committed to
+   `OxideLauncher/src/main/jniLibs/<abi>/`, replacing the precompiled
+   `libmobileglues.so` (kept only as a load-time fallback). Oxide patches to the
+   vendored tree, each marked `Copper Oxide patch` in the source:
+   (a) `config/settings.cpp` treats `OXIDE_RENDERER_FLAVOR=copper-oxide` as a
+   first-class launcher instead of forcing the restricted defaults — no other
+   launcher's identity is claimed; (b) `gl/getter.cpp` reports `Copper Oxide`
+   in the GL_VERSION / shading-language strings (same shape as before); vendor
+   authors, the `GL_MG_mobileglues` extension name and all rendering behavior
+   are untouched.
 
 ## Bundled runtime components
 

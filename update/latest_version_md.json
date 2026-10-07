@@ -1,43 +1,43 @@
 {
-  "code": 100700,
-  "version": "1.7.0",
-  "created_at": "2026-10-05",
+  "code": 101200,
+  "version": "1.12.0",
+  "created_at": "2026-10-07",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.7.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.7.0/OxideLauncher-1.7.0.apk",
+      "file_name": "OxideLauncher-1.12.0.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.7.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.7.0/OxideLauncher-1.7.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.12.0-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.7.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.7.0/OxideLauncher-1.7.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.12.0-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.7.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.7.0/OxideLauncher-1.7.0-x86.apk",
+      "file_name": "OxideLauncher-1.12.0-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.7.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.7.0/OxideLauncher-1.7.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.12.0-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Launcher 1.7.0\n\nA release whose point is that the gates work. Every one of the problems below was found by a\ncheck that had never actually run, rather than by reading the code.\n\n## The screenshot tests had never run at all\n\nThe Paparazzi workflow died in under a second on its NDK step, on every run, since it was\nwritten. It resolved `sdkmanager` into a shell variable and wrote only `ANDROID_HOME` and\n`ANDROID_SDK_ROOT` to `$GITHUB_ENV`, but the NDK step is a separate `run` block, so there\n`$SDKMANAGER` was empty and the step ran\n\n    ndk;25.2.9519653: line 1: : command not found\n\nSo no golden had ever been rendered, and `verify` had nothing to compare against. The goldens\nare now in the repository, a dispatch can re-record and commit them, and `verify` fails on\nany drift. 75 screens, at 640x360, 1280x760 and 1920x1080.\n\n## The task drawer crashed whenever a task was in it\n\n    IllegalStateException: Vertically scrollable component was measured with an\n    infinity maximum height constraints\n\n`OxideDrawerHost` wrapped its content in `verticalScroll`, which gives the child an infinite\nmaximum height. The task drawer's list is a `LazyColumn`, so it threw during measure. The empty\ndrawer drew fine, which is exactly why it had been missed. Drawers now take a `scrollable`\nflag - the one `OxideSubWindow` already had - and the task drawer passes false. This is the\nsame constraint that put the launcher on its crash screen in the Home environment card; it\nwas still latent in the shared drawer host.\n\n## A mod built for another loader could be installed into this one\n\nThe dependency install chain ended its compatibility check with\n\n    versionLoaders.isEmpty() || targetLoaders.any { it in versionLoaders }\n\nAn empty file-side list does not mean \"no loader required\". It means the platform tagged the\nfile with a loader this build has no enum entry for, so the name was dropped on the way in -\nand then the file was declared compatible. A NeoForge-only file could be installed into a\nFabric instance, where it can only fail to load. The rule now fails closed, and the whole\nmatrix is pinned by a test: same loader, a different loader, a multi-loader file, a file\nwhose tag cannot be read, and a target that states no requirement.\n\n## The launch splash was still the old one\n\n`SplashActivity` is the LAUNCHER activity, and it renders `SplashScreen` whenever components\nneed unpacking - which is every update, not only the first install. It was the upstream\nMaterial top bar over a `BackgroundCard`, with a `MarqueeText` action button and a\n`CircularProgressIndicator` per row. It is now an Oxide surface: an Oxide brand bar drawn from\n`OxideLogo`, and the list carries a state badge per item instead of one of four vector\ndrawables.\n\n## Four more defects the screenshot tests were pointing at\n\n- The FPS chart's reused `Path` was a file-level singleton. `Path()` is a JNI call, so it ran\n  during the file's class initialisation, and any JVM unit test that touched one top-level\n  function there died with `UnsatisfiedLinkError` - including a test that only wanted to\n  divide one `Dp` by another. It is a `ThreadLocal` now, which also stops one draw thread from\n  inheriting the previous frame's control points.\n- A Discover result card asked the favourites repository whether a project was favourited\n  during composition. That launches a load, and the load reads MMKV - so every screenshot that\n  rendered a result grid failed at an order-dependent point. The grid now reads the\n  repository's loaded flag outside the `remember`, which also subscribes the cards to load\n  completion.\n- The log source list read `PathManager.DIR_LAUNCHER_LOGS`, a `lateinit` field only\n  `OxideApplication.onCreate` assigns, just to decide which row is the folder row. It is a\n  parameter now.\n- The custom-JRE import row was a greyed-out row while scanning. The project has a test\n  asserting these rows do not exist in that form, and the rule is right: a greyed-out\n  clickable row reads as \"tappable, just not now\". The row is hidden while scanning, matching\n  the picker above it.\n\nThe installed-mods sheet also fell back to a raw numeric project id as a dependency's primary\nlabel when the platform had no title for it. It now says the platform gave no name and drops\nthe id to the secondary line, where it is still useful for matching two dependencies of the\nsame project.\n\n## Lint runs again\n\nLint had not passed once: 244 errors, and CI never reported them because the unit-test step\nfailed first. 242 were `MissingTranslation`, one per new user-facing string, across 15\nlocales. The inherited strings are translated by a pipeline outside this repository and the\nOxide strings are new and English-only, so the check could not be satisfied - recording each\nstring individually had pushed the baseline past 1.8 MB. The check is off, with the reasoning\nin the DSL. The other two errors - `LocalContextGetResourceValueCall` in the storage drawer,\nwhere a resource and a resolver were read off `LocalContext` inside a callback - were fixed in\ncode rather than accepted. Every other finding still sits in the baseline and still fails CI\nwhen it is new.\n\n## Version\n\nThis is release v1.7.0. The launcher reports itself as **1.0.0** in About, in the sidebar\nfooter, on the Home screen and in crash reports. That is deliberate: the release identity and\nthe product version are different facts. The update check, the HTTP user agent, the JVM\nlauncher-version argument and the modpack metadata template all keep the build version, because\nother software compares against them and they have to move monotonically.\n\n## Verified\n\nCompilation, unit tests, screenshot verification, lint, R8, packaging and signing, through CI.\nNot validated on physical hardware - that is what this release is for."
+    "markdown": "# Oxide Launcher 1.12.0\n\n## Copper Oxide builds its own renderer\n\n`libcopperoxide.so` is now compiled from source in GitHub Actions (MobileGlues 97558a6 plus Oxide patches) instead of shipping a precompiled binary. The F3 version string reports Copper Oxide; vendor credits, extensions and rendering behavior are unchanged.\n\n## Simpler control editor\n\nThe control editor opens in Simple mode with one Advanced switch for snapping, styles, focus and reorder. The default layout is now `emulated/new.json`, with the previous default as fallback.\n\n## New app icon\n\nLauncher icon replaced with the /emulated/icon.png artwork, used 1:1 with no adaptive zoom."
   },
   "bodies": []
 }

@@ -95,3 +95,25 @@ fork.
 - Control editor defaults to Simple: layers select, grid, add, inspector,
   preview switch, save. Snapping, styles, focus, reorder and preview-device
   hide behind the Advanced switch. All features remain, one toggle away.
+
+## Native source build (1.12.0)
+
+- Upstream: MobileGlues `97558a6` (`main`), first-party tree vendored at
+  `OxideLauncher/src/main/cpp/copperoxide/upstream/` (LGPL-2.1, `LICENSE` kept).
+  Third-party submodule contents are NOT vendored; `copperoxide.yml` fetches the
+  pinned SHAs at configure time (see `cpp/copperoxide/README.md`).
+- Target renamed to `libcopperoxide.so` (same translation units and flags:
+  C++20, -O3, ThinLTO, `-Bsymbolic-functions`, hidden visibility, `c++_static`).
+- Audited Oxide patches (marked in source, behavior-preserving except noted):
+  1. `config/settings.cpp`: `OXIDE_RENDERER_FLAVOR=copper-oxide` bypasses the
+     “unsupported launcher” clamp that otherwise forces angle off, compute
+     extensions off and the shader cache off. This is why the private-data-dir
+     switch used to matter so much; with our own library Oxide is first-class.
+  2. `gl/getter.cpp`: F3 `GL_VERSION` / shading-language strings say
+     “Copper Oxide” (same format as before). Vendor authors, extension names
+     and numeric versions are untouched — capabilities are still detected,
+     never spoofed.
+- Loader prefers `libcopperoxide.so` and falls back to `libmobileglues.so`
+  (compat, failure path only). `sdl_hook.c` accepts both EGL basenames.
+- No engine surgery beyond this: the tree already builds at -O3+LTO with
+  internal-call binding fixed; deeper changes wait for on-device measurements.
