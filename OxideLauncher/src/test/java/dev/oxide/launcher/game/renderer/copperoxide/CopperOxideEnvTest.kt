@@ -27,7 +27,8 @@ class CopperOxideEnvTest {
     fun baseEnvHasExactlyTheVerifiedKeys() {
         val base = CopperOxideEnv.baseEnv()
         assertEquals("3", base["LIBGL_ES"])
-        assertEquals("libmobileglues.so", base["LIBGL_EGL"])
+        assertEquals("libcopperoxide.so", base["LIBGL_EGL"])
+        assertEquals("libmobileglues.so", CopperOxideIdentity.LEGACY_LIBRARY)
         assertEquals("1", base["MG_COUNT_LAUNCH"])
         assertEquals("copper-oxide", base["OXIDE_RENDERER_FLAVOR"])
         assertEquals(4, base.size)
