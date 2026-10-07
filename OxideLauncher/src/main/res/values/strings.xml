@@ -2564,6 +2564,9 @@
     <string name="oxide_ce_section_styles">Styles</string>
     <string name="oxide_ce_section_preview">Preview</string>
     <string name="oxide_ce_section_snap">Snapping</string>
+    <string name="oxide_ce_advanced_mode">Advanced</string>
+    <string name="oxide_ce_advanced_mode_hint">Show snapping, styles, focus and reorder. Off keeps it simple.</string>
+    <string name="oxide_ce_simple_badge">Simple</string>
     <string name="oxide_ce_layers_empty">No control layers yet. Create one to add controls.</string>
     <string name="oxide_ce_controls_no_layer">Select a control layer above to see its controls.</string>
     <string name="oxide_ce_controls_empty">This layer has no controls yet.</string>

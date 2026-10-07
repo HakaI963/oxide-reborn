@@ -241,6 +241,41 @@ fun editorReconcileSelectedLayer(currentUuid: String?, layerUuids: List<String>)
 /** 预览模式下控制层不能改名、不能换序、不能删 */
 fun editorAllowsLayerEditing(isPreviewMode: Boolean): Boolean = !isPreviewMode
 
+// ---------------------------------------------------------------------------
+// 简单 / 高级模式
+// ---------------------------------------------------------------------------
+
+/**
+ * 简单模式（默认）与高级模式的可见性划分。
+ *
+ * 简单模式给普通用户：选层、控件网格、加控件、位置尺寸、预览开关、保存都在；
+ * 吸附、样式、摇杆样式、层聚焦、层换序收进高级里。所有功能都在，高级开关一开
+ * 就与旧版面板一致，因此这只是"一次倒多少出来"的区别，不是功能删减。
+ *
+ * 全部纯函数，可单测；UI 层只读 AllSettings.editorAdvancedMode。
+ */
+
+/** 高级块（吸附 / 样式 / 摇杆样式）只在高级模式出现 */
+fun editorShowsAdvancedBlock(advanced: Boolean): Boolean = advanced
+
+/** 层聚焦只在高级且非预览时出现 */
+fun editorShowsLayerFocus(advanced: Boolean, isPreviewMode: Boolean): Boolean =
+    advanced && !isPreviewMode
+
+/** 层换序按钮只在高级且非预览时出现 */
+fun editorShowsLayerReorder(advanced: Boolean, isPreviewMode: Boolean): Boolean =
+    advanced && !isPreviewMode
+
+/** 吸附整块只在高级时出现（预览里也不占地方） */
+fun editorShowsSnapBlock(advanced: Boolean): Boolean = advanced
+
+/** 样式整块只在高级时出现 */
+fun editorShowsStylesBlock(advanced: Boolean): Boolean = advanced
+
+/** 预览的设备选择只在高级 + 预览时出现；预览开关本身两种模式都有 */
+fun editorShowsPreviewDevice(advanced: Boolean, isPreviewMode: Boolean): Boolean =
+    advanced && isPreviewMode
+
 /** 没有选中控件时没有位置与尺寸可改 */
 fun editorShowsGeometrySection(kind: EditorWidgetKind?): Boolean = kind != null
 

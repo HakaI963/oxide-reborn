@@ -644,6 +644,15 @@ object AllSettings : SettingsRegistry() {
     val editorWidgetSnapMode = enumSetting("editorWidgetSnapMode", SnapMode.FullScreen)
 
     /**
+     * 控制布局编辑器：高级模式
+     *
+     * 关（默认）是给普通用户的干净界面：选层、改控件、加控件、预览、保存都在，
+     * 但吸附、样式、摇杆样式、层聚焦与换序收进"高级"里。开则全部展开，与旧版
+     * 面板一致。所有功能都在，只是默认不一次全倒出来。
+     */
+    val editorAdvancedMode = boolSetting("editorAdvancedMode", false)
+
+    /**
      * 是否启用陶瓦联机
      */
     val enableTerracotta = boolSetting("enableTerracotta", false)

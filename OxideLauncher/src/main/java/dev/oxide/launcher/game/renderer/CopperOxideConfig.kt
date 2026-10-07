@@ -209,8 +209,16 @@ fun resolveCopperOxideDataDir(
 fun authorCopperOxideConfig(dir: File, tuning: CopperOxideTuning): Boolean {
     val json = tuning.toConfigJson() ?: return false
     return runCatching {
-        dir.mkdirs()
-        File(dir, COPPER_OXIDE_CONFIG_FILE_NAME).writeText(json)
+        if (!dir.isDirectory) dir.mkdirs()
+        val target = File(dir, COPPER_OXIDE_CONFIG_FILE_NAME)
+        val existing = runCatching { if (target.isFile) target.readText() else null }.getOrNull()
+        if (existing == json) return true
+        val tmp = File(dir, COPPER_OXIDE_CONFIG_FILE_NAME + ".tmp")
+        tmp.writeText(json)
+        if (!tmp.renameTo(target)) {
+            target.writeText(json)
+            runCatching { tmp.delete() }
+        }
         true
     }.getOrDefault(false)
 }

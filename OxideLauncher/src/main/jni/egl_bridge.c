@@ -133,6 +133,14 @@ void load_vulkan() {
 
 int pojavInitOpenGL() {
     const char *renderer = getenv("POJAV_RENDERER");
+    if (renderer == NULL) {
+        /* GameLauncher always sets POJAV_RENDERER; never crash the render thread if it is missing. */
+        printf("EGLBridge: POJAV_RENDERER unset, defaulting to Copper Oxide (GL4ES) path\n");
+        pojav_environ->config_renderer = RENDERER_GL4ES;
+        set_gl_bridge_tbl();
+        if (br_init()) br_setup_window();
+        return 0;
+    }
 
     if (!strncmp("opengles", renderer, 8))
     {
@@ -221,7 +229,7 @@ EXTERNAL_API int pojavInit() {
         printf("pojavInit: GLFW bridge is not initialized\n");
         return 0;
     }
-    ANativeWindow_acquire(pojav_environ->pojavWindow);
+    if (pojav_environ->pojavWindow != NULL) ANativeWindow_acquire(pojav_environ->pojavWindow);
     pojav_environ->savedWidth = ANativeWindow_getWidth(pojav_environ->pojavWindow);
     pojav_environ->savedHeight = ANativeWindow_getHeight(pojav_environ->pojavWindow);
     ANativeWindow_setBuffersGeometry(pojav_environ->pojavWindow,pojav_environ->savedWidth,pojav_environ->savedHeight,AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM);
@@ -244,7 +252,7 @@ EXTERNAL_API void pojavSetWindowHint(int hint, int value) {
             break;
         case GLFW_OPENGL_API: {
             const char *renderer = getenv("POJAV_RENDERER");
-            if (!strncmp("opengles", renderer, 8)) {
+            if (renderer != NULL && !strncmp("opengles", renderer, 8)) {
                 pojav_environ->config_renderer = RENDERER_GL4ES;
             } else if (!strcmp(renderer, "vulkan_zink")) {
                 pojav_environ->config_renderer = RENDERER_VK_ZINK;
@@ -262,8 +270,9 @@ EXTERNAL_API void pojavSetWindowHint(int hint, int value) {
 EXTERNAL_API void pojavSwapBuffers() {
     calculateFPS();
 
-    if (pojav_environ->config_renderer == RENDERER_VK_ZINK
-     || pojav_environ->config_renderer == RENDERER_GL4ES)
+    if ((pojav_environ->config_renderer == RENDERER_VK_ZINK
+      || pojav_environ->config_renderer == RENDERER_GL4ES)
+      && br_swap_buffers != NULL)
     {
         br_swap_buffers();
     }
@@ -307,18 +316,31 @@ void* maybe_load_vulkan() {
     return (void*) strtoul(getenv("VULKAN_PTR"), NULL, 0x10);
 }
 
-static int frameCount = 0;
-static int fps = 0;
-static time_t lastTime = 0;
+static volatile int frameCount = 0;
+static volatile int fps = 0;
+static struct timespec lastFpsTime = {0, 0};
+static int lastFpsInit = 0;
 
 void calculateFPS() {
+    struct timespec now;
+    /* CLOCK_MONOTONIC: immune to wall-clock jumps (NTP/timezone). 1s buckets for the readout. */
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        frameCount++;
+        return;
+    }
     frameCount++;
-    time_t currentTime = time(NULL);
-
-    if (currentTime != lastTime) {
-        lastTime = currentTime;
-        fps = frameCount;
+    if (!lastFpsInit) {
+        lastFpsTime = now;
+        lastFpsInit = 1;
+        return;
+    }
+    long elapsedMs = (now.tv_sec - lastFpsTime.tv_sec) * 1000L
+        + (now.tv_nsec - lastFpsTime.tv_nsec) / 1000000L;
+    if (elapsedMs >= 1000) {
+        int frames = frameCount;
+        fps = (int)((frames * 1000L) / (elapsedMs > 0 ? elapsedMs : 1));
         frameCount = 0;
+        lastFpsTime = now;
     }
 
     if (!pojav_environ->hasGraphicOutput && pojav_environ->dalvikJavaVMPtr && pojav_environ->bridgeClazz && pojav_environ->method_onGraphicOutput) {

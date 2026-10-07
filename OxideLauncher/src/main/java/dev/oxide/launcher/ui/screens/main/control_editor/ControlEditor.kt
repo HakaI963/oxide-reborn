@@ -342,6 +342,8 @@ fun BoxWithConstraintsScope.ControlEditor(
                 viewModel.save(targetFile, onSaved = exit)
             },
             onExit = menuExit,
+            advanced = AllSettings.editorAdvancedMode.state,
+            onAdvancedChanged = { AllSettings.editorAdvancedMode.save(it) },
         )
 
         EditorBall(

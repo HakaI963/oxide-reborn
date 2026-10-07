@@ -24,7 +24,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Copper Oxide 选项到环境变量的映射
@@ -73,11 +72,11 @@ class CopperOxideEnvTest {
 
     @Test
     fun theRendererEnvMapOnlyContainsVerifiedKeys() {
-        val source = readRendererSource()
-        // 注意这里只匹配到键的左引号为止：真正的调用都是双参 `put("KEY", value)`，
-        // 键的右引号后面跟的是逗号而不是 `)`，要求 `")` 会一个都匹配不到，
-        // 于是 keys 恒为空，上一版断言就是这样假失败的。
-        val keys = Regex("put\\(\"([^\"]+)\"").findAll(source).map { it.groupValues[1] }.toSet()
+        // Since the Copper Oxide rebuild the env is built by pure functions
+        // instead of inline put() calls, so assert the maps directly: stronger
+        // than scanning source, and it cannot go stale on a refactor.
+        val keys = dev.oxide.launcher.game.renderer.copperoxide.CopperOxideEnv.baseEnv().keys +
+            dev.oxide.launcher.game.renderer.copperoxide.CopperOxideEnv.dataDirEnv(true, "/x").keys
         val verified = setOf("LIBGL_ES", "LIBGL_EGL", "MG_COUNT_LAUNCH", "OXIDE_RENDERER_FLAVOR", "MG_DIR_PATH")
         assertFalse("expected at least the four base env entries", keys.isEmpty())
         assertTrue(
@@ -90,25 +89,18 @@ class CopperOxideEnvTest {
 
     @Test
     fun identityNameAndVersionGatesAreUntouched() {
-        val source = readRendererSource()
-        assertTrue("renderer id must stay", source.contains("opengles3_oxide_copper"))
-        assertTrue("renderer uuid must stay", source.contains("52a0f58e-1694-4d47-9ce6-5fa0894413a7"))
-        assertTrue("renderer name must stay", source.contains("Copper Oxide"))
-        assertTrue("max MC version gate must stay", source.contains("\"26.3\""))
-        assertTrue("EGL provider must stay", source.contains("libmobileglues.so"))
-    }
-
-    private fun readRendererSource(): String = locate(
-        "src/main/java/dev/oxide/launcher/game/renderer/renderers/CopperOxideRenderer.kt"
-    ).readText()
-
-    private fun locate(suffix: String): File {
-        var dir: File? = File("").absoluteFile
-        repeat(8) {
-            val candidate = dir?.resolve(suffix)
-            if (candidate != null && candidate.isFile) return candidate
-            dir = dir?.parentFile
-        }
-        error("could not locate " + suffix + " from " + File("").absolutePath)
+        // Identity now lives in CopperOxideIdentity (single source of truth);
+        // the renderer delegates to it, so assert the constants and the live
+        // object instead of grepping the renderer file.
+        val id = dev.oxide.launcher.game.renderer.copperoxide.CopperOxideIdentity
+        assertEquals("opengles3_oxide_copper", id.RENDERER_ID)
+        assertEquals("52a0f58e-1694-4d47-9ce6-5fa0894413a7", id.UNIQUE_ID)
+        assertEquals("Copper Oxide", id.NAME)
+        assertEquals("26.3", id.MAX_MC_VERSION)
+        assertEquals("libcopperoxide.so", id.NATIVE_LIBRARY)
+        assertEquals("libmobileglues.so", id.LEGACY_LIBRARY)
+        val r = dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
+        assertEquals(id.RENDERER_ID, r.getRendererId())
+        assertEquals(id.NATIVE_LIBRARY, r.getRendererLibrary())
     }
 }

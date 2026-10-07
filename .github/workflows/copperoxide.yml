@@ -1,0 +1,130 @@
+name: Copper Oxide native
+
+# Builds libcopperoxide.so from the vendored MobileGlues source
+# (OxideLauncher/src/main/cpp/copperoxide) for all four ABIs and commits
+# the binaries into OxideLauncher/src/main/jniLibs, replacing the old
+# precompiled libmobileglues.so. Dispatch-only on purpose: the build takes
+# a full glslang compile per ABI, so it must never run on every PR.
+# The main CI/release builds stay untouched and keep working through the
+# libmobileglues.so fallback until this workflow lands the new binaries.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to build from and commit the binaries to
+        required: false
+        default: copper-oxide-rebuild
+        type: string
+
+concurrency:
+  group: copperoxide-${{ inputs.branch }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_NDK_VERSION: "27.3.13750724"
+  ANDROID_CMAKE_VERSION: "3.22.1"
+
+jobs:
+  build:
+    name: Build libcopperoxide (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: true
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86_64, x86]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Locate the Android SDK
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(ls -d "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::cmdline-tools (sdkmanager) not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          {
+            echo "ANDROID_HOME=$SDK_ROOT"
+            echo "ANDROID_SDK_ROOT=$SDK_ROOT"
+            echo "SDKMANAGER=$SDKMANAGER"
+          } >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+      - name: Install NDK and CMake
+        run: '"$SDKMANAGER" "ndk;${{ env.ANDROID_NDK_VERSION }}" "cmake;${{ env.ANDROID_CMAKE_VERSION }}" "platforms;android-35"'
+      - name: Configure
+        run: |
+          set -euo pipefail
+          NDK_HOME="$ANDROID_SDK_ROOT/ndk/${{ env.ANDROID_NDK_VERSION }}"
+          cmake -S OxideLauncher/src/main/cpp/copperoxide -B build/${{ matrix.abi }} -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="${{ matrix.abi }}" \
+            -DANDROID_PLATFORM=android-21 \
+            -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/${{ matrix.abi }} --target copperoxide -- -j4
+      - name: Verify
+        run: |
+          set -euo pipefail
+          SO="build/${{ matrix.abi }}/libcopperoxide.so"
+          test -s "$SO"
+          ls -lh "$SO"
+          NM="$ANDROID_SDK_ROOT/ndk/${{ env.ANDROID_NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          "$NM" -D --defined-only "$SO" | grep -q " eglGetProcAddress"
+          echo "OK: libcopperoxide exports eglGetProcAddress"
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: libcopperoxide-${{ matrix.abi }}
+          path: build/${{ matrix.abi }}/libcopperoxide.so
+          if-no-files-found: error
+          retention-days: 7
+
+  commit-libs:
+    name: Commit libcopperoxide to jniLibs
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: libcopperoxide-*
+          merge-multiple: false
+      - name: Place binaries, drop precompiled libmobileglues
+        run: |
+          set -euo pipefail
+          for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+            SRC="artifacts/libcopperoxide-$abi/libcopperoxide.so"
+            DST="OxideLauncher/src/main/jniLibs/$abi/libcopperoxide.so"
+            test -s "$SRC"
+            cp "$SRC" "$DST"
+            git rm -q "OxideLauncher/src/main/jniLibs/$abi/libmobileglues.so" || true
+          done
+          ls -lh OxideLauncher/src/main/jniLibs/*/libcopperoxide.so
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git add -A OxideLauncher/src/main/jniLibs
+          if git diff --cached --quiet; then
+            echo "Binaries unchanged; nothing to commit."
+            exit 0
+          fi
+          git -c user.name="oxide-ci" -c user.email="oxide-ci@users.noreply.github.com" \
+            commit -m "Copper Oxide native: libcopperoxide.so built from MobileGlues 97558a6 + Oxide patches (NDK 27.3, CMake 3.22.1, Release)"
+          git push origin HEAD:${{ inputs.branch }}
