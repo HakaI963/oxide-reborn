@@ -157,12 +157,12 @@ void gl_swap_surface(gl_render_window_t* bundle) {
     int32_t nativeWindowWidth = 0;
     int32_t nativeWindowHeight = 0;
     if (pojav_environ->pojavWindow != NULL) {
-        for (int poll = 0; poll < 8; poll++) {
+        for (int attempt = 0; attempt < 8; attempt++) {
             nativeWindowWidth = ANativeWindow_getWidth(pojav_environ->pojavWindow);
             nativeWindowHeight = ANativeWindow_getHeight(pojav_environ->pojavWindow);
             if (nativeWindowWidth <= 0 && nativeWindowHeight <= 0) break;
             /* Last iteration keeps the final reading; otherwise wait 50ms and re-check. */
-            if (poll + 1 < 8) usleep(50000);
+            if (attempt + 1 < 8) usleep(50000);
         }
     }
     if ((nativeWindowWidth > 0) || (nativeWindowHeight > 0)) {
