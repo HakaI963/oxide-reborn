@@ -45,6 +45,7 @@ import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
 import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
+import dev.oxide.launcher.game.renderer.copperoxide.CopperOxideCapabilities
 import dev.oxide.launcher.game.support.touch_controller.ControllerProxy
 import dev.oxide.launcher.game.version.installed.Version
 import dev.oxide.launcher.game.version.installed.VersionInfoParser
@@ -436,19 +437,15 @@ private fun setRendererEnv(envMap: MutableMap<String, String>) {
     }
 
     if (!envMap.containsKey("LIBGL_ES")) {
-        val glesMajor = getDetectedVersion()
-        Logger.info(TAG, "GLES version detected: $glesMajor")
-
-        envMap["LIBGL_ES"] = if (glesMajor < 3) {
-            //fallback to 2 since it's the minimum for the entire app
-            "2"
-        } else if (rendererId.startsWith("opengles")) {
-            rendererId.replace("opengles", "").replace("_5", "")
-        } else {
-            // TODO if can: other backends such as Vulkan.
-            // Sure, they should provide GLES 3 support.
-            "3"
-        }
+        // Cache the EGL probe per process: eglInitialize + eglGetConfigs +
+        // eglTerminate loads the driver, so probing on every launch is pure
+        // overhead. Later launches in the same process reuse the first result.
+        val probed = CopperOxideCapabilities.EglProbeCache.getOrProbe { getDetectedVersion() }
+        Logger.info(TAG, "GLES version detected: $probed")
+        // Honest resolution, no version spoofing: renderer id pins 2/3 when it
+        // says so, otherwise the probe decides; probe failures fall back to 3
+        // (GLES-capable backend) rather than forcing 2. See CopperOxideCapabilities.
+        envMap["LIBGL_ES"] = CopperOxideCapabilities.resolveLibGlEs(rendererId, probed)
     }
 }
 
@@ -460,18 +457,8 @@ private fun getRendererLibrary(): String? {
 /**
  * [Modified from PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher/blob/98947f2/app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/utils/JREUtils.java#L505-L516)
  */
-private fun hasExtension(extensions: String, name: String): Boolean {
-    var start = extensions.indexOf(name)
-    while (start >= 0) {
-        // check that we didn't find a prefix of a longer extension name
-        val end = start + name.length
-        if (end == extensions.length || extensions[end] == ' ') {
-            return true
-        }
-        start = extensions.indexOf(name, end)
-    }
-    return false
-}
+private fun hasExtension(extensions: String, name: String): Boolean =
+    CopperOxideCapabilities.hasExtension(extensions, name)
 
 private const val EGL_OPENGL_ES_BIT: Int = 0x0001
 private const val EGL_OPENGL_ES2_BIT: Int = 0x0004
