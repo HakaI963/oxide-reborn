@@ -48,9 +48,21 @@ import java.io.OutputStream
 private const val TAG = "ControlManager"
 
 /**
- * assets 里的默认控制布局文件名
+ * assets 里的默认控制布局文件（新默认：干净、好改的第一份布局）。
+ *
+ * 路径 `emulated/new.json` 与其它启动器的默认布局约定一致：新装用户解压的
+ * 第一份布局就是它。旧路径 `default_layout.json` 保留为兼容回落——已装机
+ * 用户不受影响，新用户拿到的永远是新文件。
  */
-private const val DEFAULT_LAYOUT_ASSET = "default_layout.json"
+internal const val DEFAULT_LAYOUT_ASSET = "emulated/new.json"
+
+/**
+ * 旧默认布局的兼容路径。
+ *
+ * 新文件读不出来（打包缺失、渠道包裁剪）时退到它，再不行才用内置兜底。
+ * 不要删除旧文件：它是已验证可加载的第二份来源。
+ */
+private const val LEGACY_DEFAULT_LAYOUT_ASSET = "default_layout.json"
 
 /**
  * 控制布局文件的后缀，创建文档契约与默认导出文件名共用它
@@ -318,8 +330,17 @@ object ControlManager {
         val file = getNewRandomFile()
         val existedBefore = file.exists()
         val unpacked = try {
-            context.copyAssetFile(fileName = DEFAULT_LAYOUT_ASSET, output = file, overwrite = false)
-            isLoadableLayout(file)
+            // 新默认优先；缺失或坏文件时退到旧默认，保证总有一份可加载的布局。
+            val triedNew = runCatching {
+                context.copyAssetFile(fileName = DEFAULT_LAYOUT_ASSET, output = file, overwrite = false)
+                isLoadableLayout(file)
+            }.getOrDefault(false)
+            if (triedNew) true else {
+                runCatching {
+                    context.copyAssetFile(fileName = LEGACY_DEFAULT_LAYOUT_ASSET, output = file, overwrite = true)
+                    isLoadableLayout(file)
+                }.getOrDefault(false)
+            }
         } catch (e: Exception) {
             Logger.warning(TAG, "Failed to unpack default control layout", e)
             false
