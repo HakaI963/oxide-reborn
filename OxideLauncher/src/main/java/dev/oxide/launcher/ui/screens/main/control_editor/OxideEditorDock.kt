@@ -555,6 +555,7 @@ private fun EditorDockBody(
                 hideLayerWhen = previewHideLayerWhen,
                 onHideLayerWhenChanged = onPreviewHideLayerChanged,
                 onPreviewChanged = onPreviewChanged,
+                advanced = advanced,
             )
         }
 
@@ -939,6 +940,7 @@ private fun EditorPreviewBlock(
     hideLayerWhen: HideLayerWhen,
     onHideLayerWhenChanged: (HideLayerWhen) -> Unit,
     onPreviewChanged: (Boolean) -> Unit,
+    advanced: Boolean = false,
 ) {
     val metrics = editorMetrics()
     Column(verticalArrangement = Arrangement.spacedBy(metrics.rowGap)) {
