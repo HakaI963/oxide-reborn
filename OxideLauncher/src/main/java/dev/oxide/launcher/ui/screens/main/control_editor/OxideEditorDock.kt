@@ -360,7 +360,7 @@ private fun EditorDockBody(
                         else R.string.oxide_ce_hide_layer
                     ),
                     visibilityOnText = stringResource(R.string.oxide_ce_layer_hidden),
-                    enabled = editorAllowsLayerEditing(!isPreviewMode),
+                    enabled = editorAllowsLayerEditing(isPreviewMode),
                     onSelect = {
                         onLayerSelected(if (selectedLayer === layer) null else layer)
                     },
@@ -381,7 +381,7 @@ private fun EditorDockBody(
                         canMoveDown = index < layers.lastIndex,
                         moveUpText = stringResource(R.string.oxide_ce_move_layer_up),
                         moveDownText = stringResource(R.string.oxide_ce_move_layer_down),
-                        enabled = editorAllowsLayerEditing(!isPreviewMode),
+                        enabled = editorAllowsLayerEditing(isPreviewMode),
                         onMoveUp = { onLayerReorder(index, index - 1) },
                         onMoveDown = { onLayerReorder(index, index + 1) },
                     )
@@ -405,7 +405,7 @@ private fun EditorDockBody(
         item(key = "create_layer") {
             EditorActionRow(
                 label = stringResource(R.string.control_editor_layers_create),
-                enabled = editorAllowsLayerEditing(!isPreviewMode),
+                enabled = editorAllowsLayerEditing(isPreviewMode),
                 onClick = onCreateLayer,
             )
         }

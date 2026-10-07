@@ -33,8 +33,9 @@ import java.io.File
  *
  * 三条硬规则：每一行都点名项目、点名许可证、给出源码仓库链接（链接在
  * 条目装配处，不在字符串里）；Copper Oxide 必须写明是 Oxide 基于
- * MobileGlues 的调优构建，而不是 Oxide 自己的东西；这三家都是 LGPL，
- * 文案里不许出现公有领域或无条件免费使用的说法。
+ * MobileGlues 的调优构建，而不是 Oxide 自己的东西；Copper Oxide 与 LTW
+ * 是 LGPL，Holy GL4ES 是 MIT，文案里不许出现公有领域或无条件免费使用的说法
+ *（v1.11.0 起 Mojo Zink 已移除，mojo-gl 那一行只剩 Holy GL4ES）。
  */
 class OxideSettingsRendererCreditsTest {
 
@@ -69,13 +70,14 @@ class OxideSettingsRendererCreditsTest {
     }
 
     @Test
-    fun theMojoGlRowNamesBothBackendsTheLicenceAndTheMaker() {
+    fun theMojoGlRowNamesTheBackendTheLicenceAndTheMaker() {
+        // v1.11.0 移除了 Mojo Zink：这一行现在只剩 FCL-Team 的 Holy GL4ES（MIT）。
         val title = stringValue("oxide_about_ack_mojo_gl_title")
         val detail = stringValue("oxide_about_ack_mojo_gl_detail")
-        assertTrue("title must name Zink", title.contains("Zink"))
         assertTrue("title must name Holy GL4ES", title.contains("Holy GL4ES"))
-        assertTrue("detail must name MojoLauncher", detail.contains("MojoLauncher"))
-        assertTrue("detail must name LGPL-3.0", detail.contains("LGPL-3.0"))
+        assertFalse("Zink is gone and must not be advertised", title.contains("Zink") || detail.contains("Zink"))
+        assertTrue("detail must name FCL-Team", detail.contains("FCL-Team"))
+        assertTrue("detail must name MIT", detail.contains("MIT"))
     }
 
     @Test

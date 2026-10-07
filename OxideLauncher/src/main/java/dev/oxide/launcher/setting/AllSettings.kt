@@ -113,6 +113,67 @@ object AllSettings : SettingsRegistry() {
      */
     val dumpShaders = boolSetting("dumpShaders", false)
 
+    /**
+     * Copper Oxide 驱动数据目录改用启动器私有目录
+     *
+     * 关（默认）时启动器不传 MG_DIR_PATH，行为与此前完全一致：驱动回落到
+     * 编译进 .so 的默认目录（rodata 中的 "/sdcard/MG"），在分区存储设备上
+     * 通常不可写，驱动打印 "Failed to load config. Use default config."
+     * 后使用默认配置。开时启动器把 MG_DIR_PATH 指到应用私有目录下的
+     * mobileglues 子目录，驱动在该目录读写 config.json、glsl_cache.tmp、
+     * latest.log 与 stats.json。
+     */
+    val copperOxidePrivateDataDir = boolSetting("copperOxidePrivateDataDir", false)
+
+    /**
+     * Copper Oxide 驱动调优总开关
+     *
+     * 关（默认）时启动器不写 config.json，驱动行为与此前逐字节一致。
+     * 开时启动时把调优快照写成 MG_DIR_PATH 所指目录下的 config.json；
+     * 数据目录开关没开也会为此把 MG_DIR_PATH 指到启动器私有目录，
+     * 因为调优文件必须落在 MG_DIR_PATH 里，而共享存储不可写。
+     */
+    val copperOxideTuningEnabled = boolSetting("copperOxideTuningEnabled", false)
+
+    /**
+     * Copper Oxide 的 FSR1 超分档位，0=关，1=超高质量，2=质量，3=均衡，4=性能
+     *
+     * 以低于原生分辨率渲染再放大，是光影掉帧时真正有效的杠杆。
+     */
+    val copperOxideFsr = intSetting("copperOxideFsr", 0, 0..4)
+
+    /**
+     * Copper Oxide 的 GLSL 缓存大小，单位 MB，0 表示关闭缓存
+     */
+    val copperOxideGlslCacheMb = intSetting("copperOxideGlslCacheMb", 64, 0..512)
+
+    /**
+     * Copper Oxide 的 ANGLE 后端模式：0=驱动默认，1=尽量启用，2=强制关闭，3=强制启用
+     */
+    val copperOxideAngle = intSetting("copperOxideAngle", 0, 0..3)
+
+    /**
+     * Copper Oxide 的 NoError 快速路径：只提供 0=自动 与 1=关闭
+     *
+     * L1/L2 是会破坏游戏的作弊项，不提供。
+     */
+    val copperOxideNoError = intSetting("copperOxideNoError", 0, 0..1)
+
+    /**
+     * Copper Oxide 是否暴露计算着色器扩展入口
+     */
+    val copperOxideExtCompute = boolSetting("copperOxideExtCompute", true)
+
+    /**
+     * Copper Oxide 是否暴露计时查询扩展入口
+     */
+    val copperOxideExtTimerQuery = boolSetting("copperOxideExtTimerQuery", true)
+
+    /**
+     * Copper Oxide 是否暴露直接状态访问扩展入口
+     */
+    val copperOxideExtDsa = boolSetting("copperOxideExtDsa", true)
+
     //Game
     /**
      * 版本隔离

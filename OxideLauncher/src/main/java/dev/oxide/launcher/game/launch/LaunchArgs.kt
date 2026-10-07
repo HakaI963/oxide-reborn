@@ -250,14 +250,17 @@ class LaunchArgs(
         }
         argsList.add("-Dlog4j.configurationFile=${configFilePath.absolutePath}")
         argsList.add("-Dminecraft.client.jar=${clientJar.absolutePath}")
-        // Oxide launcher brand. Vanilla reads these two system properties for the
-        // main-menu and F3 version line since the 1.6 era, and versions that do not
-        // read them simply ignore unknown -D flags, so setting them unconditionally
-        // is safe for old versions, snapshots and every loader with no mod and no
-        // jar patch. The version is the user-facing display version
-        // (BuildKeys.LAUNCHER_DISPLAY_VERSION), not the build identity, and the
-        // ensure call keeps each flag exactly once so a re-entered launch pipeline
-        // never stacks duplicates.
+        // Oxide launcher brand. These two system properties are telemetry-only:
+        // since snapshot 23w18a vanilla reports minecraft.launcher.brand as the
+        // launcher_name telemetry property, and no vanilla version reads them
+        // for the title screen, F3 or the window title. They are kept because
+        // they are harmless (versions that do not read them ignore unknown -D
+        // flags) and they attribute crash telemetry to this launcher. The
+        // in-game title-screen suffix comes from the --versionType game
+        // argument instead, see getMinecraftClientArgs. The version is the
+        // user-facing display version (BuildKeys.LAUNCHER_DISPLAY_VERSION),
+        // not the build identity, and the ensure call keeps each flag exactly
+        // once so a re-entered launch pipeline never stacks duplicates.
         argsList.ensureOxideLauncherBrandArgs(BuildKeys.LAUNCHER_NAME, BuildKeys.LAUNCHER_DISPLAY_VERSION)
 
         return argsList
@@ -394,18 +397,22 @@ class LaunchArgs(
 
         setLauncherInfo(varArgMap)
 
-        val minecraftArgs: MutableList<String> = ArrayList()
-        gameManifest.arguments?.apply {
-            // Support Minecraft 1.13+
-            game.forEach { if (it is String) minecraftArgs.add(it) }
-        }
+        // The 1.13+ template is already one argv element per entry, so the
+        // placeholders are substituted in place: a multi-word value (the
+        // branded versionType, a player name with spaces, ...) stays a SINGLE
+        // element. Only the legacy single-string form is ever split, and
+        // quote-aware so quoted values survive it. Joining the list into one
+        // string and re-splitting on spaces shattered the branded versionType
+        // into stray tokens, and the game then saw only its first word as the
+        // --versionType value (a leading "release" hides itself on the title
+        // screen), which is why the Oxide suffix never appeared in-game.
+        val template: List<String> = gameManifest.arguments
+            ?.game
+            ?.filterIsInstance<String>()
+            ?: gameManifest.minecraftArguments?.splitPreservingQuotes()
+            ?: emptyList()
 
-        return insertJSONValueList(
-            splitAndFilterEmpty(
-                gameManifest.minecraftArguments ?:
-                minecraftArgs.toTypedArray().joinToString(" ")
-            ), varArgMap
-        )
+        return substituteClientGameArgs(template, varArgMap).toTypedArray()
     }
 
     private fun setLauncherInfo(verArgMap: MutableMap<String, String>) {
@@ -413,14 +420,21 @@ class LaunchArgs(
         verArgMap["launcher_version"] = BuildConfig.VERSION_NAME
         verArgMap["version_type"] = version.getBrandedVersionType(gameManifest.type)
     }
+}
 
-    private fun splitAndFilterEmpty(arg: String): Array<String> {
-        val list: MutableList<String> = ArrayList()
-        arg.split(" ").forEach {
-            if (it.isNotEmpty()) list.add(it)
-        }
-        return list.toTypedArray()
-    }
+/**
+ * Substitute the manifest placeholders of the already-assembled game command
+ * template and return the final argv list.
+ *
+ * Contract: every template entry maps to exactly one argv element. Values may
+ * contain spaces (the branded versionType always does once a loader tag or a
+ * multi-word brand is appended), and splitting them would hand the game stray
+ * tokens while the --versionType flag kept only the first word. Callers must
+ * therefore pass the 1.13+ list entries through untouched and split only the
+ * legacy single-string form (quote-aware) before calling this.
+ */
+fun substituteClientGameArgs(template: List<String>, values: Map<String, String>): List<String> {
+    return insertJSONValueList(template.toTypedArray(), values).toList()
 }
 
 /**

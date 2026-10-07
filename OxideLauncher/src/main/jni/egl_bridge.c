@@ -160,18 +160,6 @@ int pojavInitOpenGL() {
         set_osm_bridge_tbl();
     }
 
-    // Mojo Zink (Oxide builtin): mesa zink driven EGL-direct, like MojoLauncher's
-    // ZinkRenderSpec. GL bridge (not OSMesa: libEGL_mesa.so exports no OSMesa*
-    // symbols, and the OSMesa loader aborts when they are missing), Vulkan
-    // preloaded so the zink gallium driver has a Vk driver to talk to.
-    if (!strcmp(renderer, "oxide_vulkan_zink"))
-    {
-        pojav_environ->config_renderer = RENDERER_GL4ES;
-        load_vulkan();
-        setenv("GALLIUM_DRIVER", "zink", 1);
-        set_gl_bridge_tbl();
-    }
-
     if (!strcmp(renderer, "gallium_freedreno"))
     {
         pojav_environ->config_renderer = RENDERER_VK_ZINK;

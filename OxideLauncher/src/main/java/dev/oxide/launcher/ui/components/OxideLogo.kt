@@ -116,7 +116,12 @@ fun OxideLogo(
 //
 // 四个角的圆角半径并不相等（外缘 103.6..117.3，±6%），但这个差异远小于
 // 一条描边的宽度，重画时取四角的均值；只有位图资源才逐角保留（见
-// 各密度下的 ic_launcher_foreground.webp 与 res/drawable/ic_launcher_monochrome.xml）。
+// 各密度下的 ic_launcher_foreground.webp；单色图标是各密度下的
+// ic_launcher_monochrome.png，从新应用图标直接取的剪影）。
+//
+// 注意：上面这些数字描述的是旧图标（双菱形）的几何；v1.11.0 起应用图标
+// 换成了新图（/emulated/oxide.png 的金属立方体），而这里画的依然是旧菱形
+// 标识。标识要不要跟着换是设计决定，不在本轮应用图标替换之内。
 //
 // 下面每个比例都除以 [OxideMarkHalfDiagonalRatio] 对应的半对角线，因此与尺寸无关；
 // 描边宽度也从半对角线里扣掉，于是 [OxideMarkRing.outerHalfDiagonal] 恒等于它。

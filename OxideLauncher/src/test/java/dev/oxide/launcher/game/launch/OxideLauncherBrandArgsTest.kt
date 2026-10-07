@@ -27,12 +27,14 @@ import java.io.File
 /**
  * Automatic Oxide Launcher branding of the JVM argument list.
  *
- * Vanilla reads the brand and version system properties for the main-menu and
- * F3 version line since the 1.6 era, and versions that do not read them simply
- * ignore unknown -D flags. Setting the flags unconditionally is therefore safe
- * for old versions, snapshots and every loader with no mod and no jar patch,
- * and these tests pin that neutrality: the helper never looks at the Minecraft
- * version at all, it only appends flags to whatever list it is given.
+ * The `-Dminecraft.launcher.brand` / `-Dminecraft.launcher.version` flags are
+ * telemetry-only (Mojang 23w18a): the main-menu and F3 lines never read them.
+ * What the title screen shows comes from the `--versionType` game argument,
+ * pinned by OxideVersionTypeArgsTest. The flags stay because versions that do
+ * not read them simply ignore unknown -D flags, so setting them unconditionally
+ * is safe for old versions, snapshots and every loader with no mod and no jar
+ * patch — and these tests pin that neutrality: the helper never looks at the
+ * Minecraft version at all, it only appends flags to whatever list it is given.
  *
  * Everything here is pure Kotlin over lists and strings, so no Robolectric and
  * no Android runtime is needed.

@@ -421,9 +421,9 @@ private fun setRendererEnv(envMap: MutableMap<String, String>) {
 
     if (RendererPluginManager.selectedRendererPlugin != null) return
 
-    // 只有 Mesa 系的渲染器才吃这一套 zink 环境：GL4ES 系（Holy）与两个封装层
-    // （Copper Oxide / LTW）各自带自己的 env，加 zink 变量只会添乱。
-    // MojoZink 是唯一的 Mesa/zink 后端，所以它是这里唯一走进去的新渲染器。
+    // 只有外置渲染器插件才吃这一套 zink 环境：三个内置渲染器（Holy GL4ES、
+    // Copper Oxide / LTW）各自带自己的 env，加 zink 变量只会添乱。
+    // （Mojo Zink 在 v1.11.0 被移除，它曾是这里唯一走进去的内置渲染器。）
     if (renderer != HolyGL4ESRenderer && renderer != CopperOxideRenderer && renderer != LTWRenderer) {
         envMap["MESA_LOADER_DRIVER_OVERRIDE"] = "zink"
         envMap["MESA_GLSL_CACHE_DIR"] = PathManager.DIR_CACHE.absolutePath

@@ -74,6 +74,7 @@ import dev.oxide.launcher.game.path.GamePathManager
 import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.Renderers
+import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.path.URL_GITHUB_DRIVER_PLUGINS
@@ -1030,6 +1031,103 @@ fun OxideRendererDrawer(
                     )
                 }
 
+                // Copper Oxide 自己的驱动选项：只在存着的渲染器正是 Copper Oxide 时出现。
+                // 其它渲染器的驱动不读 MG_DIR_PATH，这一节对它们是点了没反应的行，
+                // 因此不存在、而不是变灰。行文案复用既有字符串，专用文案见报告中的待加 key。
+                if (oxideCopperConfigVisible(storedRendererId)) {
+                    // 调优行的文案暂用英文直写：strings.xml 无权新增，专用 key 见报告；
+                    // 行写法只复用既有紧凑行（开关 / 下拉 / 步进），不引入新控件。
+                    val tuningOn = AllSettings.copperOxideTuningEnabled.state
+                    val privateDirOn = AllSettings.copperOxidePrivateDataDir.state
+                    OxideSettingsGroup(
+                        title = stringResource(R.string.settings_renderer_config_title),
+                        metrics = metrics,
+                    ) {
+                        OxideToggleRow(
+                            label = stringResource(
+                                R.string.settings_renderer_env_title,
+                                "MG_DIR_PATH",
+                            ),
+                            hint = stringResource(R.string.oxide_set_renderer_env_configure_detail),
+                            checked = privateDirOn,
+                            onCheckedChange = { AllSettings.copperOxidePrivateDataDir.save(it) },
+                        )
+                        OxideToggleRow(
+                            label = stringResource(R.string.oxide_copper_tuning_title),
+                            hint = stringResource(R.string.oxide_copper_tuning_detail),
+                            checked = tuningOn,
+                            onCheckedChange = { AllSettings.copperOxideTuningEnabled.save(it) },
+                        )
+                        // 调优行只在总开关开着时出现：关着时它们写进去的值不会被读到，
+                        // 留着就是点了也没反应的行。判据纯函数化见 oxideCopperTuningRowsVisible。
+                        if (oxideCopperTuningRowsVisible(tuningOn)) {
+                            // 数据目录开关没开时调优会自己把 MG_DIR_PATH 指到私有目录：
+                            // 这一行只解释现状，不新增写入口。
+                            if (!privateDirOn) {
+                                OxideSettingRow(
+                                    label = stringResource(R.string.oxide_copper_implied_dir_title),
+                                    hint = stringResource(R.string.oxide_copper_implied_dir_detail),
+                                )
+                            }
+                            OxideEnumRow(
+                                label = stringResource(R.string.oxide_copper_fsr_title),
+                                hint = stringResource(R.string.oxide_copper_fsr_detail),
+                                metrics = metrics,
+                                entries = listOf(0, 1, 2, 3, 4),
+                                selected = AllSettings.copperOxideFsr.state,
+                                nameOf = { oxideCopperFsrName(it) },
+                                onSelect = { AllSettings.copperOxideFsr.save(it) },
+                            )
+                            OxideIntRow(
+                                label = stringResource(R.string.oxide_copper_cache_title),
+                                hint = stringResource(R.string.oxide_copper_cache_detail),
+                                metrics = metrics,
+                                value = AllSettings.copperOxideGlslCacheMb.state,
+                                range = AllSettings.copperOxideGlslCacheMb.floatRange.toIntRange(),
+                                step = 16,
+                                suffix = " MB",
+                                onValueChange = { AllSettings.copperOxideGlslCacheMb.save(it) },
+                            )
+                            OxideEnumRow(
+                                label = stringResource(R.string.oxide_copper_angle_title),
+                                hint = stringResource(R.string.oxide_copper_angle_detail),
+                                metrics = metrics,
+                                entries = listOf(0, 1, 2, 3),
+                                selected = AllSettings.copperOxideAngle.state,
+                                nameOf = { oxideCopperAngleName(it) },
+                                onSelect = { AllSettings.copperOxideAngle.save(it) },
+                            )
+                            OxideEnumRow(
+                                label = stringResource(R.string.oxide_copper_noerror_title),
+                                hint = stringResource(R.string.oxide_copper_noerror_detail),
+                                metrics = metrics,
+                                entries = listOf(0, 1),
+                                selected = AllSettings.copperOxideNoError.state,
+                                nameOf = { oxideCopperNoErrorName(it) },
+                                onSelect = { AllSettings.copperOxideNoError.save(it) },
+                            )
+                            OxideToggleRow(
+                                label = stringResource(R.string.oxide_copper_ext_compute_title),
+                                hint = stringResource(R.string.oxide_copper_ext_compute_detail),
+                                checked = AllSettings.copperOxideExtCompute.state,
+                                onCheckedChange = { AllSettings.copperOxideExtCompute.save(it) },
+                            )
+                            OxideToggleRow(
+                                label = stringResource(R.string.oxide_copper_ext_timer_title),
+                                hint = stringResource(R.string.oxide_copper_ext_timer_detail),
+                                checked = AllSettings.copperOxideExtTimerQuery.state,
+                                onCheckedChange = { AllSettings.copperOxideExtTimerQuery.save(it) },
+                            )
+                            OxideToggleRow(
+                                label = stringResource(R.string.oxide_copper_ext_dsa_title),
+                                hint = stringResource(R.string.oxide_copper_ext_dsa_detail),
+                                checked = AllSettings.copperOxideExtDsa.state,
+                                onCheckedChange = { AllSettings.copperOxideExtDsa.save(it) },
+                            )
+                        }
+                    }
+                }
+
                 OxideSettingsGroup(
                     title = stringResource(R.string.oxide_set_section_plugins),
                     metrics = metrics,
@@ -1212,6 +1310,58 @@ internal fun oxideJavaRuntimePickerVisible(
  */
 internal fun oxideZinkSettingVisible(vulkanSupported: Boolean): Boolean =
     vulkanSupported
+
+/**
+ * Copper Oxide 专属配置节是否出现
+ *
+ * 判据是存着的渲染器标识正好是 Copper Oxide 自己的 UUID。其它渲染器
+ * （含 LTW、Holy GL4ES、Zink 系与插件渲染器）的驱动不读 MG_DIR_PATH，
+ * 这一节对它们没有任何效果，因此整节不存在，而不是留一节变灰的开关。
+ *
+ * 纯函数，因此可以直接单测。
+ */
+internal fun oxideCopperConfigVisible(storedRendererId: String): Boolean =
+    storedRendererId == CopperOxideRenderer.getUniqueIdentifier()
+
+/**
+ * Copper 调优子行是否出现
+ *
+ * 总开关关着时调优值写进去也不会被读到（不写 config.json），因此子行整批
+ * 不存在，而不是留一批变灰的行。纯函数，因此可以直接单测。
+ */
+internal fun oxideCopperTuningRowsVisible(tuningEnabled: Boolean): Boolean =
+    tuningEnabled
+
+/**
+ * FSR 档位的展示名：0=关，1=超高质量，2=质量，3=均衡，4=性能
+ *
+ * 纯函数；范围外的值回落到关，与写文件的钳制方向一致。
+ */
+internal fun oxideCopperFsrName(value: Int): String = when (value) {
+    1 -> "Ultra Quality"
+    2 -> "Quality"
+    3 -> "Balanced"
+    4 -> "Performance"
+    else -> "Disabled"
+}
+
+/** ANGLE 模式的展示名：顺序与驱动的 0-3 语义一致 */
+internal fun oxideCopperAngleName(value: Int): String = when (value) {
+    1 -> "Prefer ANGLE"
+    2 -> "Force ANGLE off"
+    3 -> "Force ANGLE on"
+    else -> "Driver default"
+}
+
+/**
+ * NoError 档位的展示名：只提供自动与关闭
+ *
+ * L1/L2 是会破坏游戏的作弊项，不提供，因此这里也没有它们的分支。
+ */
+internal fun oxideCopperNoErrorName(value: Int): String = when (value) {
+    1 -> "Disable"
+    else -> "Auto"
+}
 
 /**
  * 设置里记着的那个值当前能不能在列表里找到

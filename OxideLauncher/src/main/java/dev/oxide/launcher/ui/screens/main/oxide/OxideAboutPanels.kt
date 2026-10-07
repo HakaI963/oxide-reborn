@@ -220,8 +220,8 @@ internal fun oxideAboutEntries(): List<OxideAboutEntry> = listOf(
         url = URL_COMMUNITY,
     ),
     // 内置渲染器的上游：Copper Oxide 是 Oxide 基于 MobileGlues 的调优构建
-    // （MobileGL-Dev，LGPL-2.1），LTW 与 Mojo Zink / Holy GL4ES 来自 Mojo 系
-    // 与 FCL 的 LGPL/MIT 上游。说明文字里没有 %s，一律不填启动器名。
+    // （MobileGL-Dev，LGPL-2.1），LTW 来自 MojoLauncher（LGPL-3.0），
+    // Holy GL4ES 来自 FCL-Team（MIT）。说明文字里没有 %s，一律不填启动器名。
     OxideAboutEntry(
         key = "copper-oxide",
         titleRes = R.string.oxide_about_ack_copper_oxide_title,
@@ -244,8 +244,10 @@ internal fun oxideAboutEntries(): List<OxideAboutEntry> = listOf(
         titleRes = R.string.oxide_about_ack_mojo_gl_title,
         detailRes = R.string.oxide_about_ack_mojo_gl_detail,
         takesLauncherName = false,
-        url = "https://github.com/MojoLauncher/MojoLauncher",
-        licenseRaw = R.raw.lgpl_3_license,
+        url = "https://github.com/FCL-Team/Holy-GL4ES",
+        // Holy GL4ES 是 MIT：标题与说明文字在 strings.xml 里（非本文件所有），
+        // 见报告中的替换文本；此处先把链接与协议指向 FCL-Team 的 MIT 上游。
+        licenseRaw = R.raw.gl4es_license,
     ),
 )
 

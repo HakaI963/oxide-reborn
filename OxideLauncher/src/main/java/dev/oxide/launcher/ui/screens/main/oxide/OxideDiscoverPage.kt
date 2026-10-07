@@ -1639,11 +1639,21 @@ private class OxideDiscoverViewModel : ViewModel() {
      *
      * 每个依赖单独一次调用，因此每个依赖都是一个独立任务：
      * 失败通过 [submitError] 只落在它自己那一行，其余依赖照旧在跑。
+     *
+     * 收尾必须报给 [onQueueTaskEnded]：提示条按提交的任务数记账，主文件任务在
+     * [submitFile] 里挂了收尾监听，依赖任务原来没有——于是"全部下载"里主文件
+     * 先跑完之后计数永远对不上，提示条只能手点叉号。成败沿用开始时补算那条路
+     * 同一判据：任务系统只在无错跑完时把阶段置成 COMPLETED。
      */
     private fun submitDependency(request: DependencyRequest, target: Version, key: String): Task? =
         downloadDependenciesForVersions(
             requests = listOf(request),
             versions = listOf(target),
+            onTaskCreated = { task ->
+                TaskSystem.putTaskEndedListener(task.id) {
+                    onQueueTaskEnded(task.id, task.stage.value != TaskStage.COMPLETED)
+                }
+            },
             submitError = { error ->
                 installError = error
                 markDependencyFailed(key, error.message)

@@ -125,7 +125,7 @@ means new, empty per-instance metadata.
 
 ## 9. Builtin renderer pipeline identifiers
 
-The four builtin renderers use Oxide-specific `POJAV_RENDERER` ids and native library names.
+The three builtin renderers use Oxide-specific `POJAV_RENDERER` ids and native library names.
 They are a contract between `Renderers`, `GameLauncher.setRendererEnv`, `egl_bridge.c` and
 `sdl_hook.c` — renaming any of them breaks game launch:
 
@@ -133,13 +133,11 @@ They are a contract between `Renderers`, `GameLauncher.setRendererEnv`, `egl_bri
 |---|---|---|---|
 | `opengles3_oxide_copper` (default) | `libmobileglues.so` | `libmobileglues.so` | [MobileGL-Dev/MobileGlues](https://github.com/MobileGL-Dev/MobileGlues) (LGPL-2.1) |
 | `opengles3_oxide_ltw` | `libltw.so` | system EGL | [MojoLauncher/LTW](https://github.com/MojoLauncher/LTW) (LGPL-3.0) |
-| `oxide_vulkan_zink` | `libEGL_mesa.so` | `libEGL_mesa.so` | [MojoLauncher/MojoLauncher](https://github.com/MojoLauncher/MojoLauncher) (LGPL-3.0) |
 | `opengles2_oxide_holy` | `libholy_gl4es.so` | system EGL | [FCL-Team/Holy-GL4ES](https://github.com/FCL-Team/Holy-GL4ES) (MIT) |
 
 `sdl_hook.c` recognises the Copper Oxide EGL library by its basename (`libmobileglues.so`);
 `egl_bridge.c` routes the three `opengles*` ids through the GL bridge with no id-specific
-branch, and `oxide_vulkan_zink` through its own branch (GL bridge, Vulkan preloaded,
-`GALLIUM_DRIVER=zink`). `OXIDE_RENDERER_FLAVOR` (`copper-oxide`, `ltw`, `mojo-zink`,
+branch. `OXIDE_RENDERER_FLAVOR` (`copper-oxide`, `ltw`,
 `holy-gl4es`) is an Oxide-namespace marker read by nothing: no other launcher selects these
 ids, which is what makes the pipeline Oxide-specific. It is namespacing, not a lockout —
 the underlying libraries stay under their upstream LGPL/MIT terms.

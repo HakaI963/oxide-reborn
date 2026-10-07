@@ -189,9 +189,7 @@ internal fun oxideTaskOutcomeLabel(outcome: TaskOutcome): Int = when (outcome) {
 
 /** 五节各自的标题 */
 internal fun oxideTaskSectionLabel(section: OxideTaskSection): Int = when (section) {
-    // 下载中暂用通用"下载"兜底：strings 里没有不带参数的 Downloading，
-    // 需要新增 `oxide_tasks_section_downloading`（Downloading）后换过去
-    OxideTaskSection.Downloading -> R.string.generic_download
+    OxideTaskSection.Downloading -> R.string.oxide_tasks_section_downloading
     OxideTaskSection.Complete -> R.string.oxide_dis_task_stage_completed
     OxideTaskSection.Queued -> R.string.oxide_task_stage_preparing
     OxideTaskSection.Running -> R.string.oxide_task_stage_running

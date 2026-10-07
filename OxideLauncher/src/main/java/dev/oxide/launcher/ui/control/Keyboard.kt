@@ -40,7 +40,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -71,11 +70,7 @@ import dev.oxide.launcher.ui.components.MarqueeText
 import dev.oxide.launcher.ui.control.gamepad.SPECIAL_KEY_MOUSE_SCROLL_DOWN
 import dev.oxide.launcher.ui.control.gamepad.SPECIAL_KEY_MOUSE_SCROLL_UP
 import dev.oxide.launcher.ui.screens.main.control_editor.InfoLayoutTextItem
-import dev.oxide.launcher.ui.theme.cardColor
-import dev.oxide.launcher.ui.theme.cardTitleColor
-import dev.oxide.launcher.ui.theme.itemColor
-import dev.oxide.launcher.ui.theme.onCardColor
-import dev.oxide.launcher.ui.theme.onItemColor
+import dev.oxide.launcher.ui.theme.Oxide
 
 private data class TabItem(val title: String)
 
@@ -474,18 +469,31 @@ private fun KeyboardNavDialog(
             usePlatformDefaultWidth = false
         )
     ) {
+        // Oxide panel: opaque elevated ground with the 1px raised line,
+        // the same recipe OxideDialogPanel paints. No shadow elevation.
+        // Dialog + Surface + SecondaryTabRow + Tab stay Material on purpose:
+        // Oxide has no dialog window, no key-grid surface and no tab row,
+        // so swapping them would change window, indicator and ripple feel.
+        // Only their colours, radii and type come from Oxide tokens.
         Surface(
-            modifier = Modifier.fillMaxWidth(0.75f),
-            shadowElevation = 3.dp,
-            shape = MaterialTheme.shapes.extraLarge,
-            color = cardColor(false),
-            contentColor = onCardColor(),
+            modifier = Modifier
+                .fillMaxWidth(0.75f)
+                .border(
+                    width = 1.dp,
+                    color = Oxide.Line2,
+                    shape = Oxide.RadiusDrawer
+                ),
+            shadowElevation = 0.dp,
+            shape = Oxide.RadiusDrawer,
+            color = Oxide.BgElevated,
+            contentColor = Oxide.Fg,
         ) {
             Column {
                 //顶贴标签栏
                 SecondaryTabRow(
                     selectedTabIndex = selectedTabIndex,
-                    containerColor = cardTitleColor()
+                    containerColor = Oxide.BgElevated,
+                    contentColor = Oxide.Fg
                 ) {
                     tabs.forEachIndexed { index, item ->
                         Tab(
@@ -493,6 +501,8 @@ private fun KeyboardNavDialog(
                             onClick = {
                                 selectedTabIndex = index
                             },
+                            selectedContentColor = Oxide.Fg,
+                            unselectedContentColor = Oxide.FgGhost,
                             text = {
                                 MarqueeText(text = item.title)
                             }
@@ -609,11 +619,11 @@ private fun KeyButton(
     onSwitch: (identifier: String, pressed: Boolean) -> Unit,
     refreshed: Any? = null,
     isSelected: (String) -> Boolean,
-    color: Color = itemColor(false),
-    contentColor: Color = onItemColor(),
-    shape: Shape = MaterialTheme.shapes.medium,
-    borderColor: Color = MaterialTheme.colorScheme.primary,
-    style: TextStyle = MaterialTheme.typography.labelSmall,
+    color: Color = Oxide.BgButton,
+    contentColor: Color = Oxide.Fg,
+    shape: Shape = Oxide.RadiusBlock,
+    borderColor: Color = Oxide.Accent,
+    style: TextStyle = Oxide.Type.Body,
     maxFontSize: TextUnit = style.fontSize,
     aspectRatio: Float = 1f
 ) {
@@ -629,6 +639,10 @@ private fun KeyButton(
         if (pressed || isSelected) 2.dp
         else (-1).dp
     )
+
+    // Held or bound keys sit on the active fill, exactly like a selected
+    // OxideSurface. Idle keys sit on the button fill, like OxideButton.
+    val keyColor = if (pressed || isSelected) Oxide.BgTabActive else color
 
     Surface(
         modifier = modifier
@@ -650,7 +664,7 @@ private fun KeyButton(
                 color = borderColor,
                 shape = shape
             ),
-        color = color,
+        color = keyColor,
         contentColor = contentColor,
         shape = shape
     ) {
