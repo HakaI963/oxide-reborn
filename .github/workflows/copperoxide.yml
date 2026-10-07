@@ -78,8 +78,18 @@ jobs:
           test -s "$SO"
           ls -lh "$SO"
           NM="$ANDROID_SDK_ROOT/ndk/${{ env.ANDROID_NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
-          "$NM" -D --defined-only "$SO" | grep -q " eglGetProcAddress"
-          echo "OK: libcopperoxide exports eglGetProcAddress"
+          # No pipes: grep -q closes the pipe early, which makes nm die of
+          # SIGPIPE and fails the step even when the symbol IS exported.
+          SYM="symbols-${{ matrix.abi }}.txt"
+          "$NM" -D --defined-only "$SO" > "$SYM"
+          echo "nm exit: $?"
+          if grep -q " eglGetProcAddress" "$SYM"; then
+            echo "OK: libcopperoxide exports eglGetProcAddress"
+          else
+            echo "::error::eglGetProcAddress not in dynamic symbols:"
+            grep "eglGet" "$SYM" | head -20 || true
+            exit 1
+          fi
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
