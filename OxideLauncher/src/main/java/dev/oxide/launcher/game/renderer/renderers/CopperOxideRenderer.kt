@@ -22,6 +22,8 @@ import dev.oxide.launcher.game.renderer.CopperOxideTuning
 import dev.oxide.launcher.game.renderer.RendererInterface
 import dev.oxide.launcher.game.renderer.authorCopperOxideConfig
 import dev.oxide.launcher.game.renderer.copperOxideTuningFromSettings
+import dev.oxide.launcher.game.renderer.copperoxide.CopperOxideEnv
+import dev.oxide.launcher.game.renderer.copperoxide.CopperOxideIdentity
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.setting.AllSettings
 import java.io.File
@@ -29,13 +31,20 @@ import java.io.File
 /**
  * Copper Oxide, the default builtin renderer.
  *
- * This is Oxide's tuned build of MobileGlues, the OpenGL-on-OpenGL-ES
- * implementation by MobileGL-Dev (LGPL-2.1). Oxide does not own this project.
- * The native library is vendored from the MobileGlues-plugin dev CI artifact
- * (see THIRD_PARTY.md); the environment below mirrors the upstream plugin
- * manifest's `pojavEnv` (`LIBGL_ES`, `POJAVEXEC_EGL`/`LIBGL_EGL`,
+ * Copper Oxide is the product now: Oxide's independent OpenGL-on-OpenGL-ES
+ * renderer core (identity, env, capability detection and device tuning in
+ * `game.renderer.copperoxide`) over the MobileGlues lineage native driver
+ * by MobileGL-Dev (LGPL-2.1, see THIRD_PARTY.md). Oxide does not own the
+ * upstream driver project; the Kotlin core and the launch wiring are Oxide's
+ * own. The native library is vendored from the MobileGlues-plugin dev CI
+ * artifact; the environment below mirrors the upstream plugin manifest's
+ * `pojavEnv` (`LIBGL_ES`, `POJAVEXEC_EGL`/`LIBGL_EGL`,
  * `MG_COUNT_LAUNCH`). `POJAV_RENDERER` is intentionally not repeated here:
  * GameLauncher always sets it to [getRendererId].
+ *
+ * No capability spoofing: GL version, vendor/renderer strings and extension
+ * support come from the driver and from EGL detection. This file only emits
+ * the verified getenv keys (see CopperOxideEnv).
  *
  * The renderer id and the `OXIDE_RENDERER_FLAVOR` variable live in an
  * Oxide-specific namespace so that no other launcher selects this pipeline.
@@ -43,54 +52,54 @@ import java.io.File
  * library stays LGPL-2.1 and the plugin ABI is untouched.
  */
 object CopperOxideRenderer : RendererInterface {
-    override fun getRendererId(): String = "opengles3_oxide_copper"
+    override fun getRendererId(): String = CopperOxideIdentity.RENDERER_ID
 
-    override fun getUniqueIdentifier(): String = "52a0f58e-1694-4d47-9ce6-5fa0894413a7"
+    override fun getUniqueIdentifier(): String = CopperOxideIdentity.UNIQUE_ID
 
-    override fun getRendererName(): String = "Copper Oxide"
+    override fun getRendererName(): String = CopperOxideIdentity.NAME
 
-    override fun getMinMCVersion(): String = "1.17"
+    override fun getRendererSummary(): String = CopperOxideIdentity.summary()
+
+    override fun getMinMCVersion(): String = CopperOxideIdentity.MIN_MC_VERSION
 
     // 这里必须写正式版号，不能写快照号：GameVersionNumber 里快照（SNAPSHOT）排在正式版（GA）之前，
     // 写成 "26.3-snapshot-3" 会让 26.3 被判定为“比上限更大”，于是该渲染器在 26.3 上被禁用。
-    override fun getMaxMCVersion(): String = "26.3"
+    override fun getMaxMCVersion(): String = CopperOxideIdentity.MAX_MC_VERSION
 
     // 展示版本号默认继承 getMaxMCVersion()，两处必须同源。
 
     override fun getRendererEnv(): Lazy<Map<String, String>> = lazy {
-        buildMap {
-            put("LIBGL_ES", "3")
-            put("LIBGL_EGL", "libmobileglues.so")
-            put("MG_COUNT_LAUNCH", "1")
-            put("OXIDE_RENDERER_FLAVOR", "copper-oxide")
-            val usePrivateDir = runCatching { AllSettings.copperOxidePrivateDataDir.getValue() }.getOrDefault(false)
-            val tuning = runCatching { copperOxideTuningFromSettings() }.getOrDefault(CopperOxideTuning())
-            if (tuning.enabled || usePrivateDir) {
-                val dir = File(PathManager.DIR_FILES_EXTERNAL, COPPER_OXIDE_DATA_DIR_NAME)
-                runCatching { dir.mkdirs() }
-                // 调优开着时即使数据目录开关没开，也把 MG_DIR_PATH 指到私有目录并在此写
-                // config.json：调优文件必须落在 MG_DIR_PATH 所指的同一目录里，而共享存储
-                // 在分区存储下不可写。两处开关都关时仍返回空表，启动环境与此前逐字节一致。
-                if (tuning.enabled) runCatching { authorCopperOxideConfig(dir, tuning) }
-                putAll(copperOxideDriverDataDirEnv(usePrivateDir = true, privateDir = dir.absolutePath))
-            }
-        }
+        val base = CopperOxideEnv.baseEnv()
+        val usePrivateDir = runCatching { AllSettings.copperOxidePrivateDataDir.getValue() }.getOrDefault(false)
+        val tuning = runCatching { copperOxideTuningFromSettings() }.getOrDefault(CopperOxideTuning())
+        if (!tuning.enabled && !usePrivateDir) return@lazy base
+        val dir = File(PathManager.DIR_FILES_EXTERNAL, COPPER_OXIDE_DATA_DIR_NAME)
+        // mkdirs is a syscall even when the dir exists; skip it on the hot path.
+        if (!dir.isDirectory) runCatching { dir.mkdirs() }
+        // Tuning forces the private dir even when the data-dir switch is off:
+        // the file must live where MG_DIR_PATH points and shared storage is
+        // unwritable under scoped storage. Both switches off returns the base
+        // map above, byte-identical to the pre-tuning behaviour.
+        if (tuning.enabled) runCatching { authorCopperOxideConfig(dir, tuning) }
+        CopperOxideEnv.merged(base, CopperOxideEnv.dataDirEnv(usePrivateDir = true, privateDir = dir.absolutePath))
     }
 
     override fun getDlopenLibrary(): Lazy<List<String>> = lazy { emptyList() }
 
-    override fun getRendererLibrary(): String = "libmobileglues.so"
+    override fun getRendererLibrary(): String = CopperOxideIdentity.NATIVE_LIBRARY
 
-    override fun getRendererEGL(): String = "libmobileglues.so"
+    override fun getRendererEGL(): String = CopperOxideIdentity.NATIVE_LIBRARY
 }
 
 /**
  * 启动器私有目录下 Copper Oxide 驱动数据子目录名
  *
  * 驱动默认目录是编译进 .so 的 "/sdcard/MG"（MG_DIR_PATH 为空时的回落），
- * 私有子目录取名 "mobileglues"，与驱动库文件名一致，避免与其它启动器的数据混在一起。
+ * 私有子目录取名 "mobileglues"，与驱动库文件名一致，避免与其它启动器的数据混在一起.
+ * Single source of truth lives in [CopperOxideIdentity.DATA_DIR_NAME]; this
+ * alias stays for callers compiled against the old location.
  */
-internal const val COPPER_OXIDE_DATA_DIR_NAME = "mobileglues"
+internal const val COPPER_OXIDE_DATA_DIR_NAME: String = "mobileglues"
 
 /**
  * Copper Oxide 驱动数据目录选项到环境变量的映射
@@ -111,9 +120,10 @@ internal const val COPPER_OXIDE_DATA_DIR_NAME = "mobileglues"
  *   getenv 读取点，一律不在此表达。
  *
  * 纯函数：不碰 AllSettings 与文件系统，可单测。
+ * Delegates to [CopperOxideEnv.dataDirEnv] so both spellings stay in sync.
  *
  * @param usePrivateDir 对应 [AllSettings.copperOxidePrivateDataDir]
  * @param privateDir 已解析好的私有目录绝对路径
  */
 internal fun copperOxideDriverDataDirEnv(usePrivateDir: Boolean, privateDir: String): Map<String, String> =
-    if (usePrivateDir && privateDir.isNotBlank()) mapOf("MG_DIR_PATH" to privateDir) else emptyMap()
+    CopperOxideEnv.dataDirEnv(usePrivateDir, privateDir)
