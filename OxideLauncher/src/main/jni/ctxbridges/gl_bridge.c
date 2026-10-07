@@ -4,6 +4,7 @@
 #include <android/native_window_jni.h>
 #include <string.h>
 #include <malloc.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <dlfcn.h>
 #include <stdbool.h>
@@ -98,7 +99,7 @@ gl_render_window_t* gl_init_context(gl_render_window_t *share) {
             printf("EGLBridge: Binding to OpenGL ES\n");
             bindResult = eglBindAPI_p(EGL_OPENGL_ES_API);
         }
-        if (!bindResult) printf("EGLBridge: bind failed: %p\n", (void*)(intptr_t)eglGetError_p());
+        if (!bindResult) printf("EGLBridge: bind failed: %04x\n", (unsigned)eglGetError_p());
     }
 
     int libgl_es = 2;
