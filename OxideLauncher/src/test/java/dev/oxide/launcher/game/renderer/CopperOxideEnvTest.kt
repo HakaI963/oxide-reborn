@@ -74,7 +74,10 @@ class CopperOxideEnvTest {
     @Test
     fun theRendererEnvMapOnlyContainsVerifiedKeys() {
         val source = readRendererSource()
-        val keys = Regex("put\\(\"([^\"]+)\"\\)").findAll(source).map { it.groupValues[1] }.toSet()
+        // 注意这里只匹配到键的左引号为止：真正的调用都是双参 `put("KEY", value)`，
+        // 键的右引号后面跟的是逗号而不是 `)`，要求 `")` 会一个都匹配不到，
+        // 于是 keys 恒为空，上一版断言就是这样假失败的。
+        val keys = Regex("put\\(\"([^\"]+)\"").findAll(source).map { it.groupValues[1] }.toSet()
         val verified = setOf("LIBGL_ES", "LIBGL_EGL", "MG_COUNT_LAUNCH", "OXIDE_RENDERER_FLAVOR", "MG_DIR_PATH")
         assertFalse("expected at least the four base env entries", keys.isEmpty())
         assertTrue(
