@@ -125,7 +125,8 @@ void init_settings() {
     // Copper Oxide patch: this library built from this source is Oxide's own
     // renderer. Trust Oxide's own launcher flag instead of forcing the
     // restricted defaults. No other launcher's identity is claimed here.
-    const char* oxideFlavor = getenv("OXIDE_RENDERER_FLAVOR");
+    // GetEnvVar comes from ../gl/envvars.h (already included above).
+    const char* oxideFlavor = GetEnvVar("OXIDE_RENDERER_FLAVOR");
     int isCopperOxide = (oxideFlavor != nullptr && std::string(oxideFlavor) == "copper-oxide") ? 1 : 0;
 
     LOG_V("MG_DIR_PATH = %s", mg_directory_path ? mg_directory_path : "(default)")
