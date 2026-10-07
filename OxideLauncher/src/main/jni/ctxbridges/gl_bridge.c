@@ -57,8 +57,9 @@ static void gl4esi_get_display_dimensions(int* width, int* height) {
 }
 
 gl_render_window_t* gl_init_context(gl_render_window_t *share) {
-    gl_render_window_t* bundle = malloc(sizeof(gl_render_window_t));
-    memset(bundle, 0, sizeof(gl_render_window_t));
+    /* calloc: zeroed in one call, no separate memset round-trip. */
+    gl_render_window_t* bundle = calloc(1, sizeof(gl_render_window_t));
+    if (bundle == NULL) return NULL;
     EGLint egl_attributes[] = { EGL_BLUE_SIZE, 8,
                     EGL_GREEN_SIZE, 8,
                     EGL_RED_SIZE, 8,
@@ -70,31 +71,26 @@ gl_render_window_t* gl_init_context(gl_render_window_t *share) {
                     EGL_OPENGL_ES2_BIT,
                     EGL_NONE
                     };
+    /* Single driver round-trip: ask for up to 32 configs at once instead of
+     * count-then-fetch (two eglChooseConfig calls per context). */
+    EGLConfig configs[32];
     EGLint num_configs = 0;
-
-    if (eglChooseConfig_p(g_EglDisplay, egl_attributes, NULL, 0, &num_configs) != EGL_TRUE)
+    if (eglChooseConfig_p(g_EglDisplay, egl_attributes, configs, 32, &num_configs) != EGL_TRUE
+        || num_configs <= 0)
     {
-        __android_log_print(ANDROID_LOG_ERROR, g_LogTag, "eglChooseConfig_p() failed: %04x",
+        __android_log_print(ANDROID_LOG_ERROR, g_LogTag, "eglChooseConfig_p() failed or empty: %04x",
                             eglGetError_p());
         free(bundle);
         return NULL;
     }
-
-    if (num_configs == 0)
-    {
-        __android_log_print(ANDROID_LOG_ERROR, g_LogTag, "%s",
-                            "eglChooseConfig_p() found no matching config");
-        free(bundle);
-        return NULL;
-    }
-
-    eglChooseConfig_p(g_EglDisplay, egl_attributes, &bundle->config, 1, &num_configs);
+    bundle->config = configs[0];
     eglGetConfigAttrib_p(g_EglDisplay, bundle->config, EGL_NATIVE_VISUAL_ID, &bundle->format);
 
     {
         EGLBoolean bindResult;
+        const char *rendererEnv = getenv("POJAV_RENDERER");
 
-        if (!strncmp(getenv("POJAV_RENDERER"), "opengles3_desktopgl", 19))
+        if (rendererEnv != NULL && !strncmp(rendererEnv, "opengles3_desktopgl", 19))
         {
             printf("EGLBridge: Binding to OpenGL\n");
             bindResult = eglBindAPI_p(EGL_OPENGL_API);
@@ -102,11 +98,17 @@ gl_render_window_t* gl_init_context(gl_render_window_t *share) {
             printf("EGLBridge: Binding to OpenGL ES\n");
             bindResult = eglBindAPI_p(EGL_OPENGL_ES_API);
         }
-        if (!bindResult) printf("EGLBridge: bind failed: %p\n", eglGetError_p());
+        if (!bindResult) printf("EGLBridge: bind failed: %p\n", (void*)(intptr_t)eglGetError_p());
     }
 
-    int libgl_es = strtol(getenv("LIBGL_ES"), NULL, 0);
-    if (libgl_es < 0 || libgl_es > INT16_MAX) libgl_es = 2;
+    int libgl_es = 2;
+    {
+        const char *libglEsEnv = getenv("LIBGL_ES");
+        if (libglEsEnv != NULL && libglEsEnv[0] != '\0') {
+            long parsed = strtol(libglEsEnv, NULL, 0);
+            if (parsed >= 1 && parsed <= 3) libgl_es = (int)parsed;
+        }
+    }
     const EGLint egl_context_attributes[] = { EGL_CONTEXT_CLIENT_VERSION, libgl_es, EGL_NONE };
     bundle->context = eglCreateContext_p(g_EglDisplay, bundle->config, share == NULL ? EGL_NO_CONTEXT : share->context, egl_context_attributes);
 
@@ -146,9 +148,22 @@ void gl_swap_surface(gl_render_window_t* bundle) {
      * to release the surface. This seems driver dependent as AVD and Waydroid do not need 0.75s
      * to set the bloody height and width to their proper values. They just do it, instantly.
      */
-    usleep(750000); // An overkill amount of time to wait for a surface to finish dying
-    int32_t nativeWindowWidth = ANativeWindow_getWidth(pojav_environ->pojavWindow);
-    int32_t nativeWindowHeight = ANativeWindow_getHeight(pojav_environ->pojavWindow);
+    /* Copper Oxide: bounded early-exit poll instead of an unconditional 750ms stall.
+     * The old code blocked the render thread for 0.75s on every surface loss, even when
+     * Android had already released the window (the common rotation case). Poll every
+     * 50ms and bail as soon as the window reads dead (<=0) or 400ms elapse, whichever
+     * comes first. Worst case is ~half the old stall; typical case is 1-2 polls. */
+    int32_t nativeWindowWidth = 0;
+    int32_t nativeWindowHeight = 0;
+    if (pojav_environ->pojavWindow != NULL) {
+        for (int poll = 0; poll < 8; poll++) {
+            nativeWindowWidth = ANativeWindow_getWidth(pojav_environ->pojavWindow);
+            nativeWindowHeight = ANativeWindow_getHeight(pojav_environ->pojavWindow);
+            if (nativeWindowWidth <= 0 && nativeWindowHeight <= 0) break;
+            /* Last iteration keeps the final reading; otherwise wait 50ms and re-check. */
+            if (poll + 1 < 8) usleep(50000);
+        }
+    }
     if ((nativeWindowWidth > 0) || (nativeWindowHeight > 0)) {
         __android_log_print(ANDROID_LOG_INFO, g_LogTag, "Native surface dimensions (%d x %d)\n",
                             nativeWindowWidth, nativeWindowHeight);
@@ -208,6 +223,7 @@ void gl_make_current(gl_render_window_t* bundle) {
 }
 
 void gl_swap_buffers() {
+    if (currentBundle == NULL || currentBundle->surface == NULL) return;
     if (currentBundle->state == STATE_RENDERER_NEW_WINDOW)
     {
         eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
