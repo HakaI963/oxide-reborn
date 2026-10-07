@@ -120,10 +120,14 @@ internal fun EditorDock(
     onPreviewScenarioChanged: (PreviewScenario) -> Unit,
     previewHideLayerWhen: HideLayerWhen,
     onPreviewHideLayerChanged: (HideLayerWhen) -> Unit,
+    advanced: Boolean = false,
+    onAdvancedChanged: (Boolean) -> Unit = {},
     onSave: () -> Unit,
     saveAndExit: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    advanced: Boolean = false,
+    onAdvancedChanged: (Boolean) -> Unit = {},
     onLayerRename: (ObservableControlLayer, String) -> Unit = { layer, name -> layer.name = name },
     onLayerDuplicate: (ObservableControlLayer) -> Unit = {},
     onLayerDelete: (ObservableControlLayer) -> Unit = {},
@@ -184,6 +188,8 @@ internal fun EditorDock(
                 onSave = onSave,
                 saveAndExit = saveAndExit,
                 onExit = onExit,
+                advanced = advanced,
+                onAdvancedChanged = onAdvancedChanged,
             )
         },
         // 底栏永远是可见的，因此引导不挂在这里——它挂在列表末尾那个
@@ -338,6 +344,14 @@ private fun EditorDockBody(
         contentPadding = PaddingValues(metrics.dockPadding),
         verticalArrangement = Arrangement.spacedBy(metrics.rowGap),
     ) {
+        item(key = "section_mode") {
+            EditorSwitchRow(
+                label = stringResource(R.string.oxide_ce_advanced_mode),
+                hint = stringResource(R.string.oxide_ce_advanced_mode_hint),
+                checked = advanced,
+                onCheckedChange = onAdvancedChanged,
+            )
+        }
         item(key = "section_layers") {
             EditorGroupLabel(text = stringResource(R.string.oxide_ce_section_layers))
         }
@@ -373,8 +387,8 @@ private fun EditorDockBody(
                     },
                 )
             }
-            // 只有选中那一层才给换序按钮：每一行都放的话，窄面板上会被按钮占满
-            if (selectedLayer === layer) {
+            // 只有高级模式才给换序按钮：简单模式里层顺序不动，面板少两枚按钮。
+            if (selectedLayer === layer && editorShowsLayerReorder(advanced, isPreviewMode)) {
                 item(key = "layer_actions_${layer.uuid}") {
                     EditorLayerActions(
                         canMoveUp = index > 0,
@@ -389,9 +403,9 @@ private fun EditorDockBody(
             }
         }
 
-        // 聚焦模式：只在画布上渲染选中那一层，其余层不参与。原来的它是一枚
-        // 右上角的图标按钮，换成面板里的一行开关，触摸目标大得多，
-        // 而且它与"预览模式"那行长得一样，读起来是一类东西
+        // 简单模式藏起聚焦：普通用户一次只改一层里的控件，不需要只渲染一层。
+        // 高级开关一开就回来，所有功能都在。
+        if (editorShowsLayerFocus(advanced, isPreviewMode)) {
         item(key = "layer_focus") {
             EditorSwitchRow(
                 label = stringResource(R.string.oxide_ce_layer_focus),
@@ -400,6 +414,7 @@ private fun EditorDockBody(
                 enabled = !isPreviewMode && selectedLayer != null,
                 onCheckedChange = onLayerFocusChanged,
             )
+        }
         }
 
         item(key = "create_layer") {
@@ -509,6 +524,7 @@ private fun EditorDockBody(
 
         // ---- 外观与预览 --------------------------------------------------
 
+        if (editorShowsStylesBlock(advanced)) {
         item(key = "section_styles") {
             EditorGroupLabel(text = stringResource(R.string.oxide_ce_section_styles))
         }
@@ -526,6 +542,7 @@ private fun EditorDockBody(
                 )
             }
         }
+        }
 
         item(key = "section_preview") {
             EditorGroupLabel(text = stringResource(R.string.oxide_ce_section_preview))
@@ -541,11 +558,13 @@ private fun EditorDockBody(
             )
         }
 
+        if (editorShowsSnapBlock(advanced)) {
         item(key = "section_snap") {
             EditorGroupLabel(text = stringResource(R.string.oxide_ce_section_snap))
         }
         item(key = "snap") {
             EditorSnapBlock()
+        }
         }
 
         // 保存那一组。它挂在列表末尾而不是只在底栏，是为了引导能滚动到它；
@@ -935,8 +954,8 @@ private fun EditorPreviewBlock(
             optionText = { stringResource(it.textRes) },
             onSelect = onScenarioChanged,
         )
-        // 预览时才需要这一项：它只影响预览的隐藏判定，不影响存下来的布局
-        if (isPreviewMode) {
+        // 预览的设备选择只在高级 + 预览时出现；预览开关本身两种模式都有。
+        if (editorShowsPreviewDevice(advanced, isPreviewMode)) {
             EditorSegmentRow(
                 label = stringResource(R.string.oxide_ce_preview_device),
                 options = listOf(
