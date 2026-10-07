@@ -43,6 +43,7 @@ import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer.RendererPluginManager
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
+import dev.oxide.launcher.game.renderer.copperoxide.CopperOxideIdentity
 import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
 import dev.oxide.launcher.game.renderer.copperoxide.CopperOxideCapabilities
@@ -220,7 +221,7 @@ class GameLauncher(
             // Copper Oxide transition: prefer self-built libcopperoxide.so, fall back
             // to the precompiled libmobileglues.so until copperoxide.yml lands the
             // new binaries. Failure path only; zero cost when the primary loads.
-            val compat = (Renderers.getCurrentRenderer() as? Any as dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer?)?.let { "libmobileglues.so" }
+            val compat = if (Renderers.getCurrentRenderer() === CopperOxideRenderer) CopperOxideIdentity.LEGACY_LIBRARY else null
             if (compat == null || (!OxideBridge.dlopen(compat) && !OxideBridge.dlopen(findInLdLibPath(compat)))) {
                 Logger.error(TAG, "Failed to load renderer $rendererLib")
             }
