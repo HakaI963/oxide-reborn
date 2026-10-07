@@ -122,9 +122,15 @@ void init_settings() {
     int pgwVersion = 0;
     GetEnvVarInt("PGW_VERSION_CODE", &pgwVersion, 0);
 
+    // Copper Oxide patch: this library built from this source is Oxide's own
+    // renderer. Trust Oxide's own launcher flag instead of forcing the
+    // restricted defaults. No other launcher's identity is claimed here.
+    const char* oxideFlavor = getenv("OXIDE_RENDERER_FLAVOR");
+    int isCopperOxide = (oxideFlavor != nullptr && std::string(oxideFlavor) == "copper-oxide") ? 1 : 0;
+
     LOG_V("MG_DIR_PATH = %s", mg_directory_path ? mg_directory_path : "(default)")
 
-    if (isInPluginApp == 0 && fclVersion == 0 && zlVersion == 0 && pgwVersion == 0 && !is_custom_mg_dir) {
+    if (isInPluginApp == 0 && fclVersion == 0 && zlVersion == 0 && pgwVersion == 0 && !is_custom_mg_dir && !isCopperOxide) {
         LOG_V("Unsupported launcher detected, force using default config.")
         angleConfig = AngleConfig::DisableIfPossible;
         noErrorConfig = NoErrorConfig::Auto;

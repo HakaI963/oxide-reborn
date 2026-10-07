@@ -372,10 +372,11 @@ const GLubyte* glGetString(GLenum name) {
             versionString = GLVersion.toString();
             if (global_settings.hide_mg_env_level == HideMGEnvLevel::Disabled) {
                 if (GLVersion.toInt(2) == DEFAULT_GL_VERSION) {
-                    versionString += " MobileGlues ";
+                    // Copper Oxide patch: product name in the F3 version string.
+                    versionString += " Copper Oxide ";
                 } else {
                     Version defaultVersion = Version(DEFAULT_GL_VERSION);
-                    versionString += " §4§l(" + defaultVersion.toString() + ") MobileGlues§r ";
+                    versionString += " §4§l(" + defaultVersion.toString() + ") Copper Oxide§r "; // Copper Oxide patch
                 }
 
                 versionString += std::to_string(MAJOR) + "." + std::to_string(MINOR) + "." + std::to_string(REVISION);
@@ -478,7 +479,7 @@ const GLubyte* glGetString(GLenum name) {
                     shadingLangString += GenerateRandomString(junkOpts);
                 }
             } else {
-                shadingLangString = baseVer + " MobileGlues with glslang and SPIRV-Cross";
+                shadingLangString = baseVer + " Copper Oxide with glslang and SPIRV-Cross"; // Copper Oxide patch
             }
         }
 
