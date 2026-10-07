@@ -17,7 +17,7 @@ handling, and a full instance/multiplayer tooling set.
   driver, Java runtime, isolation, custom info, and complete control layouts.
 * **Runtimes** — bundled OpenJDK 8 / 17 / 21 / 25 packs per ABI, plus external runtime import and
   automatic version picking.
-* **Renderers** — Copper Oxide (MobileGlues, default), LTW, Holy GL4ES
+* **Renderers** — Copper Oxide (independent, default; MobileGlues lineage, no capability spoofing), LTW, Holy GL4ES
   and downloadable renderer / driver / native plugins.
 * **Input** — touch controls with an in-app editor, physical keyboard and mouse, gamepads
   (including SDL direct input), joysticks, gyroscope, and the in-game hotbar.
