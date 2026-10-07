@@ -120,8 +120,6 @@ internal fun EditorDock(
     onPreviewScenarioChanged: (PreviewScenario) -> Unit,
     previewHideLayerWhen: HideLayerWhen,
     onPreviewHideLayerChanged: (HideLayerWhen) -> Unit,
-    advanced: Boolean = false,
-    onAdvancedChanged: (Boolean) -> Unit = {},
     onSave: () -> Unit,
     saveAndExit: () -> Unit,
     onExit: () -> Unit,
@@ -310,6 +308,8 @@ private fun EditorDockBody(
     onPreviewScenarioChanged: (PreviewScenario) -> Unit,
     previewHideLayerWhen: HideLayerWhen,
     onPreviewHideLayerChanged: (HideLayerWhen) -> Unit,
+    advanced: Boolean = false,
+    onAdvancedChanged: (Boolean) -> Unit = {},
 ) {
     val metrics = editorMetrics()
     val listState = rememberLazyListState()
