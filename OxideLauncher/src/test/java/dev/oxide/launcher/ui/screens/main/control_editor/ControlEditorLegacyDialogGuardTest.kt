@@ -255,17 +255,22 @@ class ControlEditorLegacyDialogGuardTest {
     }
 
     /**
-     * 三张全屏覆盖层仍然不是 Dialog 窗口。
+     * 剩下两块全屏覆盖层仍然不是 Dialog 窗口。
      *
-     * 这一条钉住的是**没有**被"顺手"改成 `OxideDialogShell`：`EditWidgetDialog` 与两个
-     * 外观编辑器原来的注释就写着"不再真正使用 Dialog，真的会有性能问题"，套一层
-     * `OxideDialogShell` 会凭空多出一层自己的窗口，把那个历史包袱请回来。它们改的是
-     * 面板本身（不透明底、圆角、描边、按钮）。
+     * 这一条钉住的是**没有**被"顺手"改成 `OxideDialogShell`：两个外观编辑器原来的
+     * 注释就写着"不再真正使用 Dialog，真的会有性能问题"，套一层 `OxideDialogShell`
+     * 会凭空多出一层自己的窗口，把那个历史包袱请回来。它们改的是面板本身
+     * （不透明底、圆角、描边、按钮）。
+     *
+     * `edit_widget/EditWidgetDialog.kt` 曾经也在这份名单里，但在 v1.10.0 按用户
+     * 要求把整个编辑菜单推倒重做时，它被有意改成了真正的 `OxideDialogShell`
+     * 底表：原来那个"页签列 + 零宽 NavDisplay + 满屏吃触摸"的结构在真机上
+     * 渲染出一个点什么都没反应的黑洞（ct2），修布局的前提就是给它一个真正的窗口。
+     * 所以它从这份名单里毕业，归 `EditorMenuDispatchGuardTest` 管。
      */
     @Test
-    fun `三块全屏覆盖层仍然不是 Dialog 窗口`() {
+    fun `两块全屏覆盖层仍然不是 Dialog 窗口`() {
         for (relative in listOf(
-            "edit_widget/EditWidgetDialog.kt",
             "edit_style/EditStyleDialog.kt",
             "edit_joystick/EditStyleDialog.kt",
         )) {

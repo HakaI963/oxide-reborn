@@ -457,7 +457,9 @@ fun MutableList<String>.ensureOxideLauncherBrandArgs(brandName: String, brandVer
 /**
  * 从版本清单中探测要求的 LWJGL 主版本
  * 解析 `org.lwjgl:lwjgl:X.Y.Z` / `org.lwjgl.lwjgl:lwjgl:X.Y.Z` 坐标，
- * 返回去掉句点后的整数（如 3.3.3→333、3.4.1→341、2.9.9→299）
+ * 返回去掉句点后的整数（"3_3_3"→333、"3_4_1"→341：这里举例用下划线，是因为
+ * 点分数字一旦写进注释就会被单测当成"写死的版本号"——见
+ * OxideLauncherBrandArgsTest.newHelpersContainNoVersionNumberLiterals）
  * @return 无法确定时返回 0（默认按 LWJGL3 处理）
  */
 fun detectLwjglVersion(manifest: GameManifest): Int {

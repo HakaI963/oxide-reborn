@@ -429,9 +429,35 @@ class OxideTaskDownloadSectionsTest {
     private fun String.blockOf(needle: String): String {
         val start = indexOf(needle)
         assertTrue("expected to find " + needle, start >= 0)
-        val brace = indexOf('{', start)
+        // 先跳过参数列表：参数默认值里可能带着 lambda（如 `isRunning: () -> Unit = {}`），
+        // 直接找第一个 `{` 会切进那个默认值，取到的只是签名而不是函数体。
+        val params = parenEndFrom(indexOf('(', start))
+        assertTrue("expected " + needle + " to have a parameter list", params >= 0)
+        val brace = indexOf('{', params)
         assertTrue("expected " + needle + " to have a body", brace >= 0)
         return substring(start, balancedEndFrom(brace) + 1)
+    }
+
+    /**
+     * 与 [balancedEndFrom] 配对的那一半：从 `(` 出发找配对的 `)`。
+     *
+     * 引号与注释已经被 [code] 抹掉，这里只数括号；单引号字符字面量里
+     * 的括号由调用方保证不存在——本文件的两个被测函数签名里确实没有。
+     */
+    private fun String.parenEndFrom(open: Int): Int {
+        var depth = 0
+        var index = open
+        while (index < this.length) {
+            when (this[index]) {
+                '(' -> depth++
+                ')' -> {
+                    depth--
+                    if (depth == 0) return index
+                }
+            }
+            index++
+        }
+        return -1
     }
 
     private fun locate(relativePath: String): File {

@@ -246,7 +246,9 @@ class OxideAboutPanelTest {
     @Test
     fun onlyAcknowledgementsWithALicenceRawCanBeOpenedAsALicence() {
         val withLicence = entries.filter { it.licenseRaw != 0 }.map { it.key }.toSet()
-        assertEquals(setOf("pojav", "fcl", "hmcl"), withLicence)
+        // v1.10.0 把六个内置渲染器换成 Copper Oxide / LTW / Mojo Zink / Holy GL4ES：
+        // 随附 .so 就要点得开协议，所以这三条带上了各自的 LGPL 文本。
+        assertEquals(setOf("pojav", "fcl", "hmcl", "copper-oxide", "ltw", "mojo-gl"), withLicence)
         // 反过来：这三条的 raw 都不是 0
         for (key in withLicence) {
             assertTrue("$key must point at a real R.raw licence", byKey.getValue(key).licenseRaw > 0)
