@@ -43,7 +43,10 @@ object CopperOxideIdentity {
     const val UNIQUE_ID: String = "52a0f58e-1694-4d47-9ce6-5fa0894413a7"
     const val NAME: String = "Copper Oxide"
     const val FLAVOR: String = "copper-oxide"
-    const val NATIVE_LIBRARY: String = "libmobileglues.so"
+    // Self-built from the vendored tree (cpp/copperoxide) by copperoxide.yml.
+    // The precompiled libmobileglues.so stays only as a load-time fallback.
+    const val NATIVE_LIBRARY: String = "libcopperoxide.so"
+    const val LEGACY_LIBRARY: String = "libmobileglues.so"
     const val MIN_MC_VERSION: String = "1.17"
     const val MAX_MC_VERSION: String = "26.3"
 

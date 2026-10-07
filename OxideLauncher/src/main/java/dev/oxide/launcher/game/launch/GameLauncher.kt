@@ -217,7 +217,13 @@ class GameLauncher(
 
         val rendererLib = getRendererLibrary() ?: return
         if (!OxideBridge.dlopen(rendererLib) && !OxideBridge.dlopen(findInLdLibPath(rendererLib))) {
-            Logger.error(TAG, "Failed to load renderer $rendererLib")
+            // Copper Oxide transition: prefer self-built libcopperoxide.so, fall back
+            // to the precompiled libmobileglues.so until copperoxide.yml lands the
+            // new binaries. Failure path only; zero cost when the primary loads.
+            val compat = (Renderers.getCurrentRenderer() as? Any as dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer?)?.let { "libmobileglues.so" }
+            if (compat == null || (!OxideBridge.dlopen(compat) && !OxideBridge.dlopen(findInLdLibPath(compat)))) {
+                Logger.error(TAG, "Failed to load renderer $rendererLib")
+            }
         }
     }
 

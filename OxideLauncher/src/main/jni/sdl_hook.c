@@ -175,11 +175,15 @@ static int normalizeEglContextAttribs(const EGLint *attrib_list, EGLint *fixed, 
     return version;
 }
 
+// Copper Oxide path: matches the self-built libcopperoxide.so as well as the
+// legacy precompiled libmobileglues.so it replaces.
 static bool isMobileGluesEgl(void) {
     const char *egl = getenv("POJAVEXEC_EGL");
     if (egl == NULL) return false;
     const char *base = strrchr(egl, '/');
-    return strcmp(base != NULL ? base + 1 : egl, "libmobileglues.so") == 0;
+    const char *name = base != NULL ? base + 1 : egl;
+    return strcmp(name, "libmobileglues.so") == 0
+        || strcmp(name, "libcopperoxide.so") == 0;
 }
 
 // GLES 兼容层（强制 ES profile、RENDERABLE_TYPE 归一化、CV=2 兜底）
