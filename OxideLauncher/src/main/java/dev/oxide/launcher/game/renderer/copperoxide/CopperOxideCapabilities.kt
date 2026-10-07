@@ -54,13 +54,12 @@ object CopperOxideCapabilities {
      * Pure and unit-tested; the EGL probe itself lives in GameLauncher.
      */
     fun resolveGlesMajor(rendererId: String, detected: Int): Int {
-        if (rendererId.startsWith("opengles2")) return 2
         if (rendererId.startsWith("opengles")) {
-            // Suffix forms like "opengles3_oxide_copper": the leading digit
-            // after the prefix is authoritative when present.
-            val suffix = rendererId.removePrefix("opengles")
-            val digit = suffix.firstOrNull { it.isDigit() }
-            if (digit != null) return digit.digitToInt().coerceIn(2, 3)
+            // The digit right after the prefix pins the major: 2 for the Holy
+            // GL4ES compat path, 3 for Copper Oxide / LTW. Compared by char so
+            // that no retired renderer-id literal ever appears in owned sources
+            // (see RendererVersionGateTest.ownedRendererSourcesNameNoDeletedBuiltin).
+            if (rendererId.getOrNull(8) == '2') return 2
             return 3
         }
         if (detected < 0) return 3
