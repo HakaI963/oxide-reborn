@@ -187,10 +187,16 @@ object AllSettings : SettingsRegistry() {
     val silicaShaderCacheMb = intSetting("silicaShaderCacheMb", 64, 0..512)
 
     /**
-     * Silica spatial upscale (render below native + FSR). Off by default so it
-     * never increases cost unless the user opts in. Restart required.
+     * Silica state coalescing: redundant binds/mode sets never reach the driver.
+     * Real toggle, read by libsilica.so at context init (restart required).
      */
-    val silicaUpscale = boolSetting("silicaUpscale", false)
+    val silicaCoalescing = boolSetting("silicaCoalescing", true)
+
+    /**
+     * Silica diagnostic logs: verbose per-failure lines in logcat. Real toggle,
+     * read by libsilica.so at context init (restart required).
+     */
+    val silicaDiagnostics = boolSetting("silicaDiagnostics", false)
 
     //Game
     /**

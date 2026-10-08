@@ -57,11 +57,12 @@ object SilicaRenderer : RendererInterface {
             val resolved = SilicaTuning.resolve(
                 mode,
                 AllSettings.silicaShaderCacheMb.getValue(),
-                AllSettings.silicaUpscale.getValue(),
+                AllSettings.silicaCoalescing.getValue(),
+                AllSettings.silicaDiagnostics.getValue(),
             )
             val tmp = File(dir, "silica.json.tmp")
             val dst = File(dir, "silica.json")
-            tmp.writeText(SilicaTuning.toConfigJson(resolved))
+            tmp.writeText(SilicaTuning.toConfigJson(mode, resolved))
             if (dst.exists()) dst.delete()
             tmp.renameTo(dst)
         }

@@ -22,50 +22,18 @@ enum class SilicaPerformanceMode { AUTO, BALANCED, PERFORMANCE, QUALITY }
 
 object SilicaTuning {
     data class Resolved(
-        val glslCacheMb: Int,
-        val fsrLevel: Int, // 0=off, 2=quality (only real FSR levels used)
-        val angle: Int, // 0=driver default (never force without measurement)
-        val noError: Int, // 0=auto
-        val extCompute: Boolean,
-        val extTimerQuery: Boolean,
-        val extDsa: Boolean,
+        val vaultMb: Int,
+        val coalescing: Boolean,
+        val diagnostics: Boolean,
     )
 
-    fun resolve(mode: SilicaPerformanceMode, userCacheMb: Int, userUpscale: Boolean): Resolved {
-        val m = mode // AUTO resolves to BALANCED until per-GPU measurements exist
-        return when (m) {
-            SilicaPerformanceMode.PERFORMANCE -> Resolved(
-                glslCacheMb = userCacheMb.coerceIn(0, 512),
-                fsrLevel = 2, extCompute = true, extTimerQuery = true, extDsa = true,
-                angle = 0, noError = 0,
-            )
-            SilicaPerformanceMode.QUALITY -> Resolved(
-                glslCacheMb = userCacheMb.coerceIn(0, 512).coerceAtLeast(64),
-                fsrLevel = 0, extCompute = true, extTimerQuery = true, extDsa = true,
-                angle = 0, noError = 0,
-            )
-            else -> Resolved(
-                glslCacheMb = userCacheMb.coerceIn(0, 512),
-                fsrLevel = if (userUpscale) 2 else 0,
-                extCompute = true, extTimerQuery = true, extDsa = true,
-                angle = 0, noError = 0,
-            )
+    fun resolve(mode: SilicaPerformanceMode, vaultMb: Int, coalescing: Boolean, diagnostics: Boolean): Resolved {
+        val v = vaultMb.coerceIn(0, 512)
+        return when (mode) {
+            SilicaPerformanceMode.PERFORMANCE -> Resolved(v, coalescing, diagnostics)
+            SilicaPerformanceMode.QUALITY -> Resolved(v.coerceAtLeast(64), coalescing, diagnostics)
+            else -> Resolved(v, coalescing, diagnostics)
         }
     }
 
-    /**
-     * Own silica.json schema for libsilica.so. NOT the MobileGlues config.json
-     * schema: sharing that schema would couple Silica to the old backend.
-     * libsilica.so parses this file; until it exists the file documents intent
-     * and is verified by unit tests. Restart required (read at context init).
-     */
-    fun toConfigJson(r: Resolved): String =
-        "{\"silica_version\":1" +
-            ",\"glsl_cache_mb\":" + r.glslCacheMb +
-            ",\"upscale\":" + r.fsrLevel +
-            ",\"angle\":" + r.angle +
-            ",\"no_error\":" + r.noError +
-            ",\"ext_compute\":" + (if (r.extCompute) 1 else 0) +
-            ",\"ext_timer_query\":" + (if (r.extTimerQuery) 1 else 0) +
-            ",\"ext_dsa\":" + (if (r.extDsa) 1 else 0) + "}"
-}
+
