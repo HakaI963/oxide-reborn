@@ -269,8 +269,8 @@ S_API void glUniform3f(GLint l, GLfloat a, GLfloat b, GLfloat c) {
 }
 S_API void glUniform4f(GLint l, GLfloat a, GLfloat b, GLfloat c, GLfloat d) {
     SG_INIT();
-    auto f = bg<void (*)(GLint, GLfloat, GLfloat, GLfloat)>("glUniform4f");
-    if (f) f(l, a, b, c, d);
+    auto fn = bg<void (*)(GLint, GLfloat, GLfloat, GLfloat, GLfloat)>("glUniform4f");
+    if (fn) fn(l, a, b, c, d);
 }
 S_API void glUniform1fv(GLint l, GLsizei n, const GLfloat* v) {
     SG_INIT();
@@ -302,10 +302,10 @@ S_API void glVertexAttribDivisor(GLuint i, GLuint d) {
     auto f = bg<void (*)(GLuint, GLuint)>("glVertexAttribDivisor");
     if (f) f(i, d);
 }
-S_API void glDrawArrays(GLenum m, GLint f, GLsizei c) {
+S_API void glDrawArrays(GLenum m, GLint first, GLsizei c) {
     SG_INIT();
-    auto f = bg<void (*)(GLenum, GLint, GLsizei)>("glDrawArrays");
-    if (f) f(m, f, c);
+    auto fn = bg<void (*)(GLenum, GLint, GLsizei)>("glDrawArrays");
+    if (fn) fn(m, first, c);
 }
 S_API void glDrawElements(GLenum m, GLsizei c, GLenum t, const void* p) {
     SG_INIT();
