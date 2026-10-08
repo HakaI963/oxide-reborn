@@ -414,7 +414,7 @@ private fun LazyListScope.gameSection(
 private fun LazyListScope.silicaGameSection() {
     if (!Renderers.isCurrentRendererValid()) return
     if (Renderers.getCurrentRenderer() !== SilicaRenderer) return
-    group(R.string.oxide_set_section_graphics)
+    group(R.string.oxide_set_section_graphics, "silica")
     item(key = "silicaActive") {
         GameMenuNoteRow("Silica active: profile=" + AllSettings.silicaPerformanceMode.state +
             ", vault=" + AllSettings.silicaShaderCacheMb.state + "MB" +
@@ -780,8 +780,19 @@ private fun LazyListScope.gyroscopeSection(available: Boolean) {
 // 标签也只以字符串 id 传进来，真正的 `stringResource` 同样在 `item {}` 里取。
 // ---------------------------------------------------------------------------
 
-private fun LazyListScope.group(labelRes: Int) {
-    item(key = "group:$labelRes") { GameMenuGroupLabel(stringResource(labelRes)) }
+/**
+ * Settings group header with a structurally unique, stable Lazy key.
+ *
+ * The key is derived from the string resource plus the parent section that
+ * owns this occurrence: the same resource may legitimately head two sections
+ * (e.g. the graphics header and the Silica panel), and bare "group:$labelRes"
+ * then crashes LazyColumn with a duplicate key. The suffix is a fixed section
+ * id, never random and never a list index, so identity is stable across
+ * recomposition and insertion order changes elsewhere cannot collide with it.
+ */
+private fun LazyListScope.group(labelRes: Int, section: String? = null) {
+    val key = if (section == null) "group:$labelRes" else "group:$labelRes:$section"
+    item(key = key) { GameMenuGroupLabel(stringResource(labelRes)) }
 }
 
 private fun LazyListScope.action(
