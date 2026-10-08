@@ -322,16 +322,12 @@ object ControlManager {
         val file = getNewRandomFile()
         val existedBefore = file.exists()
         val unpacked = try {
-            // 新默认优先；缺失或坏文件时退到旧默认，保证总有一份可加载的布局。
-            val triedNew = runCatching {
+            // 唯一默认 emulated/new.json（/emulated/button/cc.json 原样打包）；
+            // 读不出则直接用下面的内置兜底，不再回落旧 asset（已删除）。
+            runCatching {
                 context.copyAssetFile(fileName = DEFAULT_LAYOUT_ASSET, output = file, overwrite = false)
                 isLoadableLayout(file)
             }.getOrDefault(false)
-            if (triedNew) true else {
-                runCatching {
-                    isLoadableLayout(file)
-                }.getOrDefault(false)
-            }
         } catch (e: Exception) {
             Logger.warning(TAG, "Failed to unpack default control layout", e)
             false
