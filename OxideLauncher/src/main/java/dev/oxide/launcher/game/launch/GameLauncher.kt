@@ -43,6 +43,7 @@ import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer.RendererPluginManager
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
 import dev.oxide.launcher.game.renderer.copperoxide.CopperOxideIdentity
 import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
@@ -429,10 +430,10 @@ private fun setRendererEnv(envMap: MutableMap<String, String>) {
 
     if (RendererPluginManager.selectedRendererPlugin != null) return
 
-    // 只有外置渲染器插件才吃这一套 zink 环境：三个内置渲染器（Holy GL4ES、
-    // Copper Oxide / LTW）各自带自己的 env，加 zink 变量只会添乱。
+    // 只有外置渲染器插件才吃这一套 zink 环境：四个内置渲染器（Holy GL4ES、
+    // Copper Oxide / LTW / Silica）各自带自己的 env，加 zink 变量只会添乱。
     // （Mojo Zink 在 v1.11.0 被移除，它曾是这里唯一走进去的内置渲染器。）
-    if (renderer != HolyGL4ESRenderer && renderer != CopperOxideRenderer && renderer != LTWRenderer) {
+    if (renderer != HolyGL4ESRenderer && renderer != CopperOxideRenderer && renderer != LTWRenderer && renderer != SilicaRenderer) {
         envMap["MESA_LOADER_DRIVER_OVERRIDE"] = "zink"
         envMap["MESA_GLSL_CACHE_DIR"] = PathManager.DIR_CACHE.absolutePath
         envMap["MESA_GL_VERSION_OVERRIDE"] = "4.6"
