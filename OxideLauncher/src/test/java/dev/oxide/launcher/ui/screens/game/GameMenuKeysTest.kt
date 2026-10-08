@@ -82,12 +82,21 @@ class GameMenuKeysTest {
             if (item != null) keys += item.groupValues[1]
             // Only string literals and the bare helper forwarder may feed a
             // Lazy key. Anything else (interpolation, ids, indices) fails here
-            // instead of crashing measurement on device.
-            val assign = Regex("\\bkey\\s*=\\s*([^,)]+)").find(line)
-            if (assign != null && "fun " !in line) {
-                val v = assign.groupValues[1].trim()
-                val ok = v.startsWith("\"") || v == "key"
-                if (!ok) fail("line $no: non-literal Lazy key escapes the uniqueness guard: $line")
+            // instead of crashing measurement on device. The single exception is
+            // the group() factory itself, whose construction is pinned to the
+            // two documented interpolations below.
+            if (line.startsWith("item(key = if (section ==")) {
+                assertTrue(
+                    "line $no: group() key factory left its documented shape: $line",
+                    line.contains("\"group:$labelRes\"") && line.contains(":$section"),
+                )
+            } else {
+                val assign = Regex("\\bkey\\s*=\\s*([^,)]+)").find(line)
+                if (assign != null && "fun " !in line) {
+                    val v = assign.groupValues[1].trim()
+                    val ok = v.startsWith("\"") || v == "key"
+                    if (!ok) fail("line $no: non-literal Lazy key escapes the uniqueness guard: $line")
+                }
             }
         }
         return keys
