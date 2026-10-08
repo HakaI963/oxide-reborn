@@ -37,6 +37,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     src/gl/state.cpp
     src/shader/pipeline.cpp
     src/cache/program_cache.cpp
+    src/oxide_bridge.cpp
 )
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glslang::glslang spirv-cross-c)
