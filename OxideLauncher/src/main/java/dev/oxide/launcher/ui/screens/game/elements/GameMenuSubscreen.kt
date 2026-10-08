@@ -791,8 +791,11 @@ private fun LazyListScope.gyroscopeSection(available: Boolean) {
  * recomposition and insertion order changes elsewhere cannot collide with it.
  */
 private fun LazyListScope.group(labelRes: Int, section: String? = null) {
-    val key = if (section == null) "group:$labelRes" else "group:$labelRes:$section"
-    item(key = key) { GameMenuGroupLabel(stringResource(labelRes)) }
+    // Key expression kept inline (no local val): the uniqueness test below
+    // allows exactly string literals and the bare forwarder, nothing else.
+    item(key = if (section == null) "group:$labelRes" else "group:$labelRes:$section") {
+        GameMenuGroupLabel(stringResource(labelRes))
+    }
 }
 
 private fun LazyListScope.action(

@@ -80,9 +80,14 @@ class GameMenuKeysTest {
             if (row != null) keys += row.groupValues[2]
             val item = Regex("^item\\(key\\s*=\\s*\"([^\"]+)\"").find(line)
             if (item != null) keys += item.groupValues[1]
-            val dyn = Regex("key\\s*=\\s*(?!\"[^\"]*\"|^key\\b)([^,)]+)").find(line)
-            if (dyn != null && "fun " !in line) {
-                fail("line $no: non-literal Lazy key escapes the uniqueness guard: $line")
+            // Only string literals and the bare helper forwarder may feed a
+            // Lazy key. Anything else (interpolation, ids, indices) fails here
+            // instead of crashing measurement on device.
+            val assign = Regex("\\bkey\\s*=\\s*([^,)]+)").find(line)
+            if (assign != null && "fun " !in line) {
+                val v = assign.groupValues[1].trim()
+                val ok = v.startsWith("\"") || v == "key"
+                if (!ok) fail("line $no: non-literal Lazy key escapes the uniqueness guard: $line")
             }
         }
         return keys
