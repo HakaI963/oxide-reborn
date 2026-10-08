@@ -171,7 +171,6 @@ S_API void glDetachShader(GLuint p, GLuint s) {
     SG_INIT();
     silica::shader::detach_shader(p, s);
 }
-SG_FWD_V2EU(glDetachShader)
 S_API void glDeleteVertexArrays(GLsizei n, const GLuint* v) {
     SG_INIT();
     auto f = bg<void (*)(GLsizei, const GLuint*)>(__func__);
