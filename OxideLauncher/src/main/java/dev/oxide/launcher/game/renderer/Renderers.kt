@@ -45,9 +45,11 @@ object Renderers {
             currentRenderer = null
         }
 
+        // Copper Oxide stays first until libsilica.so actually renders;
+        // new installs fall back to renderers[0] and Silica is under construction.
         addRenderers(
-            SilicaRenderer,
             CopperOxideRenderer,
+            SilicaRenderer,
             LTWRenderer,
             HolyGL4ESRenderer
         )
