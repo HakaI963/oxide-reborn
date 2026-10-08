@@ -3,10 +3,9 @@ package dev.oxide.launcher.game.renderer.silica
 /**
  * Silica launch environment.
  *
- * HARD RULE: only Oxide-integration keys Silica itself reads. No MG_* keys
- * (those belong to the MobileGlues-derived driver and would couple Silica to
- * it). SILICA_* keys are consumed by libsilica.so (own backend) once built;
- * until then they are recorded in the launch log for verification.
+ * HARD RULE: only Oxide-integration keys Silica itself reads. SILICA_* keys are
+ * consumed by libsilica.so (own backend); until it renders they are recorded in
+ * the launch log for verification.
  */
 object SilicaEnv {
     const val KEY_LIBGL_ES = "LIBGL_ES"
