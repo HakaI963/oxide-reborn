@@ -1,7 +1,7 @@
 {
     "info": {
         "name": {
-            "default": "new",
+            "default": "oxide-default",
             "matchQueue": []
         },
         "author": {
@@ -9,7 +9,7 @@
             "matchQueue": []
         },
         "description": {
-            "default": "Clean default controls: move, jump, attack, inventory, pause. Simple to edit.",
+            "default": "least working default control layout",
             "matchQueue": []
         },
         "versionCode": 0,
@@ -75,8 +75,8 @@
                     },
                     "buttonSize": {
                         "type": "percentage",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1015,
                         "heightPercentage": 1015,
                         "widthReference": "screen_height",
@@ -106,8 +106,8 @@
                     },
                     "buttonSize": {
                         "type": "percentage",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1015,
                         "heightPercentage": 1015,
                         "widthReference": "screen_height",
@@ -137,8 +137,8 @@
                     },
                     "buttonSize": {
                         "type": "percentage",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1015,
                         "heightPercentage": 1015,
                         "widthReference": "screen_height",
@@ -168,8 +168,8 @@
                     },
                     "buttonSize": {
                         "type": "percentage",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1015,
                         "heightPercentage": 1015,
                         "widthReference": "screen_height",
@@ -199,8 +199,8 @@
                     },
                     "buttonSize": {
                         "type": "percentage",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1015,
                         "heightPercentage": 1015,
                         "widthReference": "screen_height",
@@ -230,8 +230,8 @@
                     },
                     "buttonSize": {
                         "type": "percentage",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1015,
                         "heightPercentage": 1015,
                         "widthReference": "screen_height",
@@ -323,8 +323,8 @@
                     },
                     "buttonSize": {
                         "type": "percentage",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1015,
                         "heightPercentage": 1015,
                         "widthReference": "screen_height",
@@ -354,8 +354,8 @@
                     },
                     "buttonSize": {
                         "type": "percentage",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1015,
                         "heightPercentage": 1015,
                         "widthReference": "screen_height",
@@ -385,8 +385,8 @@
                     },
                     "buttonSize": {
                         "type": "dp",
-                        "widthDp": 50,
-                        "heightDp": 50,
+                        "widthDp": 50.0,
+                        "heightDp": 50.0,
                         "widthPercentage": 1180,
                         "heightPercentage": 1047,
                         "widthReference": "screen_height",
@@ -413,8 +413,8 @@
             "uuid": "20b40f7977b5",
             "animateSwap": false,
             "lightStyle": {
-                "alpha": 1,
-                "pressedAlpha": 1,
+                "alpha": 1.0,
+                "pressedAlpha": 1.0,
                 "backgroundColor": 788529152,
                 "pressedBackgroundColor": 3012069512,
                 "contentColor": 4294967295,
@@ -424,21 +424,21 @@
                 "borderColor": 4294967295,
                 "pressedBorderColor": 4294967295,
                 "borderRadius": {
-                    "topStart": 20,
-                    "topEnd": 20,
-                    "bottomEnd": 20,
-                    "bottomStart": 20
+                    "topStart": 20.0,
+                    "topEnd": 20.0,
+                    "bottomEnd": 20.0,
+                    "bottomStart": 20.0
                 },
                 "pressedBorderRadius": {
-                    "topStart": 0,
-                    "topEnd": 0,
-                    "bottomEnd": 0,
-                    "bottomStart": 0
+                    "topStart": 0.0,
+                    "topEnd": 0.0,
+                    "bottomEnd": 0.0,
+                    "bottomStart": 0.0
                 }
             },
             "darkStyle": {
-                "alpha": 1,
-                "pressedAlpha": 1,
+                "alpha": 1.0,
+                "pressedAlpha": 1.0,
                 "backgroundColor": 2147483648,
                 "pressedBackgroundColor": 3012069512,
                 "contentColor": 4294967295,
@@ -448,16 +448,16 @@
                 "borderColor": 4294967295,
                 "pressedBorderColor": 4294967295,
                 "borderRadius": {
-                    "topStart": 0,
-                    "topEnd": 0,
-                    "bottomEnd": 0,
-                    "bottomStart": 0
+                    "topStart": 0.0,
+                    "topEnd": 0.0,
+                    "bottomEnd": 0.0,
+                    "bottomStart": 0.0
                 },
                 "pressedBorderRadius": {
-                    "topStart": 0,
-                    "topEnd": 0,
-                    "bottomEnd": 0,
-                    "bottomStart": 0
+                    "topStart": 0.0,
+                    "topEnd": 0.0,
+                    "bottomEnd": 0.0,
+                    "bottomStart": 0.0
                 }
             }
         },
@@ -466,8 +466,8 @@
             "uuid": "d4cd07253e6f",
             "animateSwap": false,
             "lightStyle": {
-                "alpha": 1,
-                "pressedAlpha": 1,
+                "alpha": 1.0,
+                "pressedAlpha": 1.0,
                 "backgroundColor": 855638016,
                 "pressedBackgroundColor": 3012069512,
                 "contentColor": 4294967295,
@@ -477,21 +477,21 @@
                 "borderColor": 4294967295,
                 "pressedBorderColor": 4294967295,
                 "borderRadius": {
-                    "topStart": 10,
-                    "topEnd": 10,
-                    "bottomEnd": 10,
-                    "bottomStart": 10
+                    "topStart": 10.0,
+                    "topEnd": 10.0,
+                    "bottomEnd": 10.0,
+                    "bottomStart": 10.0
                 },
                 "pressedBorderRadius": {
-                    "topStart": 0,
+                    "topStart": 0.0,
                     "topEnd": 14.795244,
-                    "bottomEnd": 0,
-                    "bottomStart": 0
+                    "bottomEnd": 0.0,
+                    "bottomStart": 0.0
                 }
             },
             "darkStyle": {
-                "alpha": 1,
-                "pressedAlpha": 1,
+                "alpha": 1.0,
+                "pressedAlpha": 1.0,
                 "backgroundColor": 2147483648,
                 "pressedBackgroundColor": 3012069512,
                 "contentColor": 4294967295,
@@ -501,16 +501,16 @@
                 "borderColor": 4294967295,
                 "pressedBorderColor": 4294967295,
                 "borderRadius": {
-                    "topStart": 0,
-                    "topEnd": 0,
-                    "bottomEnd": 0,
-                    "bottomStart": 0
+                    "topStart": 0.0,
+                    "topEnd": 0.0,
+                    "bottomEnd": 0.0,
+                    "bottomStart": 0.0
                 },
                 "pressedBorderRadius": {
-                    "topStart": 0,
-                    "topEnd": 0,
-                    "bottomEnd": 0,
-                    "bottomStart": 0
+                    "topStart": 0.0,
+                    "topEnd": 0.0,
+                    "bottomEnd": 0.0,
+                    "bottomStart": 0.0
                 }
             }
         }
