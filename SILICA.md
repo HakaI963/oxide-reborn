@@ -86,20 +86,24 @@ legality + net frame-time before any implementation.
 
 ## Rendering path (Minecraft 26.3 target, exact code path)
 
-Minecraft/LWJGL -> `-Dorg.lwjgl.opengl.libname=libsilica.so` (dlsym core GL) +
-SDL (`SDL_EGL_LIBRARY`/`POJAVEXEC_EGL=libsilica.so`) + pre-load dlopen ->
+Minecraft/LWJGL -> `-Dorg.lwjgl.opengl.libname=libsilica.so` (dlsym core GL)
++ pre-load dlopen in GameLauncher.dlopenEngine (logs the loaded file; failure
+is loud, never substituted). EGL display/config/surface/swap are NOT routed
+through libsilica.so: with no EGL override, SDL and Oxide's bridge resolve the
+system EGL directly, end to end.
 libsilica.so exports (own code only):
-- `src/driver/loader.cpp`: opens system libEGL + libGLESv3/v2, single-driver
-  repair (ANGLE-split halves fall back to system + log), backend resolve.
-- `src/egl/exports.cpp`: full EGL 1.4/1.5 core surface; error rearm (backend
-  error read for the log, re-queued for the app's eglGetError); every
-  create/bind/makeCurrent refusal logged; probe of backend RENDERER/VERSION on
-  first successful makeCurrent into the probe cache.
+- `src/driver/loader.cpp`: opens system libEGL + libGLESv3/v2 LAZY, resolves
+  through host eglGetProcAddress first and dlsym second, single-driver repair
+  (ANGLE-split halves fall back to system + log), full open/resolve
+  diagnostics. Never serves display acquisition.
+- `src/egl/exports.cpp`: context create/destroy/current ONLY, plus
+  eglGetProcAddress (own wrappers first via our own handle, host otherwise).
+  Refusal logs with error rearm; probe of backend RENDERER/VERSION on first
+  successful makeCurrent into the probe cache.
 - `src/gl/exports.cpp`: null-safe glGetString/glGetStringi (probe fallback +
-  log, never null deref); dedup wrappers (UseProgram, binds, caps, viewport,
-  active unit); ~70-entry forwarder table (shader/program/FBO/texture/uniform/
-  draw/pixel); eglGetProcAddress serves own exports first, backend for the long
-  tail (temporary, documented below).
+  log, never null deref; live answers also feed the probe); dedup wrappers
+  (UseProgram, binds, caps, viewport, active unit); forwarder table
+  (shader/program/FBO/texture/uniform/draw/pixel).
 - `src/gl/state.cpp`: coalescing tables + hits/skips counters
   (silica_state_hits/skips); follows silica.json unless overridden.
 - `src/config/config.cpp`: parses $SILICA_DATA_DIR/silica.json (own schema:
@@ -119,12 +123,10 @@ libsilica.so exports (own code only):
 
 ## Currently implemented GL/EGL surface
 
-EGL: GetError(rearm-aware)/GetDisplay/Initialize/Terminate/QueryString/
-GetConfigs/ChooseConfig/GetConfigAttrib/Create+Destroy+Query (window/pbuffer/
-pixmap/client-buffer)/SurfaceAttrib/BindTexImage/ReleaseTexImage/WaitNative/
-BindAPI/QueryAPI/WaitClient/ReleaseThread/CreateContext/DestroyContext/
-MakeCurrent/GetCurrent*/QueryContext/WaitGL/SwapBuffers/CopyBuffers/
-SwapInterval/GetProcAddress(own-first).
+EGL (wrapped): CreateContext/DestroyContext/MakeCurrent + eglGetProcAddress
+(own-first). Everything else (GetDisplay/Initialize/configs/surfaces/swap/
+GetError/queries) is intentionally NOT exported and stays on the host; the
+build fails if display-path symbols appear.
 GL: null-safe queries, GetError/Integerv, dedup state calls, full shader/
 program/link/log/uniform resource set, FBO/RBO/VAO/VBO create-bind-data,
 texture upload/compressed/mipmap, vertex attribs (+divisor), DrawArrays/
