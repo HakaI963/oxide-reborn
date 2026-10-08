@@ -102,8 +102,7 @@ int detect_version(const std::string& src, bool& isEs) {
         while (i < n) {
             if (isspace((unsigned char)src[i])) { i++; continue; }
             if (src[i] == '/' && i + 1 < n && src[i + 1] == '/') {
-                while (i < n && src[i] != '
-') i++;
+                while (i < n && src[i] != '\n') i++;
                 continue;
             }
             if (src[i] == '/' && i + 1 < n && src[i + 1] == '*') {
@@ -122,18 +121,15 @@ int detect_version(const std::string& src, bool& isEs) {
             while (i < n && isspace((unsigned char)src[i])) i++;
             int v = 0;
             while (i < n && isdigit((unsigned char)src[i])) { v = v * 10 + (src[i] - '0'); i++; }
-            while (i < n && isspace((unsigned char)src[i]) && src[i] != '
-') i++;
+            while (i < n && isspace((unsigned char)src[i]) && src[i] != '\n') i++;
             size_t e = i;
-            while (e < n && src[e] != '
-' && !isspace((unsigned char)src[e])) e++;
+            while (e < n && src[e] != '\n' && !isspace((unsigned char)src[e])) e++;
             std::string prof = src.substr(i, e - i);
             isEs = (prof == "es");
             return v;
         }
         if (i < n && src[i] == '#') {
-            while (i < n && src[i] != '
-') i++;
+            while (i < n && src[i] != '\n') i++;
             continue;
         }
         break;
@@ -141,8 +137,7 @@ int detect_version(const std::string& src, bool& isEs) {
     return 0;
 }
 std::string first_line(const std::string& s, size_t max = 200) {
-    size_t e = s.find('
-');
+    size_t e = s.find('\n');
     std::string l = (e == std::string::npos) ? s : s.substr(0, e);
     if (l.size() > max) l.resize(max);
     return l;
@@ -433,8 +428,7 @@ void get_shader_info_log(GLuint s, GLsizei n, GLsizei* len, GLchar* log) {
     memcpy(log, ours.c_str(), copy);
     size_t used = copy;
     if (f && used + 2 < (size_t)n) {
-        log[used++] = '
-';
+        log[used++] = '\n';
         GLsizei rest = 0;
         f(s, n - (GLsizei)used, &rest, log + used);
         if (rest > 0) used += (size_t)rest;
@@ -591,8 +585,7 @@ void get_program_info_log(GLuint p, GLsizei n, GLsizei* len, GLchar* log) {
     memcpy(log, ours.c_str(), copy);
     size_t used = copy;
     if (f && used + 2 < (size_t)n) {
-        log[used++] = '
-';
+        log[used++] = '\n';
         GLsizei rest = 0;
         f(p, n - (GLsizei)used, &rest, log + used);
         if (rest > 0) used += (size_t)rest;
