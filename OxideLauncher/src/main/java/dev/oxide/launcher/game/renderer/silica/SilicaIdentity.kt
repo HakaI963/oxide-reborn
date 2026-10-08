@@ -19,14 +19,18 @@ package dev.oxide.launcher.game.renderer.silica
  * lifetime, sync, memory/cache, resolution/upscaling, pacing, optional frame
  * generation, runtime controls) is new Oxide-owned architecture.
  *
- * Phase 1 (1.13.0) honesty note: the GL translation backend is still the proven
- * libcopperoxide.so binary while the Silica pipeline, safety behavior and
- * controls are built around it. The upstream 26.2 dev black-screen fix
- * (MobileGlues fcdf914 + 8bcf28a: null-safe GL_RENDERER/GL_VERSION probe
- * fallback, EGL failure logging with error rearm, ANGLE half-load guard) is
- * ported into the native tree Silica drives (see SILICA.md). An independent
- * Silica native backend is future work; until it exists Copper Oxide code,
- * binaries and LGPL notices MUST stay (see THIRD_PARTY.md).
+ * HARD RULE: Silica NEVER loads libcopperoxide.so / libmobileglues.so and never
+ * forwards GL calls to them. Its native backend is libsilica.so built from
+ * OxideLauncher/src/main/cpp/silica/ (own EGL/context, entry layer, state
+ * tracking, shader pipeline, program cache, framebuffers, textures, buffers,
+ * uniforms, sync, presentation). Copper Oxide / MobileGlues source in
+ * cpp/copperoxide/ is REFERENCE ONLY for studying the Minecraft contract.
+ * The upstream 26.2 dev black-screen fix (MobileGlues-plugin 5974f49 ->
+ * MobileGlues fcdf914 + 8bcf28a) is ANALYZED in SILICA.md and its equivalent
+ * behavior is implemented in Silica's own code, never copied. Until the Silica
+ * native is functional, selecting Silica fails loudly at load with a clear log
+ * instead of silently falling back to another backend. Copper Oxide code,
+ * binaries and LGPL notices MUST stay until no derived code remains.
  *
  * GL vendor/renderer strings inside Minecraft come from the driver and are
  * never spoofed. No FPS numbers are claimed without on-device measurement.
@@ -36,9 +40,9 @@ object SilicaIdentity {
     const val UNIQUE_ID: String = "7c1e5a2b-9d3f-4e11-8a2c-silica000001"
     const val NAME: String = "Silica"
     const val FLAVOR: String = "silica"
-    // Phase 1: proven translation backend. Future: libsilica.so.
-    const val NATIVE_LIBRARY: String = "libcopperoxide.so"
-    const val EGL_LIBRARY: String = "libcopperoxide.so"
+    // Own native backend. No fallback to any other renderer's library, ever.
+    const val NATIVE_LIBRARY: String = "libsilica.so"
+    const val EGL_LIBRARY: String = "libsilica.so"
     const val MIN_MC_VERSION: String = "1.17"
     const val MAX_MC_VERSION: String = "26.3"
     const val DATA_DIR_NAME: String = "silica"
@@ -46,7 +50,7 @@ object SilicaIdentity {
     fun isSilicaId(rendererId: String): Boolean = rendererId == RENDERER_ID
 
     fun summary(): String =
-        "Silica: Oxide-integrated OpenGL renderer (phase 1 pipeline + proven backend). " +
+        "Silica: Oxide-integrated OpenGL renderer (own native backend, under construction). " +
             "Capabilities detected, never spoofed."
 
     fun logLine(): String = NAME + " (" + FLAVOR + " / " + RENDERER_ID + ")"

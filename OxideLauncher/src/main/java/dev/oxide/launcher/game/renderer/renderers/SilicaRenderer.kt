@@ -12,18 +12,19 @@ package dev.oxide.launcher.game.renderer.renderers
 import dev.oxide.launcher.game.renderer.RendererInterface
 import dev.oxide.launcher.game.renderer.silica.SilicaEnv
 import dev.oxide.launcher.game.renderer.silica.SilicaIdentity
+import dev.oxide.launcher.game.renderer.silica.SilicaPerformanceMode
 import dev.oxide.launcher.game.renderer.silica.SilicaTuning
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.setting.AllSettings
 import java.io.File
 
 /**
- * Silica renderer (phase 1).
+ * Silica renderer.
  *
- * Oxide-integrated pipeline; translation backend is the proven
- * libcopperoxide.so until the independent Silica native exists.
- * Always uses a private data dir so full config applies without spoofing.
- * See SILICA.md for architecture, upstream-fix port and measurement plan.
+ * HARD RULE: loads ONLY libsilica.so (own backend). No fallback to
+ * libcopperoxide.so / libmobileglues.so, no forwarding, no wrapping. If the
+ * library is absent (backend still under construction) the dlopen fails loudly
+ * in the launch log; GameLauncher must NOT silently substitute another backend.
  */
 object SilicaRenderer : RendererInterface {
     override fun getRendererId(): String = SilicaIdentity.RENDERER_ID
@@ -40,7 +41,10 @@ object SilicaRenderer : RendererInterface {
         val dir = silicaDataDir()
         dir.mkdirs()
         authorSilicaConfig(dir)
-        SilicaEnv.merged(dir.absolutePath)
+        val mode = runCatching {
+            SilicaPerformanceMode.valueOf(AllSettings.silicaPerformanceMode.getValue())
+        }.getOrDefault(SilicaPerformanceMode.AUTO).name
+        SilicaEnv.merged(mode, dir.absolutePath)
     }
 
     private fun silicaDataDir(): File = File(PathManager.DIR_FILES_PRIVATE, SilicaIdentity.DATA_DIR_NAME)
@@ -48,15 +52,15 @@ object SilicaRenderer : RendererInterface {
     private fun authorSilicaConfig(dir: File) {
         runCatching {
             val mode = runCatching {
-                SilicaTuning.SilicaPerformanceMode.valueOf(AllSettings.silicaPerformanceMode.getValue())
-            }.getOrDefault(SilicaTuning.SilicaPerformanceMode.AUTO)
+                SilicaPerformanceMode.valueOf(AllSettings.silicaPerformanceMode.getValue())
+            }.getOrDefault(SilicaPerformanceMode.AUTO)
             val resolved = SilicaTuning.resolve(
                 mode,
                 AllSettings.silicaShaderCacheMb.getValue(),
                 AllSettings.silicaUpscale.getValue(),
             )
-            val tmp = File(dir, "config.json.tmp")
-            val dst = File(dir, "config.json")
+            val tmp = File(dir, "silica.json.tmp")
+            val dst = File(dir, "silica.json")
             tmp.writeText(SilicaTuning.toConfigJson(resolved))
             if (dst.exists()) dst.delete()
             tmp.renameTo(dst)

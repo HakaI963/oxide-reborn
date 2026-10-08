@@ -53,13 +53,19 @@ object SilicaTuning {
         }
     }
 
-    /** Keys written to the Silica data-dir config.json (subset of verified keys). */
+    /**
+     * Own silica.json schema for libsilica.so. NOT the MobileGlues config.json
+     * schema: sharing that schema would couple Silica to the old backend.
+     * libsilica.so parses this file; until it exists the file documents intent
+     * and is verified by unit tests. Restart required (read at context init).
+     */
     fun toConfigJson(r: Resolved): String =
-        "{\"enableANGLE\":" + r.angle +
-            ",\"enableNoError\":" + r.noError +
-            ",\"enableExtComputeShader\":" + (if (r.extCompute) 1 else 0) +
-            ",\"enableExtTimerQuery\":" + (if (r.extTimerQuery) 1 else 0) +
-            ",\"enableExtDirectStateAccess\":" + (if (r.extDsa) 1 else 0) +
-            ",\"maxGlslCacheSize\":" + r.glslCacheMb +
-            ",\"fsr1Setting\":" + r.fsrLevel + "}"
+        "{\"silica_version\":1" +
+            ",\"glsl_cache_mb\":" + r.glslCacheMb +
+            ",\"upscale\":" + r.fsrLevel +
+            ",\"angle\":" + r.angle +
+            ",\"no_error\":" + r.noError +
+            ",\"ext_compute\":" + (if (r.extCompute) 1 else 0) +
+            ",\"ext_timer_query\":" + (if (r.extTimerQuery) 1 else 0) +
+            ",\"ext_dsa\":" + (if (r.extDsa) 1 else 0) + "}"
 }
