@@ -137,9 +137,25 @@ void load_libs() {
     // of the two it got. Probing the loaded image for an ANGLE symbol would not
     // answer it either: a device whose system driver *is* ANGLE would say yes.
     // Only the loader knows, so it reports.
-    g_angle_in_use = false;
-    gles = open_lib(gles3_lib, gles_override, &g_angle_in_use);
-    egl = open_lib(egl_lib, egl_override, nullptr);
+    // Ported from upstream fcdf914: half of ANGLE + half of the system driver
+    // is the worst outcome (contexts in one impl, GL calls in the other whose
+    // first answer is null GL_RENDERER). Both halves come from the same place.
+    bool gles_from_angle = false;
+    bool egl_from_angle = false;
+    gles = open_lib(gles3_lib, gles_override, &gles_from_angle);
+    egl = open_lib(egl_lib, egl_override, &egl_from_angle);
+    if (gles_from_angle != egl_from_angle) {
+        LOG_E("ANGLE loaded only its %s half; using the system driver for both\n", gles_from_angle ? "GLES" : "EGL")
+        if (gles_from_angle) {
+            dlclose(gles);
+            gles = open_lib(gles3_lib, nullptr, nullptr);
+        } else {
+            dlclose(egl);
+            egl = open_lib(egl_lib, nullptr, nullptr);
+        }
+        gles_from_angle = egl_from_angle = false;
+    }
+    g_angle_in_use = gles_from_angle;
     if (want_angle && !g_angle_in_use) {
         LOG_E("ANGLE was requested but was not loaded; running on the system driver\n")
     }
