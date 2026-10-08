@@ -75,6 +75,7 @@ import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.path.URL_GITHUB_DRIVER_PLUGINS
@@ -1128,6 +1129,45 @@ fun OxideRendererDrawer(
                     }
                 }
 
+                // Silica settings: only when Silica is selected. All restart-required
+                // (config is read at context init); labels say so explicitly.
+                if (oxideSilicaConfigVisible(storedRendererId)) {
+                    OxideSettingsGroup(
+                        title = "Silica",
+                        metrics = metrics,
+                    ) {
+                        OxideEnumRow(
+                            label = "Performance mode (restart required)",
+                            hint = "Auto = Balanced until per-GPU measurements exist. Performance enables spatial upscale; Quality disables it.",
+                            metrics = metrics,
+                            entries = listOf("AUTO", "BALANCED", "PERFORMANCE", "QUALITY"),
+                            selected = AllSettings.silicaPerformanceMode.state,
+                            nameOf = { it },
+                            onSelect = { AllSettings.silicaPerformanceMode.save(it) },
+                        )
+                        OxideIntRow(
+                            label = "Shader cache MB (restart required)",
+                            hint = "Real backend cache size. 0 disables (recompiles every launch).",
+                            metrics = metrics,
+                            value = AllSettings.silicaShaderCacheMb.state,
+                            range = 0..512,
+                            step = 16,
+                            suffix = " MB",
+                            onValueChange = { AllSettings.silicaShaderCacheMb.save(it) },
+                        )
+                        OxideToggleRow(
+                            label = "Spatial upscale (restart required)",
+                            hint = "Render below native + upscale. Off by default; only on when it reduces cost.",
+                            checked = AllSettings.silicaUpscale.state,
+                            onCheckedChange = { AllSettings.silicaUpscale.save(it) },
+                        )
+                        OxideSettingRow(
+                            label = "Frame generation: not available",
+                            hint = "No measured-positive backend in phase 1; no toggle shipped to avoid a fake switch.",
+                        )
+                    }
+                }
+
                 OxideSettingsGroup(
                     title = stringResource(R.string.oxide_set_section_plugins),
                     metrics = metrics,
@@ -1322,6 +1362,10 @@ internal fun oxideZinkSettingVisible(vulkanSupported: Boolean): Boolean =
  */
 internal fun oxideCopperConfigVisible(storedRendererId: String): Boolean =
     storedRendererId == CopperOxideRenderer.getUniqueIdentifier()
+
+/** Silica section appears only when the stored renderer is Silica. Pure, testable. */
+internal fun oxideSilicaConfigVisible(storedRendererId: String): Boolean =
+    storedRendererId == SilicaRenderer.getUniqueIdentifier()
 
 /**
  * Copper 调优子行是否出现
