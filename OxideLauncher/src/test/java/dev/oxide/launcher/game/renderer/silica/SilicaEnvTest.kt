@@ -6,34 +6,46 @@ import org.junit.Test
 
 class SilicaEnvTest {
     @Test
-    fun baseEnvHasExactlyVerifiedKeys() {
-        val base = SilicaEnv.baseEnv()
+    fun baseEnvHasOnlyOwnKeys() {
+        val base = SilicaEnv.baseEnv("AUTO")
         assertEquals("3", base["LIBGL_ES"])
-        assertEquals("libcopperoxide.so", base["LIBGL_EGL"])
-        assertEquals("1", base["MG_COUNT_LAUNCH"])
         assertEquals("silica", base["OXIDE_RENDERER_FLAVOR"])
-        assertEquals(4, base.size)
+        assertEquals("AUTO", base["SILICA_MODE"])
+        assertEquals(3, base.size)
     }
 
     @Test
-    fun dataDirAlwaysSetForSilica() {
-        assertTrue(SilicaEnv.dataDirEnv("").isEmpty())
-        assertEquals(mapOf("MG_DIR_PATH" to "/p"), SilicaEnv.dataDirEnv("/p"))
+    fun noMobileGluesKeysLeak() {
+        val merged = SilicaEnv.merged("BALANCED", "/p")
+        for (k in merged.keys) {
+            assertTrue("Silica must not emit MobileGlues keys, found " + k,
+                !k.startsWith("MG_") && k != "LIBGL_EGL")
+        }
+        assertEquals("/p", merged["SILICA_DATA_DIR"])
     }
 
     @Test
-    fun tuningMapsToRealKeysOnly() {
-        val r = SilicaTuning.resolve(SilicaTuning.SilicaPerformanceMode.PERFORMANCE, 64, false)
-        assertEquals(2, r.fsrLevel)
+    fun identityPointsAtOwnLibraryOnly() {
+        assertEquals("libsilica.so", SilicaIdentity.NATIVE_LIBRARY)
+        assertEquals("libsilica.so", SilicaIdentity.EGL_LIBRARY)
+        assertTrue(!SilicaIdentity.NATIVE_LIBRARY.contains("copper"))
+        assertTrue(!SilicaIdentity.NATIVE_LIBRARY.contains("mobileglues"))
+    }
+
+    @Test
+    fun tuningWritesOwnSchema() {
+        val r = SilicaTuning.resolve(SilicaPerformanceMode.PERFORMANCE, 64, false)
         val json = SilicaTuning.toConfigJson(r)
-        assertTrue(json.contains("maxGlslCacheSize"))
-        assertTrue(json.contains("fsr1Setting"))
+        assertTrue(json.contains("silica_version"))
+        assertTrue(json.contains("glsl_cache_mb"))
+        assertTrue(!json.contains("maxGlslCacheSize"))
+        assertTrue(!json.contains("fsr1Setting"))
     }
 
     @Test
     fun probeFallsBackWithoutCrashing() {
         SilicaProbe.noteProbe("Adreno 750", "OpenGL ES 3.2")
         assertEquals("Adreno 750", SilicaProbe.rendererOrProbe(null))
-        assertEquals("<unknown>", SilicaProbe.rendererOrProbe("").takeIf { it == "<unknown>" } ?: SilicaProbe.rendererOrProbe("X"))
+        assertTrue(SilicaProbe.isAdreno("Adreno 750"))
     }
 }
