@@ -45,7 +45,7 @@ import java.io.File
  */
 class EditorDefaultLayoutAssetTest {
 
-    private val assetText = locate("assets/default_layout.json").readText()
+    private val assetText = locate("assets/emulated/new.json").readText()
     private val asset = Json.parseToJsonElement(assetText).jsonObject
 
     /** 两层各自的 uuid，顺序与文件里一致 */
