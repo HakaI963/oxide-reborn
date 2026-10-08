@@ -434,25 +434,4 @@ S_API void glFinish(void) {
     auto f = bg<void (*)(void)>("glFinish");
     if (f) f();
 }
-// ---- eglGetProcAddress: own exports first, backend for the long tail ----
-typedef void (*silica_proc_t)(void);
-S_API silica_proc_t eglGetProcAddress(const char* name) {
-    SG_INIT();
-    if (!name || !*name) return nullptr;
-    // Our own handle: covers every wrapper above (present and future) without a
-    // hand-maintained table.
-    void* self = dlopen("libsilica.so", RTLD_NOLOAD | RTLD_LOCAL);
-    if (self) {
-        void* p = dlsym(self, name);
-        dlclose(self);
-        if (p) return (silica_proc_t)p;
-    }
-    // TEMPORARY compat: backend pointer for the unwrapped long tail. These
-    // calls render correctly but bypass state tracking; the wrapped set grows
-    // with profiling (see SILICA.md). Logged in diagnostics mode, counted.
-    void* p = silica::driver::resolve(name);
-    if (!p && silica::config::diagnostics())
-        SLOG(ERROR, "silica: eglGetProcAddress(%s) unknown to backend too", name);
-    return (silica_proc_t)p;
-}
 } // extern C
