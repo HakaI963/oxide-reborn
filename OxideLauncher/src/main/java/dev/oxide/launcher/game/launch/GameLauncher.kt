@@ -218,7 +218,12 @@ class GameLauncher(
         }
 
         val rendererLib = getRendererLibrary() ?: return
-        if (!OxideBridge.dlopen(rendererLib) && !OxideBridge.dlopen(findInLdLibPath(rendererLib))) {
+        // Device verification of the exact runtime library: success is logged
+        // with the resolved file so a launch log proves which .so is driving.
+        if (OxideBridge.dlopen(rendererLib) || OxideBridge.dlopen(findInLdLibPath(rendererLib))) {
+            Logger.info(TAG, "Loaded renderer library $rendererLib")
+            return
+        } else {
             // Copper Oxide transition: prefer self-built libcopperoxide.so, fall back
             // to the precompiled libmobileglues.so until copperoxide.yml lands the
             // new binaries. Failure path only; zero cost when the primary loads.
