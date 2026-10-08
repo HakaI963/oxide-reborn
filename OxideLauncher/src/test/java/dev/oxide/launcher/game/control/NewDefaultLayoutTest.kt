@@ -74,9 +74,10 @@ class NewDefaultLayoutTest {
 
     @Test
     fun identifiesAsNew() {
+        // Single default is /emulated/button/cc.json verbatim (oxide-default).
         val info = asset.getValue("info").jsonObject
         fun def(key: String) = info.getValue(key).jsonObject.getValue("default").jsonPrimitive.content
-        assertEquals("new", def("name"))
+        assertEquals("oxide-default", def("name"))
         assertEquals("oxide-mc", def("author"))
     }
 
