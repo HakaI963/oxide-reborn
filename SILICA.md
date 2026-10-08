@@ -148,3 +148,24 @@ flush/finish.
   only queries get the probe treatment.
 - No program-binary reuse yet: shader compile cost is unoptimized until the
   pipeline stage lands; no performance claims are made.
+
+## Display-path contract (device fix, 26.3 "Could not get EGL display")
+
+Reference findings (behavior only, no code copied):
+- LTW interposes context create/destroy/current + GL only; display, init,
+  configs, surfaces and swap stay on the host EGL, and its renderer declares
+  no EGL override so SDL and the bridge resolve system EGL directly.
+- MobileGlues opens backend libs RTLD_LOCAL and funnels every call through its
+  own resolved table with logged refusals and a repaired ANGLE split.
+- Oxide's bridge resolves POJAVEXEC_EGL for its own display handling; with no
+  EGL override from Silica it uses system EGL end to end.
+
+Silica implements exactly that contract in its own code:
+- getRendererEGL() is null: no second display path can return NO_DISPLAY.
+- libsilica.so exports context lifecycle + eglGetProcAddress + GL only;
+  eglGetDisplay/eglInitialize/eglChooseConfig/surfaces/swap are NOT exported
+  (build fails if they appear), so all callers transparently use the host.
+- Backend open is RTLD_LAZY|RTLD_LOCAL with host-proc-first resolution and a
+  logged ANGLE-split repair; every open/resolution logs path, flags, outcome.
+- Probe cache fills from wrapped makeCurrent AND from any live backend answer
+  observed by the null-safe glGetString wrapper.
