@@ -161,7 +161,7 @@ bool translate_desktop(const std::string& src, EShLanguage stage, int srcVer,
     shader.setEnvInput(glslang::EShSourceGlsl, stage, glslang::EShClientVulkan, 100);
     shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_0);
     shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
-    const TBuiltInResource* res = glslang::GetDefaultResources();
+    const TBuiltInResource* res = GetDefaultResources(); // global at this pin
     if (!shader.parse(res, 100, false, EShMsgDefault)) {
         error = first_line(shader.getInfoLog());
         if (error.empty()) error = "glslang parse failed";
