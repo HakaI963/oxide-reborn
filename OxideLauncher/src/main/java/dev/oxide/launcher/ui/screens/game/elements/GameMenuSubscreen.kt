@@ -61,6 +61,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.R
+import dev.oxide.launcher.game.renderer.Renderers
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
 import dev.oxide.launcher.game.sdl.SdlBridge
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.enums.FpsDisplayMode
@@ -395,6 +397,32 @@ private fun LazyListScope.gameSection(
             permitted = customResolutionRange(windowHeight),
             onCommit = onRefreshWindowSize,
         )
+    }
+    silicaGameSection()
+}
+
+/**
+ * In-game Silica panel: ONLY when Silica is the active renderer.
+ *
+ * Phase 1 honesty: Silica config (mode/cache/upscale) is read at context init,
+ * so every Silica-specific row here is restart-required and shown read-only with
+ * an explicit restart note. Live-applied rows are limited to what is proven
+ * safe mid-game (global resolution scale above, via onRefreshWindowSize).
+ * Frame generation and frame pacing are NOT offered as toggles: no measured
+ * backend exists in phase 1, and a toggle without a backend would be fake.
+ */
+private fun LazyListScope.silicaGameSection() {
+    if (!Renderers.isCurrentRendererValid()) return
+    if (Renderers.getCurrentRenderer() !== SilicaRenderer) return
+    group(R.string.oxide_set_section_graphics)
+    item(key = "silicaActive") {
+        GameMenuNoteRow("Silica active: mode=" + AllSettings.silicaPerformanceMode.state +
+            ", cache=" + AllSettings.silicaShaderCacheMb.state + "MB" +
+            ", upscale=" + (if (AllSettings.silicaUpscale.state) "on" else "off") +
+            ". Silica changes require restart (read at context init).")
+    }
+    item(key = "silicaFrameGen") {
+        GameMenuNoteRow("Frame generation: not available in phase 1 (no measured-positive backend).")
     }
 }
 
