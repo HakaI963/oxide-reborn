@@ -41,7 +41,10 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     src/egl/exports.cpp
     src/gl/exports.cpp
 )
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include)
+# Pinned third-party roots for direct header use (FetchContent targets
+# also propagate their own include dirs; both are harmless together and this
+# survives either layout. No version changes.)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include ${glslang_SOURCE_DIR} ${spirv_cross_SOURCE_DIR})
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glslang::glslang spirv-cross-c)
 if (NOT MSVC)
     target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -Wl,-Bsymbolic-functions)
