@@ -94,7 +94,7 @@ jobs:
             else
               echo "OK: $gone served by host"
             fi
-          fi
+          done
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
