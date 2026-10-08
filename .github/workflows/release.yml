@@ -174,6 +174,24 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleRelease -Darch=${{ matrix.arch }} ${OAUTH_REQUIRE_FLAG:-}
 
+      # Per-ABI integrity gates. Any failure here stops the APK before it can
+      # reach an artifact or a release (same defect class as the 1.13.0 debug
+      # "invalid stored block lengths" report).
+      - name: Validate release APK (${{ matrix.arch }})
+        run: |
+          set -euo pipefail
+          APK="$(ls OxideLauncher/build/outputs/apk/release/*.apk | head -1)"
+          test -s "$APK"
+          echo "APK=$APK"
+          ls -lh "$APK"
+          sha256sum "$APK" | tee "$APK.sha256"
+          unzip -t "$APK"
+          unzip -l "$APK" | tail -2
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          BT="$(ls -d "$SDK_ROOT"/build-tools/* 2>/dev/null | sort -V | tail -1)"
+          "$BT/zipalign" -c 4 "$APK"
+          "$BT/apksigner" verify --verbose "$APK"
+          echo "release APK integrity gates passed for ${{ matrix.arch }}"
       - name: Upload release APK (${{ matrix.arch }})
         uses: actions/upload-artifact@v7
         with:
