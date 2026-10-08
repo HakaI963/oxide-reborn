@@ -1,86 +1,85 @@
-# SILICA — Oxide-integrated OpenGL renderer (phase 1, 1.13.0)
+# SILICA — Oxide-integrated OpenGL renderer (independent backend, under construction)
 
-Silica is NOT Copper Oxide renamed. Copper Oxide / MobileGlues source was used
-ONLY as a reference for how Minecraft LWJGL/OpenGL calls, EGL, shaders,
-framebuffers, textures, programs, uniforms and driver interaction work.
+CORRECTION (2026-10-08): the earlier 1.13.0 phase-1 drove libcopperoxide.so from
+Silica. That architecture (Minecraft -> Silica -> Copper Oxide -> MobileGlues) is
+FORBIDDEN and has been removed. Silica loads ONLY libsilica.so built from
+OxideLauncher/src/main/cpp/silica/. Selecting Silica before the backend renders
+fails loudly in the launch log; it never falls back to another renderer.
+Copper Oxide stays the default until libsilica.so actually runs Minecraft.
 
-## Upstream fix ported FIRST (required behavior, not optional)
+## Why 5974f49 fixes the 26.2-dev / 26.3 black screen (analysis, not a copy)
 
-Source: MobileGlues-plugin 5974f49 -> MobileGlues c07ae39..fcdf914 + 8bcf28a.
+Upstream: MobileGlues-plugin 5974f49 pulls MobileGlues c07ae39..fcdf914 (+8bcf28a).
 
-Dev-build black screen on Minecraft 26.2 (26.3 depends on the same dev fixes):
-a host whose context was made current through another EGL made GL calls with
-nothing current; the backend answered null GL_RENDERER and the library crashed
-in strlen(nullptr), compounded by silent EGL failures and half-ANGLE loads
-(GLES from ANGLE + EGL from system driver or vice versa).
+Root causes fixed:
+1. NULL GL_RENDERER crash: with no context current on the calling thread,
+   backend glGetString returns null; constructing std::string from null is
+   strlen(nullptr) -> SIGSEGV inside the library's glGetString. A host whose
+   context was made current through a different EGL than the layer drives hits
+   this on its very first query (GL_RENDERER), dying with nothing in the log.
+   Fix: keep probe-time copies (driver facts, not per-context facts) and answer
+   from them with an explicit log line.
+2. Silent EGL failures: hosts that retry attributes or continue without a
+   context left no record of the refused create/bind/makeCurrent. Fix: LOG every
+   refusal path and rearm the backend error (read for the log, re-queue so the
+   app's own eglGetError still observes it).
+3. Half-ANGLE load: GLES from ANGLE + EGL from the system driver (or vice versa)
+   via independent per-library fallback. Contexts are created in one
+   implementation while GL calls go to the other, whose first answer is null
+   GL_RENDERER. Fix: both halves from the same place or neither (drop ANGLE to
+   system/system on split + log).
+4. Apple ARB aliases (8bcf28a): Mach-O has no symbol aliases; guard them out
+   (no-op on Android, keeps Apple builds compiling).
 
-Ported into the native tree Silica drives (OxideLauncher/src/main/cpp/copperoxide/upstream):
-- gl/getter.cpp: probe-time g_probe_renderer/g_probe_version + backend_string()
-  fallback with LOG_E instead of crash; set_es_version caches probe copies and
-  logs null GL_VERSION; getGLESName uses the same fallback.
-- egl/egl.cpp: rearmBackendError() (read backend error for the log line, put it
-  back for the app's eglGetError) + LOG_E on every create/bind/makeCurrent
-  failure path (ES refused, desktop rejected pre-backend, BindAPI failed,
-  desktop backend refused, makeCurrent failed with "no current context" cause).
-- gles/loader.cpp: ANGLE half-load guard (both halves from the same place or
-  neither; on split, drop ANGLE and use system driver for both + log).
-- gl/framebuffer.cpp: Apple ARB-alias guard (no-op on Android).
+Silica equivalent (own code, same contracts): silica:: note_probe/safe_string
+(probe cache + logged fallback, never null), egl::rearm + log_create_failure +
+log_make_current_failure, single-driver consistency check, gl::guarded entry
+(skips + logs with no current context instead of dereferencing null).
+Minecraft 26.3 bring-up (stage 10) proves this path without MobileGlues.
 
-Kotlin mirror: SilicaProbe caches the per-process EGL probe strings and answers
-from them with accounting when live returns null (never crashes on null).
+## Architecture (final)
 
-## Oxide <-> Silica pipeline (new architecture)
+Minecraft/LWJGL -> Oxide integration layer -> Silica native (libsilica.so) ->
+Silica shader compiler/translator -> Android OpenGL ES / Adreno.
 
-Launcher owns: process/game lifecycle, EGL probe, surface/swapchain geometry
-(GameDisplayLayout), launch env + dlopen, config authoring, settings UI.
-Silica owns: renderer identity/env, probe-cache policy, tuning presets,
-per-stage contracts (SilicaPipeline.kt: lifecycle, EGL context, swapchain,
-scheduler, resources, memory/cache, resolution, pacing, framegen, controls).
+Copper Oxide / MobileGlues: REFERENCE ONLY (cpp/copperoxide + ARCH_MAP.md).
+Never linked, never called, never fallen back to from Silica.
 
-Silica stays OpenGL/OpenGL-ES so Iris shaderpacks keep working. No Vulkan-only
-path. Compute is not assumed faster.
+## Native backend stages (status)
 
-## Shader regression analysis (10-13 FPS vs 45-50 FPS with BSL, hypothesis)
+1. Reference map: DONE (cpp/silica/ARCH_MAP.md).
+2. Independent interfaces: DONE (include/silica/*.h + Kotlin SilicaPipeline).
+3. EGL/context + GL entry: SKELETON DONE, full loader wiring next.
+4. Capability detection: skeleton (probe cache), Adreno tuning with measurement.
+5. Shader pipeline: glslang + SPIRV-Cross linked; full GLSL->SPIR-V->GLES path
+   with vanilla bring-up.
+6. Program cache: design + budget done, file store with bring-up.
+7-8. Buffers/textures/framebuffers/uniforms/state/draw/sync/swap: state-dedup
+   started; rest staged with Iris as the compatibility target (no Vulkan).
+9. 5974f49 behavior: implemented in own code (above), proven at stage 10.
+10-13. Vanilla -> Iris -> BSL profiling -> optimize measured bottlenecks only.
+14. Only then: remove old backend (with the license-preserving checklist).
 
-Upstream "unsupported launcher" clamp forced angle off + compute ext off +
-shader cache off (maxGlslCacheSize=0) for any launcher without a recognized
-flag/dir. Oxide hit that clamp without the private-dir switch, so every shader
-recompiled every launch with no binary cache, plus full-res fullscreen passes
-and redundant state changes. Silica ALWAYS sets its data dir (custom dir alone
-bypasses the clamp) and enables the GLSL cache by default — measured
-improvement expected, but NO FPS CLAIMED without on-device measurement.
-Plan: frame-time variance + sustained FPS with BSL @1080p on Adreno, cache
-hit rate, compile count, bandwidth (fullscreen passes, texture/format).
+## Shader-performance hypothesis (NOT a claim)
 
-Rendering-path redesign targets (measured, in order): program binary cache,
-permutation dedup, uniform/descriptor caching, redundant state elimination,
-framebuffer/render-target reuse, render-pass merging, resolution scaling.
-Libraries only if they give measured architectural advantage (none added in
-phase 1).
+BSL 45-50 FPS (old 26.2) vs 10-13 FPS (current Copper Oxide): the prime suspect
+is the unsupported-launcher clamp forcing cache off (recompile every launch) +
+full-res passes + redundant state, NOT a single compile flag. Silica attacks it
+structurally: program binary cache, variant dedup, state dedup, target reuse,
+resolution scaling. Every optimization ships only with before/after frame-time
+data on-device. No FPS numbers are claimed in code, docs, or UI.
 
-## Upscaling / frame generation (phase 1 honesty)
+## Frame generation / upscaling (researched, gated)
 
-- Upscaling: render-scale reduction + FSR spatial upscale (real FSR1 backend
-  key). Off by default; on PERFORMANCE or when user opts in. Must reduce total
-  cost or stay off.
-- Frame generation: NOT exposed in phase 1 UI. No Adreno/GL backend here offers
-  measured-positive motion-estimation synthesis; a toggle without a backend
-  would be fake. Investigation (motion vectors, depth reprojection, async
-  synthesis, pacing) continues; it ships only when measured-positive,
-  capability-driven and optional.
+Shipped only when measured-positive, capability-driven, optional. Phase state:
+upscaling = render-scale + spatial upscale behind explicit opt-in (off by
+default); frame generation = no backend, no toggle (a checkbox without a
+backend would be fake). Adreno motion-estimation/synthesis is evaluated for
+legality + net frame-time before any implementation.
 
-## Runtime controls
+## Verification before any removal (blocking)
 
-Settings -> Renderer -> Silica (new section, phase 1): performance mode,
-shader cache MB, spatial upscale. All restart-required (config read at context
-init) and labeled as such. In-game panel appears ONLY when Silica is selected;
-phase 1 shows restart-required state + cache stats; live-apply arrives with
-stages that prove safe.
-
-## Cleanup contract (NOT done in 1.13.0)
-
-Copper Oxide impl, MobileGlues source, copperoxide.yml, settings, jniLibs
-binaries, branding and LGPL notices STAY until Silica native is actually
-independent. Removing a license notice while derived code remains is forbidden.
-Pre-APK checklist (for that future removal, not now): no mobileglues/copperoxide
-source, no old .so, no old loader path, Silica packaged/loaded on all ABIs.
+- libsilica.so: no mobileglues/copperoxide/mg_context symbols (silica.yml
+  enforces), APK contains libsilica.so and Silica loads exactly it (linker +
+  loader-path + runtime checks), no MG_* env from Silica, no copperoxide
+  imports in silica sources. LGPL notices stay until zero derived code remains.
