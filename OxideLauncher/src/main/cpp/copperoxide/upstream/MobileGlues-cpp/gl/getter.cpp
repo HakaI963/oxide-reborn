@@ -282,8 +282,23 @@ std::string getBeforeThirdSpace(const std::string& str) {
     return str.substr(0, endPos);
 }
 
+// Ported from upstream fcdf914 (MobileGlues 26.2 dev black-screen fix):
+// glGetString returns null when no context is current on the calling thread,
+// and constructing std::string from null is strlen(nullptr) -> SIGSEGV.
+// Keep probe-time copies (properties of the driver, not of one context) and
+// answer from them with a log line instead of crashing.
+static std::string g_probe_renderer;
+static std::string g_probe_version;
+
+static std::string backend_string(GLenum name, const std::string& probe_copy, const char* what) {
+    const GLubyte* live = GLES.glGetString ? GLES.glGetString(name) : nullptr;
+    if (live) return reinterpret_cast<const char*>(live);
+    LOG_E("glGetString(%s): the backend returned null, so no context is current on this thread for the GLES library this layer loaded; answering from the bootstrap probe", what)
+    return probe_copy;
+}
+
 std::string getGpuName() {
-    std::string gpuName = std::string((char*)GLES.glGetString(GL_RENDERER));
+    std::string gpuName = backend_string(GL_RENDERER, g_probe_renderer, "GL_RENDERER");
 
     if (gpuName.empty()) {
         return "<unknown>";
@@ -321,7 +336,15 @@ std::string getGpuName() {
 }
 
 void set_es_version() {
-    std::string ESVersionStr = getBeforeThirdSpace(std::string((const char*)GLES.glGetString(GL_VERSION)));
+    // Under the bootstrap probe context. A failed probe leaves both null,
+    // which used to crash at library load instead of logging (upstream fcdf914).
+    const GLubyte* renderer = GLES.glGetString ? GLES.glGetString(GL_RENDERER) : nullptr;
+    const GLubyte* version = GLES.glGetString ? GLES.glGetString(GL_VERSION) : nullptr;
+    g_probe_renderer = renderer ? reinterpret_cast<const char*>(renderer) : "";
+    g_probe_version = version ? reinterpret_cast<const char*>(version) : "";
+    if (!version)
+        LOG_E("set_es_version: the backend answered GL_VERSION with null; the bootstrap context is not current")
+    std::string ESVersionStr = getBeforeThirdSpace(g_probe_version);
     int major, minor;
 
     if (sscanf(ESVersionStr.c_str(), "OpenGL ES %d.%d", &major, &minor) == 2) {
@@ -336,7 +359,7 @@ void set_es_version() {
 }
 
 std::string getGLESName() {
-    return getBeforeThirdSpace(std::string((char*)GLES.glGetString(GL_VERSION)));
+    return getBeforeThirdSpace(backend_string(GL_VERSION, g_probe_version, "GL_VERSION"));
 }
 
 static std::string rendererString;
