@@ -51,9 +51,13 @@ Never linked, never called, never fallen back to from Silica.
 2. Independent interfaces: DONE (include/silica/*.h + Kotlin SilicaPipeline).
 3. EGL/context + GL entry: SKELETON DONE, full loader wiring next.
 4. Capability detection: skeleton (probe cache), Adreno tuning with measurement.
-5. Shader pipeline: glslang + SPIRV-Cross linked; full GLSL->SPIR-V->GLES path
-   with vanilla bring-up.
-6. Program cache: design + budget done, file store with bring-up.
+5. Shader pipeline: LIVE (own design, pinned libs, no version changes).
+   Desktop GLSL -> version/profile detect -> glslang parse+link -> SPIR-V ->
+   SPIRV-Cross ESSL 310 (highp fragment precision) -> backend submit+compile.
+   ESSL passes through; other stages forward untranslated and say so.
+   Translation cached in memory by deterministic key; programs consult the
+   persistent vault before linking and store fresh binaries after.
+6. Program cache: LIVE (deterministic keys, budget eviction, thread-safe).
 7-8. Buffers/textures/framebuffers/uniforms/state/draw/sync/swap: state-dedup
    started; rest staged with Iris as the compatibility target (no Vulkan).
 9. 5974f49 behavior: implemented in own code (above), proven at stage 10.
@@ -135,8 +139,9 @@ flush/finish.
 
 ## Still missing for Iris/BSL
 
-- Full shader translation path (glslang->SPIR-V->Cross wired into compile;
-  libraries linked, path staged) and program-binary file store.
+- Shader stages beyond vertex/fragment (geometry, tessellation, compute)
+  are forwarded untranslated; sampler objects, buffer mapping, instanced and
+  multi-draw entry points, and fence sync remain on the export long tail.
 - Wrapped coverage of the eglGetProcAddress long tail (blend equations,
   stencil ops, multisample renderbuffers, buffer mapping, fence sync,
   instanced/multi-draw, sampler objects, 3D textures, occlusion queries).
