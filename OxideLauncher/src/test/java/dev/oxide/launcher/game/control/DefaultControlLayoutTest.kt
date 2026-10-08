@@ -111,7 +111,7 @@ private fun locate(relativePath: String): File {
  */
 class DefaultControlLayoutTest {
 
-    private val assetText = locate("assets/default_layout.json").readText()
+    private val assetText = locate("assets/emulated/new.json").readText()
     private val asset = Json.parseToJsonElement(assetText).jsonObject
 
     // ---- 能被真正加载 -----------------------------------------------------

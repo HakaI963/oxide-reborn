@@ -122,7 +122,7 @@ class ControlLayoutExportTest {
     val folder = TemporaryFolder()
 
     /** 随包分发的默认布局：字段最全，最能说明序列化是稳定的 */
-    private val assetText = locate("assets/default_layout.json").readText()
+    private val assetText = locate("assets/emulated/new.json").readText()
 
     /** 内置兜底布局，同样要能被导出与再导入 */
     private val fallbackText = EMBEDDED_FALLBACK_CONTROL_LAYOUT
@@ -412,7 +412,7 @@ class ControlLayoutExportTest {
         )
         assertTrue(
             "the bundled asset path must stay declared",
-            managerRaw.contains("DEFAULT_LAYOUT_ASSET = \"default_layout.json\"")
+            managerRaw.contains("DEFAULT_LAYOUT_ASSET = \"emulated/new.json\"")
         )
         assertTrue(
             "the fallback layout must still load through the real schema",
