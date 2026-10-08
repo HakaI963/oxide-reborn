@@ -174,6 +174,24 @@ object AllSettings : SettingsRegistry() {
      */
     val copperOxideExtDsa = boolSetting("copperOxideExtDsa", true)
 
+    /**
+     * Silica performance mode: AUTO (default), BALANCED, PERFORMANCE, QUALITY.
+     * Every mode maps to real backend config keys only. Restart required
+     * (config is read at context init).
+     */
+    val silicaPerformanceMode = stringSetting("silicaPerformanceMode", "AUTO")
+
+    /**
+     * Silica shader cache size, MB, 0 disables. Restart required.
+     */
+    val silicaShaderCacheMb = intSetting("silicaShaderCacheMb", 64, 0..512)
+
+    /**
+     * Silica spatial upscale (render below native + FSR). Off by default so it
+     * never increases cost unless the user opts in. Restart required.
+     */
+    val silicaUpscale = boolSetting("silicaUpscale", false)
+
     //Game
     /**
      * 版本隔离
