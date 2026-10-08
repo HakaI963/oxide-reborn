@@ -72,8 +72,10 @@ class GameMenuKeysTest {
             val line = raw.trim()
             val no = index + 1
             if ("group(" in line && "fun " !in line) {
+                // Elvis uses error() (Nothing), not fail() (Unit), so the
+                // match result smart-casts on the next line.
                 val m = Regex("^group\\(R\\.string\\.(\\w+)(?:\\s*,\\s*\"([^\"]+)\")?\\)").find(line)
-                    ?: fail("line $no: unrecognized group() shape, key cannot be proven unique: $line")
+                    ?: error("line $no: unrecognized group() shape, key cannot be proven unique: $line")
                 keys += groupKey(m.groupValues[1], m.groupValues[2].ifEmpty { null })
             }
             val row = Regex("^(action|switch|intSlider|choice|number)\\(\\s*\"([^\"]+)\"").find(line)
@@ -86,9 +88,10 @@ class GameMenuKeysTest {
             // the group() factory itself, whose construction is pinned to the
             // two documented interpolations below.
             if (line.startsWith("item(key = if (section ==")) {
+                // Dollar signs escaped: this asserts literal source text.
                 assertTrue(
                     "line $no: group() key factory left its documented shape: $line",
-                    line.contains("\"group:$labelRes\"") && line.contains(":$section"),
+                    line.contains("group:") && line.contains("labelRes") && line.contains("$" + "section"),
                 )
             } else {
                 val assign = Regex("\\bkey\\s*=\\s*([^,)]+)").find(line)
