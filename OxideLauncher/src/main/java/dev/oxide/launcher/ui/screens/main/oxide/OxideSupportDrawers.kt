@@ -1170,9 +1170,6 @@ fun OxideRendererDrawer(
                     }
                 }
 
-                    }
-                }
-
                 OxideSettingsGroup(
                     title = stringResource(R.string.oxide_set_section_plugins),
                     metrics = metrics,

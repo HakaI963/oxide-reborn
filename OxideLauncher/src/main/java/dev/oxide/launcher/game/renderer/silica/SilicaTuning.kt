@@ -1,22 +1,18 @@
 package dev.oxide.launcher.game.renderer.silica
 
 /**
- * Silica performance modes. Every mode maps to fields of Silica's own silica.json
- * schema (glsl_cache_mb, upscale, angle, no_error, ext_*) that libsilica.so
- * reads at init. No placebo toggles.
+ * Silica performance profiles. Every mode maps to fields of Silica's own
+ * silica.json schema (profile/program_vault_mb/state_coalescing/diagnostics)
+ * that libsilica.so reads at init. No placebo toggles.
  *
- * - AUTO (default): probe GPU; Adreno -> Balanced, otherwise Balanced.
- *   Sustained frame-time stability is the goal, not peak FPS.
- * - BALANCED: cache on (64MB), spatial upscale off, extensions on.
- * - PERFORMANCE: cache on (64MB), spatial upscale on, for
- *   shader-heavy scenes where render-res reduction actually saves bandwidth.
- * - QUALITY: cache on (128MB), upscale off, full resolution.
+ * - AUTO (default): starts balanced until per-GPU measurements exist.
+ * - BALANCED: user vault budget, coalescing and diagnostics as set.
+ * - PERFORMANCE: same knobs; the profile name lets the backend prefer
+ *   submission-trimming paths once they land (no effect invented today).
+ * - QUALITY: vault floor of 64MB so program reuse stays on.
  *
- * Upscaling here is render-resolution reduction + spatial upscale, which reduces
- * total cost. It never increases default cost (default is off).
- * Frame generation is NOT exposed as a toggle in phase 1: no Adreno/GL backend
- * in this tree offers measured-positive motion-estimation synthesis, and a toggle
- * without a backend would be fake. See SILICA.md investigation notes.
+ * Upscaling and frame generation are NOT options here: no measured backend
+ * exists, and a toggle without one would be fake. See SILICA.md.
  */
 enum class SilicaPerformanceMode { AUTO, BALANCED, PERFORMANCE, QUALITY }
 
@@ -36,4 +32,15 @@ object SilicaTuning {
         }
     }
 
-
+    /**
+     * Own silica.json schema for libsilica.so. NOT any other backend's config
+     * schema: sharing one would couple Silica to that backend. Restart
+     * required (read at context init).
+     */
+    fun toConfigJson(profile: SilicaPerformanceMode, r: Resolved): String =
+        "{\"silica_version\":1" +
+            ",\"profile\":\"" + profile.name + "\"" +
+            ",\"program_vault_mb\":" + r.vaultMb +
+            ",\"state_coalescing\":" + (if (r.coalescing) 1 else 0) +
+            ",\"diagnostics\":" + (if (r.diagnostics) 1 else 0) + "}"
+}

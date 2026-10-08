@@ -137,22 +137,70 @@ SG_FWD_V0(glFlush)
 SG_FWD_V1E(glDepthFunc)
 SG_FWD_V1E(glCullFace)
 SG_FWD_V1E(glFrontFace)
-SG_FWD_V1U(glDepthMask)
+S_API void glDepthMask(GLboolean v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLboolean)>(__func__);
+    if (f) f(v);
+}
 SG_FWD_V1U(glDeleteProgram)
 SG_FWD_V1U(glDeleteShader)
-SG_FWD_V1U(glClearStencil)
+S_API void glClearStencil(GLint v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLint)>(__func__);
+    if (f) f(v);
+}
 SG_FWD_V2EU(glAttachShader)
 SG_FWD_V2EU(glDetachShader)
-SG_FWD_V2UU(glDeleteVertexArrays)
-SG_FWD_GENDEL(glGenTextures)
-SG_FWD_GENDEL(glDeleteTextures)
-SG_FWD_GENDEL(glGenBuffers)
-SG_FWD_GENDEL(glDeleteBuffers)
-SG_FWD_GENDEL(glGenFramebuffers)
-SG_FWD_GENDEL(glDeleteFramebuffers)
-SG_FWD_GENDEL(glGenRenderbuffers)
-SG_FWD_GENDEL(glDeleteRenderbuffers)
-SG_FWD_GENDEL(glGenVertexArrays)
+S_API void glDeleteVertexArrays(GLsizei n, const GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, const GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glGenTextures(GLsizei n, GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glDeleteTextures(GLsizei n, const GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, const GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glGenBuffers(GLsizei n, GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glDeleteBuffers(GLsizei n, const GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, const GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glGenFramebuffers(GLsizei n, GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glDeleteFramebuffers(GLsizei n, const GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, const GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glGenRenderbuffers(GLsizei n, GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glDeleteRenderbuffers(GLsizei n, const GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, const GLuint*)>(__func__);
+    if (f) f(n, v);
+}
+S_API void glGenVertexArrays(GLsizei n, GLuint* v) {
+    SG_INIT();
+    auto f = bg<void (*)(GLsizei, GLuint*)>(__func__);
+    if (f) f(n, v);
+}
 SG_FWD_RU0(glCreateProgram)
 S_API GLuint glCreateShader(GLenum t) {
     SG_INIT();
@@ -306,13 +354,13 @@ S_API void glTexParameterf(GLenum t, GLenum p, GLfloat v) {
 }
 S_API void glTexImage2D(GLenum t, GLint l, GLint in, GLsizei w, GLsizei h, GLint b, GLenum f, GLenum ty, const void* p) {
     SG_INIT();
-    auto f = bg<void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*)>("glTexImage2D");
-    if (f) f(t, l, in, w, h, b, f, ty, p);
+    auto fn = bg<void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*)>("glTexImage2D");
+    if (fn) fn(t, l, in, w, h, b, f, ty, p);
 }
 S_API void glTexSubImage2D(GLenum t, GLint l, GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum ty, const void* p) {
     SG_INIT();
-    auto ff = bg<void (*)(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, const void*)>("glTexSubImage2D");
-    if (ff) ff(t, l, x, y, w, h, f, ty, p);
+    auto fn = bg<void (*)(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, const void*)>("glTexSubImage2D");
+    if (fn) fn(t, l, x, y, w, h, f, ty, p);
 }
 S_API void glCompressedTexImage2D(GLenum t, GLint l, GLenum in, GLsizei w, GLsizei h, GLint b, GLsizei n, const void* p) {
     SG_INIT();
@@ -344,20 +392,20 @@ S_API void glRenderbufferStorage(GLenum t, GLenum in, GLsizei w, GLsizei h) {
     auto f = bg<void (*)(GLenum, GLenum, GLsizei, GLsizei)>("glRenderbufferStorage");
     if (f) f(t, in, w, h);
 }
-S_API void glBufferData(GLenum t, long long s, const void* d, GLenum u) {
+S_API void glBufferData(GLenum t, GLsizeiptr s, const void* d, GLenum u) {
     SG_INIT();
-    auto f = bg<void (*)(GLenum, long long, const void*, GLenum)>("glBufferData");
+    auto f = bg<void (*)(GLenum, GLsizeiptr, const void*, GLenum)>(__func__);
     if (f) f(t, s, d, u);
 }
-S_API void glBufferSubData(GLenum t, long long o, long long s, const void* d) {
+S_API void glBufferSubData(GLenum t, GLintptr o, GLsizeiptr s, const void* d) {
     SG_INIT();
-    auto f = bg<void (*)(GLenum, long long, const void*)>("glBufferSubData");
+    auto f = bg<void (*)(GLenum, GLintptr, GLsizeiptr, const void*)>(__func__);
     if (f) f(t, o, s, d);
 }
 S_API void glReadPixels(GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum t, void* p) {
     SG_INIT();
-    auto ff = bg<void (*)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*)>("glReadPixels");
-    if (ff) ff(x, y, w, h, f, t, p);
+    auto fn = bg<void (*)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*)>("glReadPixels");
+    if (fn) fn(x, y, w, h, f, t, p);
 }
 S_API void glScissor(GLint x, GLint y, GLsizei w, GLsizei h) {
     SG_INIT();
