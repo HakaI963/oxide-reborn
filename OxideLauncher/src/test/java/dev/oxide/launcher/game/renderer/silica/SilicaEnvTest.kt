@@ -27,9 +27,10 @@ class SilicaEnvTest {
     @Test
     fun identityPointsAtOwnLibraryOnly() {
         assertEquals("libsilica.so", SilicaIdentity.NATIVE_LIBRARY)
-        assertEquals("libsilica.so", SilicaIdentity.EGL_LIBRARY)
+        assertEquals(null, dev.oxide.launcher.game.renderer.renderers.SilicaRenderer.getRendererEGL())
         assertTrue(!SilicaIdentity.NATIVE_LIBRARY.contains("copper"))
         assertTrue(!SilicaIdentity.NATIVE_LIBRARY.contains("mobileglues"))
+        assertTrue(!SilicaIdentity.NATIVE_LIBRARY.contains("ltw"))
     }
 
     @Test

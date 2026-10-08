@@ -36,9 +36,10 @@ bool looks_angle(const char* p) {
 void* try_open(const char* name) {
     // LAZY like the working loader: NOW can refuse the open outright in a
     // constrained namespace even when every needed symbol would resolve.
+    // (Log priority is branched: it must be a compile-time constant.)
     void* h = dlopen(name, RTLD_LAZY | RTLD_LOCAL);
-    SLOG(h ? DEBUG : ERROR, "silica: dlopen(%s, LAZY|LOCAL) -> %p%s%s",
-         name ? name : "(null)", h, h ? "" : ": ", h ? "" : dlerror());
+    if (h) SLOG(DEBUG, "silica: dlopen(%s, LAZY|LOCAL) -> %p", name ? name : "(null)", h);
+    else SLOG(ERROR, "silica: dlopen(%s, LAZY|LOCAL) -> (null): %s", name ? name : "(null)", dlerror());
     return h;
 }
 typedef void (*proc_t)(void);
@@ -79,7 +80,8 @@ void init_once() {
     g_angle = egl_a && gles_a;
     if (g_egl) {
         g_host_proc = dlsym(g_egl, "eglGetProcAddress");
-        SLOG(g_host_proc ? DEBUG : ERROR, "silica: host eglGetProcAddress -> %p", g_host_proc);
+        if (g_host_proc) SLOG(DEBUG, "silica: host eglGetProcAddress -> %p", g_host_proc);
+        else SLOG(ERROR, "silica: host eglGetProcAddress missing: %s", dlerror());
     }
     char buf[256];
     snprintf(buf, sizeof(buf), "egl=%s gles=%s angle=%d hostproc=%d",
