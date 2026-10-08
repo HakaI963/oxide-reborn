@@ -32,8 +32,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -fvisibility=hidden -O3")
 add_compile_definitions(SILICA_BUILD=1)
 add_library(${CMAKE_PROJECT_NAME} SHARED
     src/silica.cpp
-    src/egl/context.cpp
-    src/gl/entry.cpp
     src/gl/state.cpp
     src/shader/pipeline.cpp
     src/cache/program_cache.cpp
