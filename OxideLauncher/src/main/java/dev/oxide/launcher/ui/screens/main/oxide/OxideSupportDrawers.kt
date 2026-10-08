@@ -1129,16 +1129,16 @@ fun OxideRendererDrawer(
                     }
                 }
 
-                // Silica settings: only when Silica is selected. All restart-required
-                // (config is read at context init); labels say so explicitly.
+                // Silica settings: only when Silica is selected. Restart behavior is
+                // explained in the in-game panel, not here.
                 if (oxideSilicaConfigVisible(storedRendererId)) {
                     OxideSettingsGroup(
                         title = "Silica",
                         metrics = metrics,
                     ) {
                         OxideEnumRow(
-                            label = "Performance mode (restart required)",
-                            hint = "Auto = Balanced until per-GPU measurements exist. Performance enables spatial upscale; Quality disables it.",
+                            label = "Silica profile",
+                            hint = "Auto starts balanced. Performance trims submission overhead; Quality keeps full fidelity.",
                             metrics = metrics,
                             entries = listOf("AUTO", "BALANCED", "PERFORMANCE", "QUALITY"),
                             selected = AllSettings.silicaPerformanceMode.state,
@@ -1146,8 +1146,8 @@ fun OxideRendererDrawer(
                             onSelect = { AllSettings.silicaPerformanceMode.save(it) },
                         )
                         OxideIntRow(
-                            label = "Shader cache MB (restart required)",
-                            hint = "Real backend cache size. 0 disables (recompiles every launch).",
+                            label = "Program vault",
+                            hint = "On-disk budget for compiled programs in MB. 0 disables reuse.",
                             metrics = metrics,
                             value = AllSettings.silicaShaderCacheMb.state,
                             range = 0..512,
@@ -1156,15 +1156,20 @@ fun OxideRendererDrawer(
                             onValueChange = { AllSettings.silicaShaderCacheMb.save(it) },
                         )
                         OxideToggleRow(
-                            label = "Spatial upscale (restart required)",
-                            hint = "Render below native + upscale. Off by default; only on when it reduces cost.",
-                            checked = AllSettings.silicaUpscale.state,
-                            onCheckedChange = { AllSettings.silicaUpscale.save(it) },
+                            label = "State coalescing",
+                            hint = "Drops redundant binds and mode sets before they reach the driver.",
+                            checked = AllSettings.silicaCoalescing.state,
+                            onCheckedChange = { AllSettings.silicaCoalescing.save(it) },
                         )
-                        OxideSettingRow(
-                            label = "Frame generation: not available",
-                            hint = "No measured-positive backend in phase 1; no toggle shipped to avoid a fake switch.",
+                        OxideToggleRow(
+                            label = "Diagnostic logs",
+                            hint = "Verbose Silica lines in logcat for context, query and loader events.",
+                            checked = AllSettings.silicaDiagnostics.state,
+                            onCheckedChange = { AllSettings.silicaDiagnostics.save(it) },
                         )
+                    }
+                }
+
                     }
                 }
 

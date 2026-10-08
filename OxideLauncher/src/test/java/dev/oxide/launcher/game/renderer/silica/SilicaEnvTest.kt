@@ -33,11 +33,12 @@ class SilicaEnvTest {
     }
 
     @Test
-    fun tuningWritesOwnSchema() {
-        val r = SilicaTuning.resolve(SilicaPerformanceMode.PERFORMANCE, 64, false)
-        val json = SilicaTuning.toConfigJson(r)
+    fun tuningWritesOwnSchema() { // + no upscale key without a backend
+        val r = SilicaTuning.resolve(SilicaPerformanceMode.PERFORMANCE, 64, true, false)
+        val json = SilicaTuning.toConfigJson(SilicaPerformanceMode.PERFORMANCE, r)
         assertTrue(json.contains("silica_version"))
-        assertTrue(json.contains("glsl_cache_mb"))
+        assertTrue(json.contains("program_vault_mb"))
+        assertTrue(json.contains("state_coalescing"))
         assertTrue(!json.contains("maxGlslCacheSize"))
         assertTrue(!json.contains("fsr1Setting"))
     }

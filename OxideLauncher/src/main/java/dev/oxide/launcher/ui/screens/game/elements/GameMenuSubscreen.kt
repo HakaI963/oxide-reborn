@@ -416,13 +416,13 @@ private fun LazyListScope.silicaGameSection() {
     if (Renderers.getCurrentRenderer() !== SilicaRenderer) return
     group(R.string.oxide_set_section_graphics)
     item(key = "silicaActive") {
-        GameMenuNoteRow("Silica active: mode=" + AllSettings.silicaPerformanceMode.state +
-            ", cache=" + AllSettings.silicaShaderCacheMb.state + "MB" +
-            ", upscale=" + (if (AllSettings.silicaUpscale.state) "on" else "off") +
-            ". Silica changes require restart (read at context init).")
+        GameMenuNoteRow("Silica active: profile=" + AllSettings.silicaPerformanceMode.state +
+            ", vault=" + AllSettings.silicaShaderCacheMb.state + "MB" +
+            ", coalescing=" + (if (AllSettings.silicaCoalescing.state) "on" else "off") +
+            ". Silica changes need a restart (read at context start).")
     }
-    item(key = "silicaFrameGen") {
-        GameMenuNoteRow("Frame generation: not available in phase 1 (no measured-positive backend).")
+    item(key = "silicaLimits") {
+        GameMenuNoteRow("Restart needed for: profile, vault, coalescing, diagnostics. Frame generation and upscaling are not offered until measured-positive backends exist.")
     }
 }
 
