@@ -214,6 +214,25 @@ jobs:
           pattern: release-apk-*
           merge-multiple: true
 
+      # The exact files about to be published are re-validated after the
+      # artifact round trip; a transit-corrupted APK never becomes a release.
+      - name: Validate downloaded APKs (all ABIs)
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          BT="$(ls -d "$SDK_ROOT"/build-tools/* 2>/dev/null | sort -V | tail -1)"
+          for APK in ./artifacts/*.apk; do
+            echo "=== $APK ==="
+            ls -lh "$APK"
+            if [ -f "$APK.sha256" ]; then
+              (cd ./artifacts && sha256sum -c "$(basename "$APK").sha256") || { echo "::error::hash mismatch" >&2; exit 1; }
+            fi
+            unzip -t "$APK"
+            "$BT/zipalign" -c 4 "$APK"
+            "$BT/apksigner" verify "$APK"
+          done
+          echo "all release APKs pass integrity gates after download"
+
       - name: List APKs
         run: |
           set -euo pipefail
