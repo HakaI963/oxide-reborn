@@ -74,6 +74,7 @@ import dev.oxide.launcher.bridge.OxideBridgeStates
 import dev.oxide.launcher.game.keycodes.mapToKeycode
 import dev.oxide.launcher.game.launch.MCOptions
 import dev.oxide.launcher.setting.AllSettings
+import dev.oxide.launcher.utils.currentGameDisplayLayout
 import dev.oxide.launcher.utils.rememberGameRenderSize
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -155,15 +156,27 @@ fun BoxScope.MinecraftHotbar(
             val optionsChangeKey by MCOptions.refreshKey.collectAsStateWithLifecycle()
             val windowChangeKey by OxideBridgeStates.windowChangeKey.collectAsStateWithLifecycle()
             val renderSize = rememberGameRenderSize(screenSize)
+            // Dynamic GUI-scale fix: the overlay must match the on-screen MC hotbar,
+            // which lives inside the letterboxed display area, not fullscreen.
+            // gamePx -> displayPx scale comes from the live display layout, so any
+            // GUI scale / resolution rule / custom size is handled without hardcode.
+            val displayLayout = currentGameDisplayLayout(screenSize)
             LaunchedEffect(
                 isGrabbing, optionsChangeKey, screenSize, density,
-                renderSize, windowChangeKey
+                renderSize, windowChangeKey, displayLayout
             ) {
                 val guiScale = getMCGuiScale(renderSize.width, renderSize.height)
-                val slotSize = guiScale * 20
-
+                val slotGamePx = (guiScale * 20).toFloat()
+                val scale = if (renderSize.width > 0) {
+                    displayLayout.displaySize.width / renderSize.width.toFloat()
+                } else 1f
+                // Clamp absurd scales (stale layout during rotation) instead of
+                // publishing a zero-size hitbox that drops every tap.
+                val safeScale = scale.coerceIn(0.2f, 3f)
+                val slotDisplayPx = slotGamePx * safeScale
+                val totalDisplayPx = slotDisplayPx * hotbarList.size
                 with(density) {
-                    hotbarSize = DpSize((slotSize * hotbarList.size).toDp(), slotSize.toDp())
+                    hotbarSize = DpSize(totalDisplayPx.toDp(), slotDisplayPx.toDp())
                 }
             }
         }
@@ -301,7 +314,14 @@ private fun Modifier.mainTouchLogic(
                             }
 
                             val x = change.position.x
+                            val y = change.position.y
+                            if (!isYInsideHotbar(y, hotbarSize, density)) {
+                                // Clearly above/below the bar: let it pass through
+                                // instead of forcing a wrong slot.
+                                return@forEach
+                            }
                             val slotIndex = calculateSlotIndex(x, hotbarSize, slotCount, density)
+                            if (slotIndex < 0) return@forEach
                             //碰到就视为点击，避免后续逻辑临时切物品栏导致游戏状态不同步
                             onClick(slotIndex)
 
@@ -334,8 +354,13 @@ private fun Modifier.mainTouchLogic(
                         //按下、滑动
                         change.pressed && change.previousPressed -> {
                             val state = states[pointerId] ?: return@forEach
-                            //滑动时实时计算并更新当前槽位
-                            state.currentSlotIndex = calculateSlotIndex(change.position.x, hotbarSize, slotCount, density)
+                            //滑动时实时计算并更新当前槽位；滑出容差范围则保持原槽位
+                            if (!isYInsideHotbar(change.position.y, hotbarSize, density)) {
+                                change.consume()
+                                return@forEach
+                            }
+                            val moved = calculateSlotIndex(change.position.x, hotbarSize, slotCount, density)
+                            if (moved >= 0) state.currentSlotIndex = moved
 
                             if (enableLongClick) {
                                 val distance = (change.position - state.initialPosition).getDistance()
@@ -391,7 +416,12 @@ private fun Modifier.mainTouchLogic(
                                     )
                                 }
                             } else {
-                                onClick(finalSlotIndex)
+                                // DOWN already fired the initial slot; only fire
+                                // again when the finger slid to a different slot.
+                                // This stops double-select churn on every plain tap.
+                                if (finalSlotIndex != state.initialSlotIndex) {
+                                    onClick(finalSlotIndex)
+                                }
                             }
 
                             change.consume()
@@ -416,8 +446,27 @@ private fun calculateSlotIndex(
     density: Density
 ): Int {
     val totalWidth = with(density) { hotbarSize.width.toPx() }
+    if (totalWidth <= 0f) return 0
     val slotWidth = totalWidth / slotCount
+    // Dynamic edge tolerance: half a slot, derived from the live overlay width
+    // (which already tracks GUI scale), never a hardcoded px value. Taps just
+    // outside the visual edge still select the edge slot instead of missing.
+    val edgeTol = slotWidth * 0.5f
+    if (x < -edgeTol || x > totalWidth + edgeTol) return -1
     return (x / slotWidth).toInt().coerceIn(0, slotCount - 1)
+}
+
+private fun isYInsideHotbar(
+    y: Float,
+    hotbarSize: DpSize,
+    density: Density
+): Boolean {
+    val h = with(density) { hotbarSize.height.toPx() }
+    if (h <= 0f) return false
+    // Vertical tolerance scales with slot size (== hotbar height in Auto mode),
+    // so small and large GUI scales get proportional forgiveness, not a fixed px.
+    val tol = h * 0.6f
+    return y >= -tol && y <= h + tol
 }
 
 private fun calculateSlotKeycode(
