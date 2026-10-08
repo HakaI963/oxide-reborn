@@ -23,7 +23,7 @@
 #include "glslang/Public/ShaderLang.h"
 #include "glslang/Public/ResourceLimits.h"
 #include "SPIRV/GlslangToSpv.h"
-#include "spirv_cross/spirv_glsl.hpp"
+#include "spirv_glsl.hpp"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
