@@ -77,12 +77,9 @@ S_API void glActiveTexture(GLenum t) {
     auto f = bg<void (*)(GLenum)>("glActiveTexture");
     if (f) f(t);
 }
-// active unit is tracked in state.cpp; this file keeps a mirror for bind calls.
-namespace silica_bind_mirror { extern unsigned current_unit(); }
 S_API void glBindTexture(GLenum target, GLuint id) {
     SG_INIT();
-    extern unsigned silica_current_unit_mirror();
-    if (!silica::state::bind_texture(silica::state::active_unit(0x84C0), target, id)) return;
+    if (!silica::state::bind_texture(silica::state::current_unit(), target, id)) return;
     auto f = bg<void (*)(GLenum, GLuint)>("glBindTexture");
     if (f) f(target, id);
 }
@@ -136,7 +133,6 @@ S_API void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
 #define SG_FWD_V2UU(name) S_API void name(GLuint a, GLuint b){ SG_INIT(); auto f = bg<void(*)(GLuint,GLuint)>(#name); if(f) f(a,b); }
 #define SG_FWD_GENDEL(name) S_API void name(GLsizei n, GLuint* v){ SG_INIT(); auto f = bg<void(*)(GLsizei,GLuint*)>(#name); if(f) f(n,v); }
 #define SG_FWD_RU0(name) S_API GLuint name(void){ SG_INIT(); auto f = bg<GLuint(*)(void)>(#name); return f ? f() : 0; }
-#define SG_FWD_RI1E1U(name) S_API GLint name(GLuint s, GLenum p){ SG_INIT(); auto f = bg<GLint(*)(GLuint,GLenum)>(#name); GLint v=0; if(f) f(s,p,&v); return v; }
 SG_FWD_V0(glFlush)
 SG_FWD_V1E(glDepthFunc)
 SG_FWD_V1E(glCullFace)

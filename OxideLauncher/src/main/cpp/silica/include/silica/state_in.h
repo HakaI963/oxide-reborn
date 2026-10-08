@@ -10,6 +10,7 @@ namespace silica::state {
 void set_dedup(bool on);
 bool use_program(silica_uint_t p);
 bool active_unit(silica_enum_t unit);
+unsigned current_unit();
 bool bind_texture(silica_uint_t unit, silica_enum_t target, silica_uint_t id);
 bool bind_buffer(silica_enum_t target, silica_uint_t id);
 bool bind_framebuffer(silica_enum_t target, silica_uint_t id);

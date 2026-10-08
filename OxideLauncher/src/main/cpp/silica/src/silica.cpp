@@ -21,9 +21,27 @@ const char* safe_string(const char* live, const char* what) {
     if (g_out.empty()) g_out = "<unknown>";
     return g_out.c_str();
 }
+const char* probe_renderer() {
+    std::lock_guard<std::mutex> l(g_mu);
+    return g_probe_renderer.c_str();
+}
+const char* probe_version() {
+    std::lock_guard<std::mutex> l(g_mu);
+    return g_probe_version.c_str();
+}
 } // namespace silica
 extern "C" {
 const char* silica_version(void) { return "silica-0.1.0-dev (own backend, under construction)"; }
-const char* silica_renderer_string(void) { return silica::safe_string(nullptr, "RENDERER"); }
-const char* silica_version_string(void) { return silica::safe_string(nullptr, "VERSION"); }
+const char* silica_renderer_string(void) {
+    std::lock_guard<std::mutex> l(silica::g_mu);
+    if (silica::g_probe_renderer.empty()) return "<unknown>";
+    silica::g_out = silica::g_probe_renderer;
+    return silica::g_out.c_str();
+}
+const char* silica_version_string(void) {
+    std::lock_guard<std::mutex> l(silica::g_mu);
+    if (silica::g_probe_version.empty()) return "<unknown>";
+    silica::g_out = silica::g_probe_version;
+    return silica::g_out.c_str();
+}
 }
