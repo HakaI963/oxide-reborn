@@ -189,3 +189,13 @@ covered by the Maven dependency table below:
 | constraintlayout-compose | Copyright © The Android Open Source Project | Apache 2.0 | [Link↗](https://developer.android.com/develop/ui/compose/layouts/constraintlayout) |
 | mockwebserver3 (test only) | Copyright © 2019 Square, Inc. | Apache 2.0 | [Link↗](https://github.com/square/okhttp/tree/master/mockwebserver) |
 | flite (bundled native TTS) | Copyright © 2005-2014 Carnegie Mellon University | BSD 3-Clause License | [Link↗](https://github.com/festvox/flite) |
+
+
+## Silica phase 1 native ports (1.13.0, still MobileGlues-derived — notices stay)
+
+Ported from upstream MobileGlues c07ae39..fcdf914 + 8bcf28a into
+OxideLauncher/src/main/cpp/copperoxide/upstream/ (marked 'Ported from upstream'):
+null-safe GL_RENDERER/GL_VERSION probe fallback, EGL failure logging with error
+rearm, ANGLE half-load guard, Apple ARB-alias guard. The tree remains LGPL-2.1
+MobileGlues-derived; Copper Oxide impl, binaries, copperoxide.yml and all license
+notices stay until the independent Silica native exists.

@@ -1,43 +1,43 @@
 {
-  "code": 101200,
-  "version": "1.12.0",
-  "created_at": "2026-10-07",
+  "code": 101300,
+  "version": "1.13.0",
+  "created_at": "2026-10-08",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.12.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0.apk",
+      "file_name": "OxideLauncher-1.13.0.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.13.0/OxideLauncher-1.13.0.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.12.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.13.0-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.13.0/OxideLauncher-1.13.0-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.12.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.13.0-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.13.0/OxideLauncher-1.13.0-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.12.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0-x86.apk",
+      "file_name": "OxideLauncher-1.13.0-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.13.0/OxideLauncher-1.13.0-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.12.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.12.0/OxideLauncher-1.12.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.13.0-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.13.0/OxideLauncher-1.13.0-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Launcher 1.12.0\n\n## Copper Oxide builds its own renderer\n\n`libcopperoxide.so` is now compiled from source in GitHub Actions (MobileGlues 97558a6 plus Oxide patches) instead of shipping a precompiled binary. The F3 version string reports Copper Oxide; vendor credits, extensions and rendering behavior are unchanged.\n\n## Simpler control editor\n\nThe control editor opens in Simple mode with one Advanced switch for snapping, styles, focus and reorder. The default layout is now `emulated/new.json`, with the previous default as fallback.\n\n## New app icon\n\nLauncher icon replaced with the /emulated/icon.png artwork, used 1:1 with no adaptive zoom."
+    "markdown": "# Oxide Launcher 1.13.0\n\n## Silica phase 1 (new renderer project)\n\nSilica pipeline, settings and in-game panel land alongside Copper Oxide (which stays fully working). Upstream 26.2 dev black-screen fix ported (null-safe GL strings, EGL failure logs, ANGLE half-load guard). No FPS claimed without measurement.\n\n## Hotbar touch fix\n\nHitbox now tracks the live display layout + MC GUI scale dynamically (no hardcoded px): display-scale sizing, edge/Y tolerance, no double-fire.\n\n## Default controls\n\nSingle default emulated/new.json (from /emulated/button/cc.json); legacy default_layout.json deleted."
   },
   "bodies": []
 }
