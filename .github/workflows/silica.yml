@@ -73,12 +73,14 @@ jobs:
           SYM="symbols-${{ matrix.abi }}.txt"
           "$NM" -D --defined-only "$SO" > "$SYM"
           echo "nm exit: $?"
-          if grep -q " silica_version" "$SYM"; then
-            echo "OK: libsilica exports silica_version"
-          else
-            echo "::error::silica_version missing"
-            exit 1
-          fi
+          for sym in silica_version eglGetProcAddress eglInitialize eglMakeCurrent eglCreateContext glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus; do
+            if grep -q " $sym" "$SYM"; then
+              echo "OK: exports $sym"
+            else
+              echo "::error::$sym missing from libsilica"
+              exit 1
+            fi
+          done
           if grep -qi "mobileglues\|copperoxide\|mg_context" "$SYM"; then
             echo "::error::MobileGlues symbols leaked into libsilica"
             exit 1

@@ -83,3 +83,68 @@ legality + net frame-time before any implementation.
   enforces), APK contains libsilica.so and Silica loads exactly it (linker +
   loader-path + runtime checks), no MG_* env from Silica, no copperoxide
   imports in silica sources. LGPL notices stay until zero derived code remains.
+
+## Rendering path (Minecraft 26.3 target, exact code path)
+
+Minecraft/LWJGL -> `-Dorg.lwjgl.opengl.libname=libsilica.so` (dlsym core GL) +
+SDL (`SDL_EGL_LIBRARY`/`POJAVEXEC_EGL=libsilica.so`) + pre-load dlopen ->
+libsilica.so exports (own code only):
+- `src/driver/loader.cpp`: opens system libEGL + libGLESv3/v2, single-driver
+  repair (ANGLE-split halves fall back to system + log), backend resolve.
+- `src/egl/exports.cpp`: full EGL 1.4/1.5 core surface; error rearm (backend
+  error read for the log, re-queued for the app's eglGetError); every
+  create/bind/makeCurrent refusal logged; probe of backend RENDERER/VERSION on
+  first successful makeCurrent into the probe cache.
+- `src/gl/exports.cpp`: null-safe glGetString/glGetStringi (probe fallback +
+  log, never null deref); dedup wrappers (UseProgram, binds, caps, viewport,
+  active unit); ~70-entry forwarder table (shader/program/FBO/texture/uniform/
+  draw/pixel); eglGetProcAddress serves own exports first, backend for the long
+  tail (temporary, documented below).
+- `src/gl/state.cpp`: coalescing tables + hits/skips counters
+  (silica_state_hits/skips); follows silica.json unless overridden.
+- `src/config/config.cpp`: parses $SILICA_DATA_DIR/silica.json (own schema:
+  profile/program_vault_mb/state_coalescing/diagnostics).
+- `src/cache/program_cache.cpp`: vault budget enforcement (file store lands
+  with the shader-pipeline stage).
+
+## 5974f49 behaviors implemented (own code, same contracts)
+
+1. Probe-cache fallback for GL_RENDERER/GL_VERSION (+glGetStringi empty answer)
+   with an explicit log line instead of strlen(nullptr).
+2. EGL refusal logging on every failing path + error rearm preserved for the
+   app's eglGetError.
+3. Single-driver consistency (ANGLE-half repair + log).
+4. makeCurrent failure states the cause (GL without a current context).
+5. Apple ARB-alias guard equivalent: n/a on Android (no alias attributes used).
+
+## Currently implemented GL/EGL surface
+
+EGL: GetError(rearm-aware)/GetDisplay/Initialize/Terminate/QueryString/
+GetConfigs/ChooseConfig/GetConfigAttrib/Create+Destroy+Query (window/pbuffer/
+pixmap/client-buffer)/SurfaceAttrib/BindTexImage/ReleaseTexImage/WaitNative/
+BindAPI/QueryAPI/WaitClient/ReleaseThread/CreateContext/DestroyContext/
+MakeCurrent/GetCurrent*/QueryContext/WaitGL/SwapBuffers/CopyBuffers/
+SwapInterval/GetProcAddress(own-first).
+GL: null-safe queries, GetError/Integerv, dedup state calls, full shader/
+program/link/log/uniform resource set, FBO/RBO/VAO/VBO create-bind-data,
+texture upload/compressed/mipmap, vertex attribs (+divisor), DrawArrays/
+Elements, viewport/scissor/clear/blend/depth/cull/pixelstore/readpixels/
+flush/finish.
+
+## Still missing for Iris/BSL
+
+- Full shader translation path (glslang->SPIR-V->Cross wired into compile;
+  libraries linked, path staged) and program-binary file store.
+- Wrapped coverage of the eglGetProcAddress long tail (blend equations,
+  stencil ops, multisample renderbuffers, buffer mapping, fence sync,
+  instanced/multi-draw, sampler objects, 3D textures, occlusion queries).
+- Fence-sync presentation + frame pacing; any upscaling/frame-gen backend.
+
+## Temporary compatibility hacks (explicit)
+
+- eglGetProcAddress falls through to backend pointers for unwrapped names:
+  renders correctly, bypasses state tracking (counted in diagnostics).
+- Forward-on-null-context for non-query GL calls (drivers no-op safely);
+  only queries get the probe treatment.
+- No program-binary reuse yet: shader compile cost is unoptimized until the
+  pipeline stage lands; no performance claims are made.
