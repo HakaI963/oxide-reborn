@@ -21,6 +21,7 @@ package dev.oxide.launcher.game.renderer
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
 import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
 import dev.oxide.launcher.game.version.installed.utils.isBiggerVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerOrEqualVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerVer
@@ -42,11 +43,11 @@ import java.io.File
  * 也就是选中的 MC 版本严格大于渲染器上限时，渲染器会被直接拒绝。而
  * `GameVersionNumber` 的 ReleaseType 顺序是 `SNAPSHOT < PRE_RELEASE < RC < GA`，
  * 于是把上限写成 "26.3-snapshot-3" 会让 "26.3" 被判为更大——本测试钉住三台
- * 内置渲染器（Copper Oxide、LTW、Holy GL4ES）的上限必须是正式版号 "26.3"。
+ * 内置渲染器（Copper Oxide、Silica、LTW、Holy GL4ES）的上限必须是正式版号 "26.3"。
  * Mojo Zink 已删除：它的 id、类名与 mesa 产物名都在下面的已删除标记里，
  * 出现在自有源码中即判失败。
  *
- * 注册表部分钉住：`Renderers.init()` 之后表里恰好是这三个 id，默认回退（未知 id）
+ * 注册表部分钉住：`Renderers.init()` 之后表里恰好是这四个 id，默认回退（未知 id）
  * 落到 Copper Oxide。源码守卫钉住：渲染器自有源码里不再引用六台被删的旧渲染器
  * 与已删除的 Mojo Zink。
  *
@@ -58,12 +59,14 @@ class RendererVersionGateTest {
 
     private val builtinRenderers: List<RendererInterface> = listOf(
         CopperOxideRenderer,
+        SilicaRenderer,
         LTWRenderer,
         HolyGL4ESRenderer
     )
 
     private val expectedRendererIds: Set<String> = setOf(
         "opengles3_oxide_copper",
+        "opengles3_oxide_silica",
         "opengles3_oxide_ltw",
         "opengles2_oxide_holy"
     )
