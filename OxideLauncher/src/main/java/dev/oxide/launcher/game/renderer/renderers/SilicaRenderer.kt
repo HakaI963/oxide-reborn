@@ -34,7 +34,12 @@ object SilicaRenderer : RendererInterface {
     override fun getMinMCVersion(): String = SilicaIdentity.MIN_MC_VERSION
     override fun getMaxMCVersion(): String = SilicaIdentity.MAX_MC_VERSION
     override fun getRendererLibrary(): String = SilicaIdentity.NATIVE_LIBRARY
-    override fun getRendererEGL(): String = SilicaIdentity.EGL_LIBRARY
+    // No EGL override: display acquisition, init, configs, surfaces and swap
+    // stay on the host EGL end to end (SDL + bridge resolve system EGL).
+    // libsilica.so interposes GL entry points plus context lifecycle only.
+    // A second display path inside the renderer is what can return NO_DISPLAY
+    // while the host would succeed, so it must not exist.
+    override fun getRendererEGL(): String? = null
     override fun getDlopenLibrary(): Lazy<List<String>> = lazy { emptyList() }
 
     override fun getRendererEnv(): Lazy<Map<String, String>> = lazy {

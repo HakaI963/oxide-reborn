@@ -41,8 +41,9 @@ object SilicaIdentity {
     const val NAME: String = "Silica"
     const val FLAVOR: String = "silica"
     // Own native backend. No fallback to any other renderer's library, ever.
+    // NOTE: no EGL library is published: EGL display/config/surface/swap stay
+    // on the host implementation (SilicaRenderer.getRendererEGL() is null).
     const val NATIVE_LIBRARY: String = "libsilica.so"
-    const val EGL_LIBRARY: String = "libsilica.so"
     const val MIN_MC_VERSION: String = "1.17"
     const val MAX_MC_VERSION: String = "26.3"
     const val DATA_DIR_NAME: String = "silica"

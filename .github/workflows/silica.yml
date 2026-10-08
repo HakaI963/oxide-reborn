@@ -73,7 +73,7 @@ jobs:
           SYM="symbols-${{ matrix.abi }}.txt"
           "$NM" -D --defined-only "$SO" > "$SYM"
           echo "nm exit: $?"
-          for sym in silica_version eglGetProcAddress eglInitialize eglMakeCurrent eglCreateContext glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus; do
+          for sym in silica_version eglGetProcAddress eglMakeCurrent eglCreateContext glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus; do
             if grep -q " $sym" "$SYM"; then
               echo "OK: exports $sym"
             else
@@ -86,6 +86,14 @@ jobs:
             exit 1
           else
             echo "OK: no MobileGlues symbols"
+          fi
+          for gone in eglGetDisplay eglInitialize eglChooseConfig eglCreateWindowSurface eglSwapBuffers; do
+            if grep -q " $gone" "$SYM"; then
+              echo "::error::$gone must NOT be exported (host owns the display path)"
+              exit 1
+            else
+              echo "OK: $gone served by host"
+            fi
           fi
       - name: Upload
         uses: actions/upload-artifact@v7

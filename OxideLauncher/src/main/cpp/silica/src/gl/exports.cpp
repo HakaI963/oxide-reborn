@@ -35,7 +35,14 @@ S_API const GLubyte* glGetString(GLenum name) {
     typedef const GLubyte* (*F)(GLenum);
     auto f = bg<F>("glGetString");
     const GLubyte* live = f ? f(name) : nullptr;
-    if (live) return live;
+    if (live) {
+        // Live answer: feed the probe cache too, so later no-context queries
+        // inherit real driver facts even if no Silica-wrapped makeCurrent ran.
+        if (name == GL_RENDERER || name == GL_VERSION) silica::note_probe(
+            name == GL_RENDERER ? (const char*)live : nullptr,
+            name == GL_VERSION ? (const char*)live : nullptr);
+        return live;
+    }
     // No context current (or backend refused): answer from the probe cache.
     const char* what = (name == GL_RENDERER) ? "RENDERER" : (name == GL_VERSION) ? "VERSION" : "OTHER";
     SLOG(ERROR, "silica: glGetString(%s) backend returned null (no current context); answering from probe cache", what);
