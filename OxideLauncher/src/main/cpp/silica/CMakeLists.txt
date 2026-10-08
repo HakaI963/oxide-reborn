@@ -45,7 +45,9 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
 # also propagate their own include dirs; both are harmless together and this
 # survives either layout. No version changes.)
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include ${glslang_SOURCE_DIR} ${spirv_cross_SOURCE_DIR})
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glslang::glslang spirv-cross-c)
+# glslang-default-resource-limits provides GetDefaultResources() (same pin,
+# no version change). Everything else stays on the two main libraries.
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glslang::glslang glslang-default-resource-limits spirv-cross-c)
 if (NOT MSVC)
     target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -Wl,-Bsymbolic-functions)
 endif()
