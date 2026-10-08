@@ -13,6 +13,7 @@
 #include "silica/driver.h"
 #include "silica/probe.h"
 #include "silica/state_in.h"
+#include "silica/shader_pipe.h"
 #include "silica/shim_config.h"
 #include <GLES3/gl3.h>
 #include <dlfcn.h>
@@ -149,14 +150,27 @@ S_API void glDepthMask(GLboolean v) {
     auto f = bg<void (*)(GLboolean)>(__func__);
     if (f) f(v);
 }
-SG_FWD_V1U(glDeleteProgram)
-SG_FWD_V1U(glDeleteShader)
+S_API void glDeleteProgram(GLuint p) {
+    SG_INIT();
+    silica::shader::delete_program(p);
+}
+S_API void glDeleteShader(GLuint s) {
+    SG_INIT();
+    silica::shader::delete_shader(s);
+}
 S_API void glClearStencil(GLint v) {
     SG_INIT();
     auto f = bg<void (*)(GLint)>(__func__);
     if (f) f(v);
 }
-SG_FWD_V2EU(glAttachShader)
+S_API void glAttachShader(GLuint p, GLuint s) {
+    SG_INIT();
+    silica::shader::attach_shader(p, s);
+}
+S_API void glDetachShader(GLuint p, GLuint s) {
+    SG_INIT();
+    silica::shader::detach_shader(p, s);
+}
 SG_FWD_V2EU(glDetachShader)
 S_API void glDeleteVertexArrays(GLsizei n, const GLuint* v) {
     SG_INIT();
@@ -208,46 +222,53 @@ S_API void glGenVertexArrays(GLsizei n, GLuint* v) {
     auto f = bg<void (*)(GLsizei, GLuint*)>(__func__);
     if (f) f(n, v);
 }
-SG_FWD_RU0(glCreateProgram)
+S_API GLuint glCreateProgram(void) {
+    SG_INIT();
+    return silica::shader::create_program();
+}
 S_API GLuint glCreateShader(GLenum t) {
     SG_INIT();
-    auto f = bg<GLuint (*)(GLenum)>("glCreateShader");
-    return f ? f(t) : 0;
+    return silica::shader::create_shader(t);
 }
 S_API void glShaderSource(GLuint s, GLsizei n, const GLchar* const* src, const GLint* len) {
     SG_INIT();
-    auto f = bg<void (*)(GLuint, GLsizei, const GLchar* const*, const GLint*)>("glShaderSource");
-    if (f) f(s, n, src, len);
+    silica::shader::shader_source(s, n, src, len);
 }
 S_API void glCompileShader(GLuint s) {
     SG_INIT();
-    auto f = bg<void (*)(GLuint)>("glCompileShader");
-    if (f) f(s);
+    silica::shader::compile_shader(s);
 }
 S_API void glGetShaderiv(GLuint s, GLenum p, GLint* v) {
     SG_INIT();
-    auto f = bg<void (*)(GLuint, GLenum, GLint*)>("glGetShaderiv");
-    if (f) f(s, p, v);
+    silica::shader::get_shaderiv(s, p, v);
 }
 S_API void glGetShaderInfoLog(GLuint s, GLsizei n, GLsizei* l, GLchar* m) {
     SG_INIT();
-    auto f = bg<void (*)(GLuint, GLsizei, GLsizei*, GLchar*)>("glGetShaderInfoLog");
-    if (f) f(s, n, l, m);
+    silica::shader::get_shader_info_log(s, n, l, m);
 }
 S_API void glLinkProgram(GLuint p) {
     SG_INIT();
-    auto f = bg<void (*)(GLuint)>("glLinkProgram");
-    if (f) f(p);
+    silica::shader::link_program(p);
 }
 S_API void glGetProgramiv(GLuint p, GLenum q, GLint* v) {
     SG_INIT();
-    auto f = bg<void (*)(GLuint, GLenum, GLint*)>("glGetProgramiv");
-    if (f) f(p, q, v);
+    silica::shader::get_programiv(p, q, v);
 }
 S_API void glGetProgramInfoLog(GLuint p, GLsizei n, GLsizei* l, GLchar* m) {
     SG_INIT();
-    auto f = bg<void (*)(GLuint, GLsizei, GLsizei*, GLchar*)>("glGetProgramInfoLog");
-    if (f) f(p, n, l, m);
+    silica::shader::get_program_info_log(p, n, l, m);
+}
+// Program binaries: forwarded so LWJGL resolves them; the vault path inside
+// link_program calls the backend directly and never depends on these.
+S_API void glProgramBinary(GLuint p, GLenum f, const void* b, GLsizei n) {
+    SG_INIT();
+    auto fn = bg<void (*)(GLuint, GLenum, const void*, GLsizei)>("glProgramBinary");
+    if (fn) fn(p, f, b, n);
+}
+S_API void glGetProgramBinary(GLuint p, GLsizei n, GLsizei* l, GLenum* f, void* b) {
+    SG_INIT();
+    auto fn = bg<void (*)(GLuint, GLsizei, GLsizei*, GLenum*, void*)>("glGetProgramBinary");
+    if (fn) fn(p, n, l, f, b);
 }
 S_API GLint glGetUniformLocation(GLuint p, const GLchar* n) {
     SG_INIT();
