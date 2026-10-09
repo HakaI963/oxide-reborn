@@ -8,11 +8,12 @@ updated as each check runs; nothing here is assumed.
 | Check | Result | Where |
 |---|---|---|
 | Native build, 4 ABIs (arm64-v8a, armeabi-v7a, x86_64, x86) | PASS | workflow "Onigami native", run 37939337919 |
+| Native symbol gate per ABI (own exports present; no mobileglues/copperoxide/silica) | PASS | "Verify exports and no foreign linkage", all 4 ABI jobs |
 | Native symbol gate (own exports present, no mobileglues/copperoxide/silica) | PASS | "Verify exports and no foreign linkage" step, all 4 ABIs |
 | libonigami.so committed to jniLibs for all 4 ABIs | PASS | commit a1c6e67e + successors |
 | CI: unit tests, lint, debug APK, APK integrity gates, release R8 | PASS | workflow "CI" on main HEAD |
-| Release: 5 APK variants built, signed, zipaligned, integrity-checked | PASS | workflow "Release" |
-| Release renderer gate (libonigami.so present, libsilica.so absent) | PASS | "Verify renderer libraries in the release APK" |
+| Release: 5 APK variants built, signed, zipaligned, integrity-checked | PASS | workflow "Release", run 37967063785 |
+| Release renderer gate (libonigami.so present, libsilica.so absent) | PASS (machine-verified in the packaged APK) | gate output: libonigami_so_entries=4 (arm64-v8a, armeabi-v7a, x86, x86_64), libsilica_so_entries=0 |
 
 ## Compatibility matrix — ACTUAL device results
 
@@ -29,6 +30,14 @@ results are claimed here until a launch log or capture is attached.
 | 26.3 + Iris + shaderpack (compiles, links, executes) | NOT TESTED |
 | Context/surface lifecycle recovery | NOT TESTED |
 | FPS / frame-time measurements | NOT TESTED |
+
+Release APK artifacts (run 37967063785):
+
+- release-apk-all (275 MB)
+- release-apk-arm64 (153 MB)
+- release-apk-arm (145 MB)
+- release-apk-x86_64 (156 MB)
+- release-apk-x86 (146 MB)
 
 Install and run:
 
