@@ -30,6 +30,10 @@ FetchContent_MakeAvailable(spirv_cross)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -funwind-tables -O3 -D_THREAD_SAFE -fPIC")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -fvisibility=hidden -O3")
 add_compile_definitions(SILICA_BUILD=1)
+# Commit stamp from CI (-DSILICA_BUILD_COMMIT=); local/manual builds say unknown.
+if(DEFINED SILICA_BUILD_COMMIT)
+  add_compile_definitions(SILICA_BUILD_COMMIT_STR="${SILICA_BUILD_COMMIT}")
+endif()
 add_library(${CMAKE_PROJECT_NAME} SHARED
     src/silica.cpp
     src/gl/state.cpp

@@ -60,6 +60,8 @@ jobs:
             -DANDROID_ABI="${{ matrix.abi }}" \
             -DANDROID_PLATFORM=android-21 \
             -DANDROID_STL=c++_static \
+            GEN_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+            "-DSILICA_BUILD_COMMIT=$GEN_COMMIT" \
             -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build/${{ matrix.abi }} --target silica -- -j4
@@ -73,7 +75,7 @@ jobs:
           SYM="symbols-${{ matrix.abi }}.txt"
           "$NM" -D --defined-only "$SO" > "$SYM"
           echo "nm exit: $?"
-          for sym in silica_version eglGetProcAddress eglMakeCurrent eglCreateContext glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus; do
+          for sym in silica_version silica_build_id eglGetProcAddress eglMakeCurrent eglCreateContext glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus; do
             if grep -q " $sym" "$SYM"; then
               echo "OK: exports $sym"
             else
