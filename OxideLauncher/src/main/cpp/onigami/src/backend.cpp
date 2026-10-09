@@ -65,7 +65,7 @@ GlesProcs& gles_procs() {
     static GlesProcs p;
     return p;
 }
-#define ONIGAMI_LOAD(h, P, N) P.N = (decltype(P.N))dlsym(h, #N)
+#define ONIGAMI_LOAD(h, P, M, N) P.M = (decltype(P.M))dlsym(h, #N)
 bool ensure_egl_loaded() {
     EglProcs& p = egl_procs();
     if (p.handle && p.GetError) return true;
@@ -75,24 +75,24 @@ bool ensure_egl_loaded() {
         return false;
     }
     p.handle = h;
-    ONIGAMI_LOAD(h, p, eglGetDisplay);
-    ONIGAMI_LOAD(h, p, eglInitialize);
-    ONIGAMI_LOAD(h, p, eglTerminate);
-    ONIGAMI_LOAD(h, p, eglChooseConfig);
-    ONIGAMI_LOAD(h, p, eglGetConfigAttrib);
-    ONIGAMI_LOAD(h, p, eglCreateContext);
-    ONIGAMI_LOAD(h, p, eglDestroyContext);
-    ONIGAMI_LOAD(h, p, eglMakeCurrent);
-    ONIGAMI_LOAD(h, p, eglGetCurrentDisplay);
-    ONIGAMI_LOAD(h, p, eglGetCurrentContext);
-    ONIGAMI_LOAD(h, p, eglGetCurrentSurface);
-    ONIGAMI_LOAD(h, p, eglSwapBuffers);
-    ONIGAMI_LOAD(h, p, eglQueryString);
-    ONIGAMI_LOAD(h, p, eglGetError);
-    ONIGAMI_LOAD(h, p, eglBindAPI);
-    ONIGAMI_LOAD(h, p, eglQueryAPI);
-    ONIGAMI_LOAD(h, p, eglReleaseThread);
-    ONIGAMI_LOAD(h, p, eglGetProcAddress);
+    ONIGAMI_LOAD(h, p, GetDisplay, eglGetDisplay);
+    ONIGAMI_LOAD(h, p, Initialize, eglInitialize);
+    ONIGAMI_LOAD(h, p, Terminate, eglTerminate);
+    ONIGAMI_LOAD(h, p, ChooseConfig, eglChooseConfig);
+    ONIGAMI_LOAD(h, p, GetConfigAttrib, eglGetConfigAttrib);
+    ONIGAMI_LOAD(h, p, CreateContext, eglCreateContext);
+    ONIGAMI_LOAD(h, p, DestroyContext, eglDestroyContext);
+    ONIGAMI_LOAD(h, p, MakeCurrent, eglMakeCurrent);
+    ONIGAMI_LOAD(h, p, GetCurrentDisplay, eglGetCurrentDisplay);
+    ONIGAMI_LOAD(h, p, GetCurrentContext, eglGetCurrentContext);
+    ONIGAMI_LOAD(h, p, GetCurrentSurface, eglGetCurrentSurface);
+    ONIGAMI_LOAD(h, p, SwapBuffers, eglSwapBuffers);
+    ONIGAMI_LOAD(h, p, QueryString, eglQueryString);
+    ONIGAMI_LOAD(h, p, GetError, eglGetError);
+    ONIGAMI_LOAD(h, p, BindAPI, eglBindAPI);
+    ONIGAMI_LOAD(h, p, QueryAPI, eglQueryAPI);
+    ONIGAMI_LOAD(h, p, ReleaseThread, eglReleaseThread);
+    ONIGAMI_LOAD(h, p, GetProcAddress, eglGetProcAddress);
     if (!p.GetError || !p.MakeCurrent || !p.GetDisplay) {
         diag_write("onigami: libEGL.so missing core symbols");
         return false;
