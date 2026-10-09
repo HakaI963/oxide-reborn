@@ -55,13 +55,13 @@ jobs:
         run: |
           set -euo pipefail
           NDK_HOME="$ANDROID_SDK_ROOT/ndk/${{ env.ANDROID_NDK_VERSION }}"
+          GEN_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
           cmake -S OxideLauncher/src/main/cpp/silica -B build/${{ matrix.abi }} -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI="${{ matrix.abi }}" \
             -DANDROID_PLATFORM=android-21 \
             -DANDROID_STL=c++_static \
-            GEN_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
-            "-DSILICA_BUILD_COMMIT=$GEN_COMMIT" \
+            "-DSILICA_BUILD_COMMIT=${GEN_COMMIT}" \
             -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build/${{ matrix.abi }} --target silica -- -j4
