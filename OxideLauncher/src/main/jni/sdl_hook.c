@@ -301,10 +301,11 @@ static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share
 // RENDERABLE_TYPE; a context request that outruns the config is exactly BAD_MATCH.
 static void silicaLogChosenConfig(EGLDisplay dpy, EGLConfig cfg) {
     typedef EGLBoolean (*GCA)(EGLDisplay, EGLConfig, EGLint, EGLint *);
-    GCA gca = (GCA)GLGetProcAddress(dlsym(RTLD_DEFAULT, "libEGL.so"), "eglGetConfigAttrib");
     EGLint renderable = -1, surface = -1, conformant = -1;
-    if (gca == NULL) gca = (GCA)GLGetProcAddress(NULL, "eglGetConfigAttrib");
-    if (gca != NULL && dpy != NULL && cfg != NULL) {
+    // Resolve through the same host entry the rest of this file already binds,
+    // rather than inventing another lookup path that may not link here.
+    GCA gca = (GCA)SDL_EGL_GetProcAddress("eglGetConfigAttrib");
+    if (gca == NULL && dpy != NULL && cfg != NULL) {
         gca(dpy, cfg, 0x3040 /* RENDERABLE_TYPE */, &renderable);
         gca(dpy, cfg, 0x3033 /* SURFACE_TYPE */, &surface);
         gca(dpy, cfg, 0x3042 /* CONFORMANT */, &conformant);
