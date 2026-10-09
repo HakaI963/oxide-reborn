@@ -296,6 +296,24 @@ static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share
     return ctx;
 }
 
+// SILICA_EGL_DIAG: report the capabilities of the config SDL actually chose.
+// The compat path below can hand back an ES2-only config after normalizing
+// RENDERABLE_TYPE; a context request that outruns the config is exactly BAD_MATCH.
+static void silicaLogChosenConfig(EGLDisplay dpy, EGLConfig cfg) {
+    typedef EGLBoolean (*GCA)(EGLDisplay, EGLConfig, EGLint, EGLint *);
+    GCA gca = (GCA)GLGetProcAddress(dlsym(RTLD_DEFAULT, "libEGL.so"), "eglGetConfigAttrib");
+    EGLint renderable = -1, surface = -1, conformant = -1;
+    if (gca == NULL) gca = (GCA)GLGetProcAddress(NULL, "eglGetConfigAttrib");
+    if (gca != NULL && dpy != NULL && cfg != NULL) {
+        gca(dpy, cfg, 0x3040 /* RENDERABLE_TYPE */, &renderable);
+        gca(dpy, cfg, 0x3033 /* SURFACE_TYPE */, &surface);
+        gca(dpy, cfg, 0x3042 /* CONFORMANT */, &conformant);
+    }
+    LOG_TO_I("SILICA_EGL_DIAG config dpy=%p cfg=%p renderable=0x%x surface=0x%x conformant=0x%x es2=%d es3=%d",
+             dpy, cfg, (unsigned)renderable, (unsigned)surface, (unsigned)conformant,
+             (renderable & 0x0004) != 0, (renderable & 0x0040) != 0);
+}
+
 static EGLBoolean proxyEglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list, EGLConfig *configs,
                                        EGLint config_size, EGLint *num_config) {
     if (sOrigEglChooseConfig == NULL) {
@@ -304,7 +322,10 @@ static EGLBoolean proxyEglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list
     }
 
     EGLBoolean result = sOrigEglChooseConfig(dpy, attrib_list, configs, config_size, num_config);
-    if (result && num_config != NULL && *num_config > 0) return result;
+    if (result && num_config != NULL && *num_config > 0) {
+        if (configs != NULL && config_size > 0) silicaLogChosenConfig(dpy, configs[0]);
+        return result;
+    }
     if (!sdlGlesCompatEnabled()) return result; // 兼容 fallback 仅限移动 ES 渲染器
 
     EGLint fixed[64];
@@ -312,6 +333,7 @@ static EGLBoolean proxyEglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list
     EGLint fallbackCount = 0;
     EGLBoolean fallbackResult = sOrigEglChooseConfig(dpy, fixed, configs, config_size, &fallbackCount);
     if (fallbackResult && num_config != NULL) *num_config = fallbackCount;
+    if (fallbackResult && configs != NULL && config_size > 0) silicaLogChosenConfig(dpy, configs[0]);
     LOG_TO_W("SDL_Hook: eglChooseConfig compatibility fallback result=%d count=%d", fallbackResult, fallbackCount);
     return fallbackResult;
 }
