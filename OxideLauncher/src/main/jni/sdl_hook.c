@@ -227,14 +227,29 @@ static void silicaDescribeCtxAttribs(const EGLint *attrib_list, char *out, size_
         EGLint a = attrib_list[i], v = attrib_list[i + 1];
         n++;
         if (a == EGL_CONTEXT_CLIENT_VERSION) client = v;
-        else if (a == EGL_CONTEXT_MAJOR_VERSION_KHR) major = v;
-        else if (a == EGL_CONTEXT_MINOR_VERSION_KHR) minor = v;
-        else if (a == EGL_CONTEXT_FLAGS_KHR) flags = v;
-        else if (a == EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR) profile = v;
+        else if (a == kSilicaCtxMajor) major = v;
+        else if (a == kSilicaCtxMinor) minor = v;
+        else if (a == kSilicaCtxFlags) flags = v;
+        else if (a == kSilicaCtxProfile) profile = v;
     }
     snprintf(out, cap, "pairs=%d client=%d major=%d minor=%d flags=0x%x profile=0x%x", n, client, major,
              minor, flags < 0 ? 0 : (unsigned)flags, profile < 0 ? 0 : (unsigned)profile);
 }
+
+// KHR context ids by value: this TU's EGL headers only declare the basic
+// set, and eglext.h is not available here. Values per the EGL registry.
+#ifndef kSilicaCtxMajor
+#define kSilicaCtxMajor 0x3098
+#endif
+#ifndef kSilicaCtxMinor
+#define kSilicaCtxMinor 0x30FB
+#endif
+#ifndef kSilicaCtxFlags
+#define kSilicaCtxFlags 0x30FC
+#endif
+#ifndef kSilicaCtxProfile
+#define kSilicaCtxProfile 0x30FD
+#endif
 
 static bool sSilicaDiagOriginLogged = false;
 

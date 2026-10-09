@@ -38,6 +38,19 @@ const char* silica_renderer_string(void) {
     silica::g_out = silica::g_probe_renderer;
     return silica::g_out.c_str();
 }
+#ifndef SILICA_BUILD_COMMIT_STR
+#define SILICA_BUILD_COMMIT_STR "unknown"
+#endif
+extern "C" {
+const char* silica_build_id(void) {
+    static std::string id;
+    static std::once_flag once;
+    std::call_once(once, []() {
+        id = std::string("silica-") + SILICA_BUILD_COMMIT_STR + " built " + __DATE__ + " " + __TIME__;
+    });
+    return id.c_str();
+}
+}
 const char* silica_version_string(void) {
     std::lock_guard<std::mutex> l(silica::g_mu);
     if (silica::g_probe_version.empty()) return "<unknown>";
