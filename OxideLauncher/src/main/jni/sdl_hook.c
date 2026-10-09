@@ -331,7 +331,7 @@ static bool configSupportsEs3(EGLDisplay dpy, EGLConfig cfg) {
     GCA gca = (GCA)dlsym(RTLD_DEFAULT, "eglGetConfigAttrib");
     if (gca == NULL || dpy == NULL || cfg == NULL) return true; // cannot tell: do not interfere
     EGLint renderable = 0;
-    if (gca(dpy, cfg, 0x3040 /* EGL_RENDERABLE_TYPE */, &renderable) != EGL_TRUE) return true;
+    if (gca(dpy, cfg, 0x3040 /* EGL_RENDERABLE_TYPE */, &renderable) != 1) return true;
     return (renderable & 0x0040 /* EGL_OPENGL_ES3_BIT */) != 0;
 }
 
