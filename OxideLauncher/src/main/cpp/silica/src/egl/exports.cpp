@@ -161,7 +161,11 @@ CtxRequest analyze_ctx(const EGLint* attr) {
         }
     }
     const EGLint desktop_flags = 0x0001 /* DEBUG */ | 0x0002 /* FORWARD_COMPATIBLE */;
-    r.desktop = (r.profile != 0) || ((r.flags & desktop_flags) != 0);
+    // A bound desktop frontend makes every later creation a desktop request,
+    // even a plain-looking retry: this is the working renderer's decision rule
+    // (it keys off its tracked frontend API, not only the attribute list).
+    r.desktop = (r.profile != 0) || ((r.flags & desktop_flags) != 0) ||
+                (g_frontend_api == EGL_OPENGL_API);
     return r;
 }
 
