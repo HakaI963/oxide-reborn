@@ -130,6 +130,18 @@ const char* egl_error_name(EGLint error) {
     }
 }
 
+// ---- frontend API virtualization -------------------------------------------
+// The backend only speaks ES. When the app asks for desktop GL we bind ES
+// underneath and remember what the frontend asked for, so later queries and
+// context decisions each see a coherent answer. Per-thread, like all EGL
+// binding state. Declared before the request analysis because the desktop
+// decision reads it.
+thread_local EGLenum g_frontend_api = EGL_OPENGL_ES_API;
+// Latest refusal in plain text for the SDL hook to surface through its own
+// (visible) log channel. Valid until the next EGL call on this thread; the
+// caller must log or copy it immediately.
+thread_local std::string g_last_diag;
+
 // ---- desktop request analysis ---------------------------------------------
 struct CtxRequest {
     bool desktop = false;   // asked for desktop GL, not ES
@@ -183,11 +195,6 @@ void build_es_request(const CtxRequest& in, EGLint* out, int cap) {
 // underneath and remember what the frontend asked for, so later queries and
 // context decisions each see a coherent answer. Per-thread, like all EGL
 // binding state.
-thread_local EGLenum g_frontend_api = EGL_OPENGL_ES_API;
-// Latest refusal in plain text for the SDL hook to surface through its own
-// (visible) log channel. Valid until the next EGL call on this thread; the
-// caller must log or copy it immediately.
-thread_local std::string g_last_diag;
 
 void set_last_diag(const char* fmt, ...) {
     char line[512];
