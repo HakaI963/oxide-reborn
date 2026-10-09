@@ -7,12 +7,20 @@
 // return NO_DISPLAY while the host would succeed, so it does not exist here.
 // What IS wrapped: context create/destroy/current (probe fill + state setup +
 // refusal logs) and eglGetProcAddress (own wrappers first, host otherwise).
+//
+// ERROR DISCIPLINE (hard lesson, device-proven): these wrappers NEVER call the
+// backend eglGetError. Silica does not export eglGetError, so the application
+// reads errors from the host implementation; consuming the flag here for a log
+// line is what once turned every real failure into a reported EGL_SUCCESS.
+// Refusals are logged with their decoded arguments while the backend error
+// flag stays queued for the app's own read. No errors are invented.
 #include "silica/driver.h"
 #include "silica/probe.h"
 #include "silica/shim_config.h"
 #include <EGL/egl.h>
 #include <dlfcn.h>
 #include <mutex>
+#include <string>
 #include <android/log.h>
 #if defined(__GNUC__) || defined(__clang__)
 #define S_API __attribute__((visibility("default")))
@@ -20,18 +28,16 @@
 #define S_API
 #endif
 #define SLOG(prio, ...) __android_log_print(ANDROID_LOG_##prio, "silica", __VA_ARGS__)
+// KHR context-attribute ids, decoded for diagnostics (local names so no header
+// can collide with them).
+constexpr int kMajorKhr = 0x3098;
+constexpr int kMinorKhr = 0x30FB;
+constexpr int kFlagsKhr = 0x30FC;
+constexpr int kProfileKhr = 0x30FD;
 namespace silica::egl {
 namespace {
 std::mutex g_mu;
-EGLint g_front_err = EGL_SUCCESS;
 bool g_probed = false;
-EGLint rearm() {
-    typedef EGLint (*F)(void);
-    auto f = (F)driver::resolve("eglGetError");
-    EGLint e = f ? f() : EGL_SUCCESS;
-    if (e != EGL_SUCCESS) g_front_err = e;
-    return e;
-}
 void probe_once() {
     if (g_probed) return;
     g_probed = true;
@@ -49,6 +55,27 @@ void probe_once() {
     else if (config::diagnostics())
         SLOG(DEBUG, "silica: probe renderer/version cached");
 }
+// Decodes the requested client version and profile from a context attrib list
+// for failure logs. Values only; nothing sensitive can appear here.
+std::string describe_ctx_attribs(const EGLint* attr) {
+    if (!attr) return "null";
+    int client = -1, major = -1, minor = -1, flags = -1, profile = -1;
+    for (int i = 0; attr[i] != EGL_NONE; i += 2) {
+        switch (attr[i]) {
+            case EGL_CONTEXT_CLIENT_VERSION: client = attr[i + 1]; break;
+            case kMajorKhr: major = attr[i + 1]; break;
+            case kMinorKhr: minor = attr[i + 1]; break;
+            case kFlagsKhr: flags = attr[i + 1]; break;
+            case kProfileKhr: profile = attr[i + 1]; break;
+            default: break;
+        }
+        if (i > 60) break; // never walk a hostile list
+    }
+    char buf[192];
+    snprintf(buf, sizeof(buf), "client=%d major=%d minor=%d flags=0x%x profile=0x%x", client, major,
+             minor, flags < 0 ? 0 : (unsigned)flags, profile < 0 ? 0 : (unsigned)profile);
+    return buf;
+}
 } // namespace
 } // namespace silica::egl
 template <typename F>
@@ -58,11 +85,23 @@ extern "C" {
 S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, const EGLint* attr) {
     SE_INIT();
     auto f = be<EGLContext (*)(EGLDisplay, EGLConfig, EGLContext, const EGLint*)>("eglCreateContext");
-    EGLContext ctx = f ? f(dpy, cfg, share, attr) : EGL_NO_CONTEXT;
+    if (!f) {
+        // Entry missing, not a backend refusal: say exactly that. The backend
+        // error flag is untouched (nothing was called).
+        SLOG(ERROR, "silica: eglCreateContext has no backend entry; failing without calling through");
+        return EGL_NO_CONTEXT;
+    }
+    EGLContext ctx = f(dpy, cfg, share, attr);
     if (ctx == EGL_NO_CONTEXT) {
         std::lock_guard<std::mutex> l(silica::egl::g_mu);
-        SLOG(ERROR, "silica: eglCreateContext refused by backend (dpy=%p); error kept for eglGetError", (void*)dpy);
-        silica::egl::rearm();
+        // No backend eglGetError call here by design: the flag stays queued
+        // for the application's own read (see file header).
+        SLOG(ERROR, "silica: eglCreateContext refused dpy=%p cfg=%p share=%s [%s]; backend error left queued",
+             (void*)dpy, (void*)cfg, share == EGL_NO_CONTEXT ? "null" : "set",
+             silica::egl::describe_ctx_attribs(attr).c_str());
+    } else if (silica::config::diagnostics()) {
+        SLOG(DEBUG, "silica: eglCreateContext ok ctx=%p dpy=%p share=%s [%s]", (void*)ctx, (void*)dpy,
+             share == EGL_NO_CONTEXT ? "null" : "set", silica::egl::describe_ctx_attribs(attr).c_str());
     }
     return ctx;
 }
@@ -74,11 +113,15 @@ S_API EGLBoolean eglDestroyContext(EGLDisplay dpy, EGLContext ctx) {
 S_API EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGLContext ctx) {
     SE_INIT();
     auto f = be<EGLBoolean (*)(EGLDisplay, EGLSurface, EGLSurface, EGLContext)>("eglMakeCurrent");
-    EGLBoolean r = f ? f(dpy, draw, read, ctx) : EGL_FALSE;
+    if (!f) {
+        SLOG(ERROR, "silica: eglMakeCurrent has no backend entry; failing without calling through");
+        return EGL_FALSE;
+    }
+    EGLBoolean r = f(dpy, draw, read, ctx);
     if (r != EGL_TRUE) {
         std::lock_guard<std::mutex> l(silica::egl::g_mu);
-        SLOG(ERROR, "silica: eglMakeCurrent failed; GL on this thread has no current context (error kept for eglGetError)");
-        silica::egl::rearm();
+        SLOG(ERROR, "silica: eglMakeCurrent failed dpy=%p draw=%p read=%p ctx=%p; GL on this thread has no current context; backend error left queued",
+             (void*)dpy, (void*)draw, (void*)read, (void*)ctx);
     } else if (ctx != EGL_NO_CONTEXT) {
         std::lock_guard<std::mutex> l(silica::egl::g_mu);
         silica::egl::probe_once();
