@@ -33,6 +33,10 @@
 #include <mutex>
 #include <string>
 #include <android/log.h>
+#include <unistd.h>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
 #if defined(__GNUC__) || defined(__clang__)
 #define S_API __attribute__((visibility("default")))
 #else
@@ -168,6 +172,86 @@ void build_es_request(const CtxRequest& in, EGLint* out, int cap) {
     int n = 0;
     if (n < cap - 2) { out[n++] = EGL_CONTEXT_CLIENT_VERSION; out[n++] = version; }
     if (n < cap - 2) out[n++] = EGL_NONE;
+}
+
+// ---- diagnostics that survive the launcher console --------------------------
+// __android_log_print under the "silica" tag does not reach the log the user
+// pastes, so every decisive EGL fact is also appended to a file the launcher
+// can read back. Same text, both sinks; nothing is logged in only one.
+void diag(const char* fmt, ...) {
+    char line[768];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    __android_log_print(ANDROID_LOG_INFO, "silica", "%s", line);
+    const char* dir = getenv("SILICA_DATA_DIR");
+    if (!dir || !*dir) return;
+    char path[512];
+    snprintf(path, sizeof(path), "%s/silica-egl.log", dir);
+    FILE* f = fopen(path, "ae");
+    if (!f) return;
+    fputs(line, f);
+    fputc('\n', f);
+    fclose(f);
+}
+
+// ---- config capability interrogation ---------------------------------------
+// EGL_BAD_MATCH from eglCreateContext is documented for a config that cannot
+// satisfy the requested client API, and for a share context that does not match
+// the config. Attributes alone cannot explain a plain ES2 request failing too,
+// so the config's real capabilities are read before any attribute is touched.
+constexpr EGLint kRenderableType = 0x3040;
+constexpr EGLint kSurfaceType = 0x3033;
+constexpr EGLint kConformant = 0x3042;
+constexpr EGLint kCaveat = 0x3031;
+constexpr EGLint kClientApis = 0x308D;
+constexpr EGLint kEs2Bit = 0x0004;
+constexpr EGLint kEs3Bit = 0x0040;
+constexpr EGLint kOpenGlBit = 0x0008;
+
+struct ConfigCaps {
+    EGLint renderable = -1;
+    EGLint surface_type = -1;
+    EGLint conformant = -1;
+    EGLint caveat = -1;
+    bool readable = false;
+};
+
+ConfigCaps probe_config(EGLDisplay dpy, EGLConfig cfg) {
+    ConfigCaps c;
+    typedef EGLBoolean (*GCA)(EGLDisplay, EGLConfig, EGLint, EGLint*);
+    auto g = (GCA)driver::resolve("eglGetConfigAttrib");
+    if (!g || dpy == EGL_NO_DISPLAY || cfg == nullptr) return c;
+    c.readable = g(dpy, cfg, kRenderableType, &c.renderable) == EGL_TRUE;
+    g(dpy, cfg, kSurfaceType, &c.surface_type);
+    g(dpy, cfg, kConformant, &c.conformant);
+    g(dpy, cfg, kCaveat, &c.caveat);
+    return c;
+}
+
+// Highest ES version this config actually advertises, or 0 when it advertises
+// none. Derived from the config, never assumed: requesting ES 3 from an ES2-only
+// config is exactly the BAD_MATCH we are chasing.
+int config_es_version(const ConfigCaps& c) {
+    if (c.renderable & kEs3Bit) return 3;
+    if (c.renderable & kEs2Bit) return 2;
+    return 0;
+}
+
+// Proves which EGL implementation is answering, so a config created by one
+// implementation and passed to another cannot masquerade as a plain refusal.
+void log_display_identity(EGLDisplay dpy) {
+    typedef const char* (*QS)(EGLDisplay, EGLint);
+    typedef EGLBoolean (*QDA)(EGLDisplay, EGLint, EGLint*);
+    auto qs = (QS)driver::resolve("eglQueryString");
+    auto qda = (QDA)driver::resolve("eglQueryDisplayAttrib");
+    EGLint apis = -1;
+    if (qda) qda(dpy, kClientApis, &apis);
+    diag("silica: display dpy=%p client_apis=0x%x vendor=\"%s\" version=\"%s\"",
+         (void*)dpy, (unsigned)apis,
+         qs ? qs(dpy, 0x3053 /* VENDOR */) : "(no eglQueryString)",
+         qs ? qs(dpy, 0x3054 /* VERSION */) : "(no eglQueryString)");
 }
 
 } // namespace
