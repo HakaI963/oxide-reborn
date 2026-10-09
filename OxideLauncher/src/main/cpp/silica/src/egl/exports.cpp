@@ -60,8 +60,14 @@ std::string describe_ctx_attribs(const EGLint* attr) {
     int client = -1, major = -1, minor = -1, flags = -1, profile = -1;
     for (int i = 0; attr[i] != EGL_NONE; i += 2) {
         switch (attr[i]) {
+// This NDK aliases CLIENT_VERSION to MAJOR_VERSION (both 0x3098); other
+// headers keep them apart. One shared case keeps both layouts compiling.
+#if EGL_CONTEXT_CLIENT_VERSION == EGL_CONTEXT_MAJOR_VERSION
+            case EGL_CONTEXT_CLIENT_VERSION: client = attr[i + 1]; major = attr[i + 1]; break;
+#else
             case EGL_CONTEXT_CLIENT_VERSION: client = attr[i + 1]; break;
             case EGL_CONTEXT_MAJOR_VERSION: major = attr[i + 1]; break;
+#endif
             case EGL_CONTEXT_MINOR_VERSION: minor = attr[i + 1]; break;
             case kFlagsKhr: flags = attr[i + 1]; break;
             case EGL_CONTEXT_OPENGL_PROFILE_MASK: profile = attr[i + 1]; break;
