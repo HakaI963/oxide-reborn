@@ -222,20 +222,20 @@ static eglSwapBuffers_t sOrigEglSwapBuffers = NULL;
 
 // KHR context ids by value: this TU's EGL headers only declare the basic
 // set, and eglext.h is not available here. Values per the EGL registry.
-#ifndef kSilicaCtxMajor
-#define kSilicaCtxMajor 0x3098
+#ifndef kOnigamiCtxMajor
+#define kOnigamiCtxMajor 0x3098
 #endif
-#ifndef kSilicaCtxMinor
-#define kSilicaCtxMinor 0x30FB
+#ifndef kOnigamiCtxMinor
+#define kOnigamiCtxMinor 0x30FB
 #endif
-#ifndef kSilicaCtxFlags
-#define kSilicaCtxFlags 0x30FC
+#ifndef kOnigamiCtxFlags
+#define kOnigamiCtxFlags 0x30FC
 #endif
-#ifndef kSilicaCtxProfile
-#define kSilicaCtxProfile 0x30FD
+#ifndef kOnigamiCtxProfile
+#define kOnigamiCtxProfile 0x30FD
 #endif
 
-// SILICA_EGL_DIAG: decode context attribs for logs (values only, bounded walk).
+// ONIGAMI_EGL_DIAG: decode context attribs for logs (values only, bounded walk).
 // This proxy deliberately never calls eglGetError: the backend error flag must
 // stay queued for the application's own read. A single read here is what once
 // turned every real refusal into a reported EGL_SUCCESS.
@@ -249,10 +249,10 @@ static void silicaDescribeCtxAttribs(const EGLint *attrib_list, char *out, size_
         EGLint a = attrib_list[i], v = attrib_list[i + 1];
         n++;
         if (a == EGL_CONTEXT_CLIENT_VERSION) client = v;
-        else if (a == kSilicaCtxMajor) major = v;
-        else if (a == kSilicaCtxMinor) minor = v;
-        else if (a == kSilicaCtxFlags) flags = v;
-        else if (a == kSilicaCtxProfile) profile = v;
+        else if (a == kOnigamiCtxMajor) major = v;
+        else if (a == kOnigamiCtxMinor) minor = v;
+        else if (a == kOnigamiCtxFlags) flags = v;
+        else if (a == kOnigamiCtxProfile) profile = v;
     }
     snprintf(out, cap, "pairs=%d client=%d major=%d minor=%d flags=0x%x profile=0x%x", n, client, major,
              minor, flags < 0 ? 0 : (unsigned)flags, profile < 0 ? 0 : (unsigned)profile);
@@ -269,7 +269,7 @@ static void silicaLogLastDiag(const char *attempt) {
     LDD fn = (LDD)dlsym(RTLD_DEFAULT, "silica_last_egl_diag");
     if (fn == NULL) return;
     const char *detail = fn();
-    LOG_TO_I("SILICA_EGL_DIAG silica-detail attempt=%s %s", attempt, detail != NULL ? detail : "(null)");
+    LOG_TO_I("ONIGAMI_EGL_DIAG silica-detail attempt=%s %s", attempt, detail != NULL ? detail : "(null)");
 }
 
 static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share, const EGLint *attrib_list) {
@@ -284,15 +284,15 @@ static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share
         Dl_info info;
         const char *from = "(dladdr failed)";
         if (dladdr((void *) sOrigEglCreateContext, &info) && info.dli_fname != NULL) from = info.dli_fname;
-        LOG_TO_I("SILICA_EGL_DIAG origin backend=%p from=%s", sOrigEglCreateContext, from);
+        LOG_TO_I("ONIGAMI_EGL_DIAG origin backend=%p from=%s", sOrigEglCreateContext, from);
     }
     char req[192];
     silicaDescribeCtxAttribs(attrib_list, req, sizeof(req));
-    LOG_TO_I("SILICA_EGL_DIAG entry dpy=%p cfg=%p share=%s attribs=[%s]", (void *) dpy, (void *) config,
+    LOG_TO_I("ONIGAMI_EGL_DIAG entry dpy=%p cfg=%p share=%s attribs=[%s]", (void *) dpy, (void *) config,
              share != NULL ? "set" : "null", req);
 
     void *ctx = sOrigEglCreateContext(dpy, config, share, attrib_list);
-    LOG_TO_I("SILICA_EGL_DIAG attempt=requested ctx=%p", ctx);
+    LOG_TO_I("ONIGAMI_EGL_DIAG attempt=requested ctx=%p", ctx);
     if (ctx == NULL) silicaLogLastDiag("requested");
     if (ctx != NULL || !sdlGlesCompatEnabled()) return ctx;
 
@@ -304,21 +304,21 @@ static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share
     LOG_TO_W("SDL_Hook: retrying eglCreateContext without KHR version attrs (CV=%d)", version);
     char fixdesc[192];
     silicaDescribeCtxAttribs(fixed, fixdesc, sizeof(fixdesc));
-    LOG_TO_I("SILICA_EGL_DIAG attempt=no-khr attribs=[%s]", fixdesc);
+    LOG_TO_I("ONIGAMI_EGL_DIAG attempt=no-khr attribs=[%s]", fixdesc);
     ctx = sOrigEglCreateContext(dpy, config, share, fixed);
-    LOG_TO_I("SILICA_EGL_DIAG attempt=no-khr ctx=%p", ctx);
+    LOG_TO_I("ONIGAMI_EGL_DIAG attempt=no-khr ctx=%p", ctx);
     if (ctx == NULL) silicaLogLastDiag("no-khr");
     if (ctx != NULL || !esSemantics || version <= 2) return ctx; // CV=2 为移动端最后兜底
 
     LOG_TO_W("SDL_Hook: retrying eglCreateContext with CV=2 after CV=%d failed", version);
     EGLint es2[3] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
     ctx = sOrigEglCreateContext(dpy, config, share, es2);
-    LOG_TO_I("SILICA_EGL_DIAG attempt=gles2 ctx=%p", ctx);
+    LOG_TO_I("ONIGAMI_EGL_DIAG attempt=gles2 ctx=%p", ctx);
     if (ctx == NULL) silicaLogLastDiag("gles2");
     return ctx;
 }
 
-// SILICA_EGL_DIAG: report the capabilities of the config SDL actually chose.
+// ONIGAMI_EGL_DIAG: report the capabilities of the config SDL actually chose.
 // The compat path below can hand back an ES2-only config after normalizing
 // RENDERABLE_TYPE; a context request that outruns the config is exactly BAD_MATCH.
 static void silicaLogChosenConfig(EGLDisplay dpy, EGLConfig cfg) {
@@ -334,7 +334,7 @@ static void silicaLogChosenConfig(EGLDisplay dpy, EGLConfig cfg) {
         gca(dpy, cfg, 0x3033 /* SURFACE_TYPE */, &surface);
         gca(dpy, cfg, 0x3042 /* CONFORMANT */, &conformant);
     }
-    LOG_TO_I("SILICA_EGL_DIAG config dpy=%p cfg=%p renderable=0x%x surface=0x%x conformant=0x%x es2=%d es3=%d",
+    LOG_TO_I("ONIGAMI_EGL_DIAG config dpy=%p cfg=%p renderable=0x%x surface=0x%x conformant=0x%x es2=%d es3=%d",
              dpy, cfg, (unsigned)renderable, (unsigned)surface, (unsigned)conformant,
              (renderable & 0x0004) != 0, (renderable & 0x0040) != 0);
 }
