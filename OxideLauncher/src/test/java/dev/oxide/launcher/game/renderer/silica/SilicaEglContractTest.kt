@@ -59,10 +59,36 @@ class SilicaEglContractTest {
     }
 
     /** Strip strings and comments so assertions see code, not prose. */
-    private fun code(source: String): String = source
-        .replace(Regex("\"(?:[^\"\\]|\\.)*\""), "\"\"")
-        .replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), " ")
-        .replace(Regex("//[^\n]*"), "")
+    private fun code(source: String): String {
+        // Plain scanner, no regex escapes: strings, // lines and /* blocks
+        // are blanked so assertions see code, not prose.
+        val out = StringBuilder()
+        var i = 0
+        var inStr = false
+        var inLine = false
+        var inBlock = 0
+        while (i < source.length) {
+            val c = source[i]
+            if (inLine) {
+                if (c == '\n') { inLine = false; out.append(c) }
+            } else if (inBlock > 0) {
+                if (c == '*' && i + 1 < source.length && source[i + 1] == '/') { inBlock--; i++ }
+            } else if (inStr) {
+                if (c == '\\' && i + 1 < source.length) i++
+                else if (c == '"') inStr = false
+            } else if (c == '/' && i + 1 < source.length && source[i + 1] == '/') {
+                inLine = true
+            } else if (c == '/' && i + 1 < source.length && source[i + 1] == '*') {
+                inBlock = 1
+            } else if (c == '"') {
+                inStr = true
+            } else {
+                out.append(c)
+            }
+            i++
+        }
+        return out.toString()
+    }
 
     @Test
     fun wrappersNeverConsumeTheBackendErrorFlag() {
