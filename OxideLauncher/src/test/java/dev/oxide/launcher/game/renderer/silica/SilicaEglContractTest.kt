@@ -316,3 +316,4 @@ class SilicaEglContractTest {
             hook.contains("silicaLogLastDiag"),
         )
     }
+}
