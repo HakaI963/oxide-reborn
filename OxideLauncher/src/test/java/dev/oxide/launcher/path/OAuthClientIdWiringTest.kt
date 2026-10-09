@@ -290,22 +290,22 @@ class OAuthClientIdWiringTest {
     // ---- 版本号 -----------------------------------------------------------
 
     @Test
-    fun theReleaseIsBumpedToOnePointThirteenPointZeroWhileTheAppStillSaysOneZeroZero() {
+    fun theReleaseIsBumpedToOnePointFourteenPointZeroWhileTheAppStillSaysOneZeroZero() {
         val properties = moduleGradleProperties().readText()
-        assertEquals("1.13.0", propertyValue(properties, "launcher_version_name"))
+        assertEquals("1.14.0", propertyValue(properties, "launcher_version_name"))
         // 发行号与用户看到的版本号是两件事，报错版本就等于把两者搞混
         assertEquals("1.0.0", propertyValue(properties, "launcher_display_version"))
         assertTrue(
             "the explanatory comment must name the release it describes, not an older one",
-            properties.contains("GitHub release is v1.13.0")
+            properties.contains("GitHub release is v1.14.0")
         )
     }
 
     @Test
     fun theVersionCodeIsMonotonic() {
-        // 101300 是 v1.13.0；versionCode 变小或不变，会让已经装上的用户装不了这一版
+        // 101400 是 v1.14.0；versionCode 变小或不变，会让已经装上的用户装不了这一版
         val code = propertyValue(moduleGradleProperties().readText(), "launcher_version_code")
-        assertEquals("launcher_version_code must be the integer 101300 for v1.13.0", "101300", code)
+        assertEquals("launcher_version_code must be the integer 101400 for v1.14.0", "101400", code)
         assertTrue(
             "launcher_version_code must parse as an integer so versionCode never silently defaults",
             code?.toIntOrNull() != null,
