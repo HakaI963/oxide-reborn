@@ -248,7 +248,13 @@ jobs:
             "$BT/zipalign" -c 4 "$APK"
             "$BT/apksigner" verify "$APK"
           done
-          echo "all release APKs pass integrity gates after download"
+          echo "all release APKs pass integrity and renderer gates after download"
+            LIST=$(unzip -Z1 "$APK" | grep '^lib/' || true)
+            ONIGAMI=$(printf '%s\n' "$LIST" | grep -c libonigami || true)
+            SILICA=$(printf '%s\n' "$LIST" | grep -c libsilica || true)
+            echo "$APK" libonigami_so_entries=$ONIGAMI libsilica_so_entries=$SILICA
+            test "$ONIGAMI" -ge 1 || { echo "::error::libonigami.so missing from $APK"; exit 1; }
+            test "$SILICA" -eq 0 || { echo "::error::libsilica.so present in $APK"; exit 1; }
 
       - name: List APKs
         run: |
