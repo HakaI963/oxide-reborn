@@ -260,6 +260,18 @@ static void silicaDescribeCtxAttribs(const EGLint *attrib_list, char *out, size_
 
 static bool sSilicaDiagOriginLogged = false;
 
+// Surface Silica's latest refusal detail through this file's visible log
+// channel. Silica's own android-log tag does not reach the launcher console,
+// so without this the decisive facts would stay invisible. Null-safe: when
+// Silica is not the renderer the lookup simply yields nothing.
+static void silicaLogLastDiag(const char *attempt) {
+    typedef const char *(*LDD)(void);
+    LDD fn = (LDD)dlsym(RTLD_DEFAULT, "silica_last_egl_diag");
+    if (fn == NULL) return;
+    const char *detail = fn();
+    LOG_TO_I("SILICA_EGL_DIAG silica-detail attempt=%s %s", attempt, detail != NULL ? detail : "(null)");
+}
+
 static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share, const EGLint *attrib_list) {
     if (sOrigEglCreateContext == NULL) {
         LOG_TO_E("SDL_Hook: eglCreateContext was not resolved");
@@ -281,6 +293,7 @@ static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share
 
     void *ctx = sOrigEglCreateContext(dpy, config, share, attrib_list);
     LOG_TO_I("SILICA_EGL_DIAG attempt=requested ctx=%p", ctx);
+    if (ctx == NULL) silicaLogLastDiag("requested");
     if (ctx != NULL || !sdlGlesCompatEnabled()) return ctx;
 
     bool esSemantics = sForcedEsProfile;
@@ -294,12 +307,14 @@ static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share
     LOG_TO_I("SILICA_EGL_DIAG attempt=no-khr attribs=[%s]", fixdesc);
     ctx = sOrigEglCreateContext(dpy, config, share, fixed);
     LOG_TO_I("SILICA_EGL_DIAG attempt=no-khr ctx=%p", ctx);
+    if (ctx == NULL) silicaLogLastDiag("no-khr");
     if (ctx != NULL || !esSemantics || version <= 2) return ctx; // CV=2 为移动端最后兜底
 
     LOG_TO_W("SDL_Hook: retrying eglCreateContext with CV=2 after CV=%d failed", version);
     EGLint es2[3] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
     ctx = sOrigEglCreateContext(dpy, config, share, es2);
     LOG_TO_I("SILICA_EGL_DIAG attempt=gles2 ctx=%p", ctx);
+    if (ctx == NULL) silicaLogLastDiag("gles2");
     return ctx;
 }
 
