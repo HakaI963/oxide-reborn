@@ -91,6 +91,85 @@ std::string describe_ctx_attribs(const EGLint* attr) {
              minor, flags < 0 ? 0 : (unsigned)flags, profile < 0 ? 0 : (unsigned)profile);
     return buf;
 }
+// ---- explicit error queue -------------------------------------------------
+// Per-thread, as EGL requires: an error raised on the render thread must never
+// be handed to a different thread's read.
+thread_local EGLint g_frontend_error = EGL_SUCCESS;
+
+void set_frontend_error(EGLint error) { g_frontend_error = error; }
+
+// Reads the backend error once for diagnostics and queues the real code. Safe
+// precisely because the app is served by the eglGetError exported below.
+EGLint capture_backend_error() {
+    typedef EGLint (*GS)(void);
+    auto ge = (GS)driver::resolve("eglGetError");
+    EGLint error = ge ? ge() : EGL_SUCCESS;
+    if (error != EGL_SUCCESS) set_frontend_error(error);
+    return error;
+}
+
+const char* egl_error_name(EGLint error) {
+    switch (error) {
+    case EGL_SUCCESS: return "EGL_SUCCESS";
+    case EGL_NOT_INITIALIZED: return "EGL_NOT_INITIALIZED";
+    case EGL_BAD_ACCESS: return "EGL_BAD_ACCESS";
+    case EGL_BAD_ALLOC: return "EGL_BAD_ALLOC";
+    case EGL_BAD_ATTRIBUTE: return "EGL_BAD_ATTRIBUTE";
+    case EGL_BAD_CONFIG: return "EGL_BAD_CONFIG";
+    case EGL_BAD_CONTEXT: return "EGL_BAD_CONTEXT";
+    case EGL_BAD_DISPLAY: return "EGL_BAD_DISPLAY";
+    case EGL_BAD_MATCH: return "EGL_BAD_MATCH";
+    case EGL_BAD_PARAMETER: return "EGL_BAD_PARAMETER";
+    case EGL_BAD_NATIVE_WINDOW: return "EGL_BAD_NATIVE_WINDOW";
+    case EGL_CONTEXT_LOST: return "EGL_CONTEXT_LOST";
+    default: return "EGL_<other>";
+    }
+}
+
+// ---- desktop request analysis ---------------------------------------------
+struct CtxRequest {
+    bool desktop = false;   // asked for desktop GL, not ES
+    int major = 0;
+    int minor = 0;
+    EGLint flags = 0;
+    EGLint profile = 0;
+    int client = 0;
+};
+
+// Desktop is decided by attributes that only ever appear in a desktop request: a
+// profile mask, or the desktop context flags. EGL_CONTEXT_CLIENT_VERSION alone
+// stays ES, which is the vanilla path.
+CtxRequest analyze_ctx(const EGLint* attr) {
+    CtxRequest r;
+    if (!attr) return r;
+    for (int i = 0; attr[i] != EGL_NONE && i < 60; i += 2) {
+        switch (attr[i]) {
+#if EGL_CONTEXT_CLIENT_VERSION == EGL_CONTEXT_MAJOR_VERSION
+        case EGL_CONTEXT_CLIENT_VERSION: r.client = attr[i + 1]; r.major = attr[i + 1]; break;
+#else
+        case EGL_CONTEXT_CLIENT_VERSION: r.client = attr[i + 1]; break;
+        case EGL_CONTEXT_MAJOR_VERSION: r.major = attr[i + 1]; break;
+#endif
+        case EGL_CONTEXT_MINOR_VERSION: r.minor = attr[i + 1]; break;
+        case kFlagsKhr: r.flags = attr[i + 1]; break;
+        case EGL_CONTEXT_OPENGL_PROFILE_MASK: r.profile = attr[i + 1]; break;
+        default: break;
+        }
+    }
+    const EGLint desktop_flags = 0x0001 /* DEBUG */ | 0x0002 /* FORWARD_COMPATIBLE */;
+    r.desktop = (r.profile != 0) || ((r.flags & desktop_flags) != 0);
+    return r;
+}
+
+// The ES request actually sent to a GLES backend for a desktop frontend ask.
+void build_es_request(const CtxRequest& in, EGLint* out, int cap) {
+    int version = 3;
+    if (in.major > 0 && in.major < 3) version = 2;
+    int n = 0;
+    if (n < cap - 2) { out[n++] = EGL_CONTEXT_CLIENT_VERSION; out[n++] = version; }
+    if (n < cap - 2) out[n++] = EGL_NONE;
+}
+
 } // namespace
 } // namespace silica::egl
 template <typename F>
