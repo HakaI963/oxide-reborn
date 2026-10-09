@@ -302,8 +302,9 @@ static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share
 static void silicaLogChosenConfig(EGLDisplay dpy, EGLConfig cfg) {
     typedef EGLBoolean (*GCA)(EGLDisplay, EGLConfig, EGLint, EGLint *);
     EGLint renderable = -1, surface = -1, conformant = -1;
-    // Host EGL handle already opened below; RTLD_DEFAULT is not used here
-    // because this file never links libEGL directly.
+    // Resolve from the global namespace, which is where the already-loaded
+    // libEGL publishes its entries. If the lookup fails the attributes stay at
+    // -1 and the log says so, rather than guessing a renderable type.
     GCA gca = (GCA)dlsym(RTLD_DEFAULT, "eglGetConfigAttrib");
     if (dpy == NULL || cfg == NULL) return;
     if (gca != NULL) {
