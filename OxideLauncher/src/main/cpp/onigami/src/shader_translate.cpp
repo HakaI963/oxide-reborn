@@ -12,6 +12,10 @@
 #include <sstream>
 namespace onigami {
 namespace {
+// Desktop compute-shader stage enum: not part of the ES 3.0 headers this
+// backend compiles against, so the GL value is spelled out locally.
+constexpr GLenum kComputeShaderDesktop = 0x91B9; /* GL_COMPUTE_SHADER */
+
 std::string trim_left(const std::string& s) {
     size_t i = 0;
     while (i < s.size() && isspace((unsigned char)s[i])) i++;
@@ -72,7 +76,7 @@ bool is_essl_source(const char* src) {
 Stage stage_from_gl(GLenum type) {
     if (type == GL_VERTEX_SHADER) return Stage::Vertex;
     if (type == GL_FRAGMENT_SHADER) return Stage::Fragment;
-    if (type == GL_COMPUTE_SHADER) return Stage::Compute;
+    if (type == kComputeShaderDesktop) return Stage::Compute;
     return Stage::Unknown;
 }
 TranslateResult translate_shader(GLenum glType, const char* src) {
