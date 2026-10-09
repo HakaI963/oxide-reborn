@@ -321,19 +321,26 @@ S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext shar
         backend_attr = translated;
         silica::egl::diag("silica: ctx desktop %d.%d profile=0x%x flags=0x%x -> ES version %d (config supports %d)",
                           req.major, req.minor, (unsigned)req.profile, (unsigned)req.flags, want, cfg_es);
-        // The driver must be in ES mode for the context about to be created;
-        // without this the backend rejects an ES request while bound to GL.
+    }
+    // The backend only speaks ES, so this thread must be bound to ES before any
+    // context is asked for. Desktop applications bind EGL_OPENGL_API as a matter
+    // of course; left in place, that binding makes even a minimal valid ES2
+    // request fail with EGL_BAD_MATCH against an ES-only config -- which is the
+    // observed all-three-attempts-fail. Binding ES when already ES is a no-op.
+    {
         auto bind = be<EGLBoolean (*)(EGLenum)>("eglBindAPI");
-        if (bind) {
-            if (bind(EGL_OPENGL_ES_API) != EGL_TRUE) {
-                const EGLint e = silica::egl::capture_backend_error();
-                SLOG(ERROR, "silica: eglBindAPI(EGL_OPENGL_ES_API) refused with %s; not creating a context",
-                     silica::egl::egl_error_name(e));
-                return EGL_NO_CONTEXT;
-            }
-        } else {
+        if (!bind) {
             silica::egl::set_frontend_error(EGL_BAD_MATCH);
-            SLOG(ERROR, "silica: eglBindAPI unavailable; cannot honour a desktop request as ES");
+            silica::egl::set_last_diag("bind entry missing; no context created");
+            SLOG(ERROR, "silica: eglBindAPI unavailable; cannot create a context");
+            return EGL_NO_CONTEXT;
+        }
+        if (bind(EGL_OPENGL_ES_API) != EGL_TRUE) {
+            const EGLint be_err = silica::egl::capture_backend_error();
+            silica::egl::set_last_diag("eglBindAPI(ES) refused with %s; no context created",
+                                       silica::egl::egl_error_name(be_err));
+            SLOG(ERROR, "silica: eglBindAPI(EGL_OPENGL_ES_API) refused with %s; no context created",
+                 silica::egl::egl_error_name(be_err));
             return EGL_NO_CONTEXT;
         }
     }
@@ -344,6 +351,11 @@ S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext shar
         // Real backend code, read once into the queue the app reads from.
         const EGLint e = silica::egl::capture_backend_error();
         std::lock_guard<std::mutex> l(silica::egl::g_mu);
+        silica::egl::set_last_diag("REFUSED with %s requested=[%s] sent=[%s] cfg_renderable=0x%x cfg_es=%d",
+                                       silica::egl::egl_error_name(e),
+                                       silica::egl::describe_ctx_attribs(attr).c_str(),
+                                       silica::egl::describe_ctx_attribs(backend_attr).c_str(),
+                                       (unsigned)caps.renderable, cfg_es);
         silica::egl::diag("silica: ctx REFUSED with %s requested=[%s] sent=[%s] cfg_renderable=0x%x cfg_es=%d cfg_surface=0x%x share=%s",
                           silica::egl::egl_error_name(e),
                           silica::egl::describe_ctx_attribs(attr).c_str(),
