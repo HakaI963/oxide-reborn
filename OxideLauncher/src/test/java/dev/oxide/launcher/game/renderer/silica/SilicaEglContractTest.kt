@@ -132,4 +132,38 @@ class SilicaEglContractTest {
             eglSource().contains("has no backend entry"),
         )
     }
+
+    private fun hookSource(): String = locate(
+        "jni/sdl_hook.c"
+    ).readText()
+
+    @Test
+    fun hookProxyNeverReadsTheBackendErrorFlag() {
+        // The SDL retry proxy sits between the app and the backend on the
+        // context path. A single eglGetError here would consume the flag and
+        // forge EGL_SUCCESS for the application's own read, exactly like the
+        // wrapper bug above. Attrib tracing must carry the diagnostics alone.
+        val body = code(hookSource())
+        org.junit.Assert.assertFalse(
+            "proxyEglCreateContext must not call eglGetError",
+            body.contains("eglGetError"),
+        )
+    }
+
+    @Test
+    fun hookProxyTracesOriginAndAttempts() {
+        val raw = hookSource()
+        org.junit.Assert.assertTrue(
+            "origin of the backend entry must be logged via dladdr",
+            raw.contains("SILICA_EGL_DIAG origin"),
+        )
+        org.junit.Assert.assertTrue(
+            "requested attempt must log decoded attribs",
+            raw.contains("SILICA_EGL_DIAG entry"),
+        )
+        org.junit.Assert.assertTrue(
+            "retries must log decoded attribs and results",
+            raw.contains("SILICA_EGL_DIAG attempt="),
+        )
+    }
 }
