@@ -93,25 +93,76 @@ S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext shar
          (void*)f, (void*)dpy, (void*)cfg, share == EGL_NO_CONTEXT ? "null" : "set",
          silica::egl::describe_ctx_attribs(attr).c_str());
     if (!f) {
-        // Entry missing, not a backend refusal: say exactly that. The backend
-        // error flag is untouched (nothing was called).
+        // Entry missing, not a backend refusal: say exactly that. Nothing was
+        // called, so there is no backend code to queue.
+        silica::egl::set_frontend_error(EGL_BAD_MATCH);
         SLOG(ERROR, "silica: eglCreateContext has no backend entry; failing without calling through");
         return EGL_NO_CONTEXT;
     }
-    EGLContext ctx = f(dpy, cfg, share, attr);
+
+    // Desktop requests are translated to ES (see file header). ES requests pass
+    // through untouched, so the vanilla path is unchanged.
+    const silica::egl::CtxRequest req = silica::egl::analyze_ctx(attr);
+    const EGLint* backend_attr = attr;
+    EGLint translated[3] = {EGL_NONE, EGL_NONE, EGL_NONE};
+    if (req.desktop) {
+        silica::egl::build_es_request(req, translated, 3);
+        backend_attr = translated;
+        SLOG(INFO, "silica: eglCreateContext desktop request %d.%d profile=0x%x flags=0x%x -> ES request [%s]",
+             req.major, req.minor, (unsigned)req.profile, (unsigned)req.flags,
+             silica::egl::describe_ctx_attribs(translated).c_str());
+        // The driver must be in ES mode for the context about to be created;
+        // without this the backend rejects an ES request while bound to GL.
+        auto bind = be<EGLBoolean (*)(EGLenum)>("eglBindAPI");
+        if (bind) {
+            if (bind(EGL_OPENGL_ES_API) != EGL_TRUE) {
+                const EGLint e = silica::egl::capture_backend_error();
+                SLOG(ERROR, "silica: eglBindAPI(EGL_OPENGL_ES_API) refused with %s; not creating a context",
+                     silica::egl::egl_error_name(e));
+                return EGL_NO_CONTEXT;
+            }
+        } else {
+            silica::egl::set_frontend_error(EGL_BAD_MATCH);
+            SLOG(ERROR, "silica: eglBindAPI unavailable; cannot honour a desktop request as ES");
+            return EGL_NO_CONTEXT;
+        }
+    }
+
+    EGLContext ctx = f(dpy, cfg, share, backend_attr);
     SLOG(INFO, "SILICA_EGL_DIAG exit ctx=%p", (void*)ctx);
     if (ctx == EGL_NO_CONTEXT) {
+        // Real backend code, read once into the queue the app reads from.
+        const EGLint e = silica::egl::capture_backend_error();
         std::lock_guard<std::mutex> l(silica::egl::g_mu);
-        // No backend eglGetError call here by design: the flag stays queued
-        // for the application's own read (see file header).
-        SLOG(ERROR, "silica: eglCreateContext refused dpy=%p cfg=%p share=%s [%s]; backend error left queued",
+        SLOG(ERROR, "silica: eglCreateContext refused dpy=%p cfg=%p share=%s requested=[%s] sent=[%s] with %s",
              (void*)dpy, (void*)cfg, share == EGL_NO_CONTEXT ? "null" : "set",
-             silica::egl::describe_ctx_attribs(attr).c_str());
+             silica::egl::describe_ctx_attribs(attr).c_str(),
+             silica::egl::describe_ctx_attribs(backend_attr).c_str(),
+             silica::egl::egl_error_name(e));
     } else if (silica::config::diagnostics()) {
         SLOG(DEBUG, "silica: eglCreateContext ok ctx=%p dpy=%p share=%s [%s]", (void*)ctx, (void*)dpy,
              share == EGL_NO_CONTEXT ? "null" : "set", silica::egl::describe_ctx_attribs(attr).c_str());
     }
     return ctx;
+}
+// The application resolves eglGetError through POJAVEXEC_EGL, which lands in
+// this library, so this is the read the app actually performs. A queued real
+// code is returned once and cleared; otherwise the backend is asked directly.
+S_API EGLint eglGetError(void) {
+    SE_INIT();
+    EGLint queued = silica::egl::g_frontend_error;
+    if (queued != EGL_SUCCESS) {
+        silica::egl::g_frontend_error = EGL_SUCCESS;
+        // Drain the backend flag too: our queue replaces rather than queues
+        // behind it, so a stale backend error cannot resurface later.
+        auto ge = be<EGLint (*)(void)>("eglGetError");
+        const EGLint stale = ge ? ge() : EGL_SUCCESS;
+        SLOG(INFO, "silica: eglGetError -> %s (queued; backend had %s)",
+             silica::egl::egl_error_name(queued), silica::egl::egl_error_name(stale));
+        return queued;
+    }
+    auto ge = be<EGLint (*)(void)>("eglGetError");
+    return ge ? ge() : EGL_SUCCESS;
 }
 S_API EGLBoolean eglDestroyContext(EGLDisplay dpy, EGLContext ctx) {
     SE_INIT();
