@@ -21,7 +21,7 @@ package dev.oxide.launcher.game.renderer
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
 import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
-import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
+import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
 import dev.oxide.launcher.game.version.installed.utils.isBiggerVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerOrEqualVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerVer
@@ -43,7 +43,7 @@ import java.io.File
  * 也就是选中的 MC 版本严格大于渲染器上限时，渲染器会被直接拒绝。而
  * `GameVersionNumber` 的 ReleaseType 顺序是 `SNAPSHOT < PRE_RELEASE < RC < GA`，
  * 于是把上限写成 "26.3-snapshot-3" 会让 "26.3" 被判为更大——本测试钉住三台
- * 内置渲染器（Copper Oxide、Silica、LTW、Holy GL4ES）的上限必须是正式版号 "26.3"。
+ * 内置渲染器（Copper Oxide、Onigami、LTW、Holy GL4ES）的上限必须是正式版号 "26.3"。
  * Mojo Zink 已删除：它的 id、类名与 mesa 产物名都在下面的已删除标记里，
  * 出现在自有源码中即判失败。
  *
@@ -59,7 +59,7 @@ class RendererVersionGateTest {
 
     private val builtinRenderers: List<RendererInterface> = listOf(
         CopperOxideRenderer,
-        SilicaRenderer,
+        OnigamiRenderer,
         LTWRenderer,
         HolyGL4ESRenderer
     )
