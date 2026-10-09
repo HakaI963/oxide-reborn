@@ -28,12 +28,10 @@
 #define S_API
 #endif
 #define SLOG(prio, ...) __android_log_print(ANDROID_LOG_##prio, "silica", __VA_ARGS__)
-// KHR context-attribute ids, decoded for diagnostics (local names so no header
-// can collide with them).
-constexpr int kMajorKhr = 0x3098;
-constexpr int kMinorKhr = 0x30FB;
+// Context-attribute ids decoded for diagnostics. EGL 1.5 promoted the KHR
+// version/profile ids to core, so the NDK header names are used directly;
+// only the flags id keeps a local name (it stayed KHR-suffixed).
 constexpr int kFlagsKhr = 0x30FC;
-constexpr int kProfileKhr = 0x30FD;
 namespace silica::egl {
 namespace {
 std::mutex g_mu;
@@ -63,10 +61,10 @@ std::string describe_ctx_attribs(const EGLint* attr) {
     for (int i = 0; attr[i] != EGL_NONE; i += 2) {
         switch (attr[i]) {
             case EGL_CONTEXT_CLIENT_VERSION: client = attr[i + 1]; break;
-            case kMajorKhr: major = attr[i + 1]; break;
-            case kMinorKhr: minor = attr[i + 1]; break;
+            case EGL_CONTEXT_MAJOR_VERSION: major = attr[i + 1]; break;
+            case EGL_CONTEXT_MINOR_VERSION: minor = attr[i + 1]; break;
             case kFlagsKhr: flags = attr[i + 1]; break;
-            case kProfileKhr: profile = attr[i + 1]; break;
+            case EGL_CONTEXT_OPENGL_PROFILE_MASK: profile = attr[i + 1]; break;
             default: break;
         }
         if (i > 60) break; // never walk a hostile list

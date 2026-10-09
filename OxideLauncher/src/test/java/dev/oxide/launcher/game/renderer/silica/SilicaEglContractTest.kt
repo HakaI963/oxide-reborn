@@ -42,7 +42,7 @@ import java.io.File
 class SilicaEglContractTest {
 
     private fun eglSource(): String = locate(
-        "src/main/cpp/silica/src/egl/exports.cpp"
+        "cpp/silica/src/egl/exports.cpp"
     ).readText()
 
     private fun locate(relativePath: String): File {
