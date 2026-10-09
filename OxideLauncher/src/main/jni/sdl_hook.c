@@ -213,6 +213,21 @@ static eglChooseConfig_t sOrigEglChooseConfig = NULL;
 static eglCreateContext_t sOrigEglCreateContext = NULL;
 static eglSwapBuffers_t sOrigEglSwapBuffers = NULL;
 
+// KHR context ids by value: this TU's EGL headers only declare the basic
+// set, and eglext.h is not available here. Values per the EGL registry.
+#ifndef kSilicaCtxMajor
+#define kSilicaCtxMajor 0x3098
+#endif
+#ifndef kSilicaCtxMinor
+#define kSilicaCtxMinor 0x30FB
+#endif
+#ifndef kSilicaCtxFlags
+#define kSilicaCtxFlags 0x30FC
+#endif
+#ifndef kSilicaCtxProfile
+#define kSilicaCtxProfile 0x30FD
+#endif
+
 // SILICA_EGL_DIAG: decode context attribs for logs (values only, bounded walk).
 // This proxy deliberately never calls eglGetError: the backend error flag must
 // stay queued for the application's own read. A single read here is what once
@@ -235,21 +250,6 @@ static void silicaDescribeCtxAttribs(const EGLint *attrib_list, char *out, size_
     snprintf(out, cap, "pairs=%d client=%d major=%d minor=%d flags=0x%x profile=0x%x", n, client, major,
              minor, flags < 0 ? 0 : (unsigned)flags, profile < 0 ? 0 : (unsigned)profile);
 }
-
-// KHR context ids by value: this TU's EGL headers only declare the basic
-// set, and eglext.h is not available here. Values per the EGL registry.
-#ifndef kSilicaCtxMajor
-#define kSilicaCtxMajor 0x3098
-#endif
-#ifndef kSilicaCtxMinor
-#define kSilicaCtxMinor 0x30FB
-#endif
-#ifndef kSilicaCtxFlags
-#define kSilicaCtxFlags 0x30FC
-#endif
-#ifndef kSilicaCtxProfile
-#define kSilicaCtxProfile 0x30FD
-#endif
 
 static bool sSilicaDiagOriginLogged = false;
 
