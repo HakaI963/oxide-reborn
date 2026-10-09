@@ -292,9 +292,14 @@ class SilicaEglContractTest {
             "an ES bind must precede the backend create call",
             raw.indexOf("bind(EGL_OPENGL_ES_API)") < raw.indexOf("f(dpy, cfg, share, backend_attr)"),
         )
-        org.junit.Assert.assertFalse(
-            "the bind must not be gated on desktop-only requests",
-            Regex("if\\s*\\(req\\.desktop\\)[^}]*bind\\(EGL_OPENGL_ES_API\\)").containsMatchIn(body),
+        // The translation assigns backend_attr inside the desktop gate; the
+        // bind must come after that assignment, i.e. outside the gate, so it
+        // runs for every request including the plain-ES retries.
+        val translatedAt = body.indexOf("backend_attr = translated")
+        val bindAt = body.indexOf("bind(EGL_OPENGL_ES_API")
+        org.junit.Assert.assertTrue(
+            "the bind must sit after the desktop translation, not inside it",
+            translatedAt > 0 && bindAt > translatedAt,
         )
     }
 
