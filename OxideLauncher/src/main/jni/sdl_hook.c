@@ -10,6 +10,7 @@
 
 #include <bytehook.h>
 #include <dlfcn.h>
+#include <stdio.h>
 #include <jni.h>
 #include <stdlib.h>
 #include <string.h>
@@ -212,13 +213,52 @@ static eglChooseConfig_t sOrigEglChooseConfig = NULL;
 static eglCreateContext_t sOrigEglCreateContext = NULL;
 static eglSwapBuffers_t sOrigEglSwapBuffers = NULL;
 
+// SILICA_EGL_DIAG: decode context attribs for logs (values only, bounded walk).
+// This proxy deliberately never calls eglGetError: the backend error flag must
+// stay queued for the application's own read. A single read here is what once
+// turned every real refusal into a reported EGL_SUCCESS.
+static void silicaDescribeCtxAttribs(const EGLint *attrib_list, char *out, size_t cap) {
+    if (attrib_list == NULL || out == NULL || cap == 0) {
+        if (out != NULL && cap > 0) snprintf(out, cap, "null");
+        return;
+    }
+    int client = -1, major = -1, minor = -1, flags = -1, profile = -1, n = 0;
+    for (int i = 0; attrib_list[i] != EGL_NONE && i < 60; i += 2) {
+        EGLint a = attrib_list[i], v = attrib_list[i + 1];
+        n++;
+        if (a == EGL_CONTEXT_CLIENT_VERSION) client = v;
+        else if (a == EGL_CONTEXT_MAJOR_VERSION_KHR) major = v;
+        else if (a == EGL_CONTEXT_MINOR_VERSION_KHR) minor = v;
+        else if (a == EGL_CONTEXT_FLAGS_KHR) flags = v;
+        else if (a == EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR) profile = v;
+    }
+    snprintf(out, cap, "pairs=%d client=%d major=%d minor=%d flags=0x%x profile=0x%x", n, client, major,
+             minor, flags < 0 ? 0 : (unsigned)flags, profile < 0 ? 0 : (unsigned)profile);
+}
+
+static bool sSilicaDiagOriginLogged = false;
+
 static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share, const EGLint *attrib_list) {
     if (sOrigEglCreateContext == NULL) {
         LOG_TO_E("SDL_Hook: eglCreateContext was not resolved");
         return NULL;
     }
+    if (!sSilicaDiagOriginLogged) {
+        // Proves at runtime which EGL implementation serves context creation:
+        // system libEGL means SDL bypasses any renderer wrapper for this call.
+        sSilicaDiagOriginLogged = true;
+        Dl_info info;
+        const char *from = "(dladdr failed)";
+        if (dladdr((void *) sOrigEglCreateContext, &info) && info.dli_fname != NULL) from = info.dli_fname;
+        LOG_TO_I("SILICA_EGL_DIAG origin backend=%p from=%s", sOrigEglCreateContext, from);
+    }
+    char req[192];
+    silicaDescribeCtxAttribs(attrib_list, req, sizeof(req));
+    LOG_TO_I("SILICA_EGL_DIAG entry dpy=%p cfg=%p share=%s attribs=[%s]", (void *) dpy, (void *) config,
+             share != NULL ? "set" : "null", req);
 
     void *ctx = sOrigEglCreateContext(dpy, config, share, attrib_list);
+    LOG_TO_I("SILICA_EGL_DIAG attempt=requested ctx=%p", ctx);
     if (ctx != NULL || !sdlGlesCompatEnabled()) return ctx;
 
     bool esSemantics = sForcedEsProfile;
@@ -227,12 +267,18 @@ static void *proxyEglCreateContext(EGLDisplay dpy, EGLConfig config, void *share
     if (version == 0) return ctx;
 
     LOG_TO_W("SDL_Hook: retrying eglCreateContext without KHR version attrs (CV=%d)", version);
+    char fixdesc[192];
+    silicaDescribeCtxAttribs(fixed, fixdesc, sizeof(fixdesc));
+    LOG_TO_I("SILICA_EGL_DIAG attempt=no-khr attribs=[%s]", fixdesc);
     ctx = sOrigEglCreateContext(dpy, config, share, fixed);
+    LOG_TO_I("SILICA_EGL_DIAG attempt=no-khr ctx=%p", ctx);
     if (ctx != NULL || !esSemantics || version <= 2) return ctx; // CV=2 为移动端最后兜底
 
     LOG_TO_W("SDL_Hook: retrying eglCreateContext with CV=2 after CV=%d failed", version);
     EGLint es2[3] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
-    return sOrigEglCreateContext(dpy, config, share, es2);
+    ctx = sOrigEglCreateContext(dpy, config, share, es2);
+    LOG_TO_I("SILICA_EGL_DIAG attempt=gles2 ctx=%p", ctx);
+    return ctx;
 }
 
 static EGLBoolean proxyEglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list, EGLConfig *configs,
