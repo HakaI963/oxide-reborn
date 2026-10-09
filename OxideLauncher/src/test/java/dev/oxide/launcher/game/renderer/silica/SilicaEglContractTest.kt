@@ -252,9 +252,11 @@ class SilicaEglContractTest {
             "the read must use EGL_RENDERABLE_TYPE",
             Regex("0x3040").containsMatchIn(body),
         )
+        // The re-ask notice is a log string, and code() strips string literals by
+        // design, so this one assertion reads the raw source.
         assertTrue(
             "an ES2-only config must trigger a re-ask, not silent acceptance",
-            body.contains("ES3 re-ask") || body.contains("re-asked for an ES3-capable config"),
+            hookSource().contains("re-asked for an ES3-capable config"),
         )
     }
 }
