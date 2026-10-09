@@ -8,12 +8,23 @@
 // What IS wrapped: context create/destroy/current (probe fill + state setup +
 // refusal logs) and eglGetProcAddress (own wrappers first, host otherwise).
 //
-// ERROR DISCIPLINE (hard lesson, device-proven): these wrappers NEVER call the
-// backend eglGetError. Silica does not export eglGetError, so the application
-// reads errors from the host implementation; consuming the flag here for a log
-// line is what once turned every real failure into a reported EGL_SUCCESS.
-// Refusals are logged with their decoded arguments while the backend error
-// flag stays queued for the app's own read. No errors are invented.
+// ERROR DISCIPLINE (device-proven): refusals are logged with their decoded
+// arguments, and the real backend code is captured exactly once into an explicit
+// thread-local queue that the eglGetError exported below serves. No error is
+// invented, and none is dropped.
+//
+// WHY THE QUEUE (device-proven): the application resolves eglGetError through
+// POJAVEXEC_EGL, which lands in this library, so the read it performs is the one
+// exported here, not the backend's own flag. Reading the backend flag only to
+// log it and discard the code is exactly what reported EGL_SUCCESS forever.
+//
+// DESKTOP REQUEST TRANSLATION (device-proven): RenderPearl/Iris request a
+// desktop core-profile context (MAJOR/MINOR + PROFILE_MASK + FLAGS) on a device
+// with GLES only. The backend refuses such a request, and dropping only the KHR
+// version attributes does not help, because PROFILE_MASK and the debug flag are
+// unsupported too. A desktop request is therefore rewritten into a plain ES 3
+// request and the API is bound to ES before creation. The context really is ES
+// and the backend is never spoofed.
 #include "silica/driver.h"
 #include "silica/probe.h"
 #include "silica/shim_config.h"
