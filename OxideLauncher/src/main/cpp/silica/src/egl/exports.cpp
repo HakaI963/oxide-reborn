@@ -33,6 +33,7 @@
 #include <mutex>
 #include <string>
 #include <android/log.h>
+#include <cstring>
 #include <unistd.h>
 #include <cstdarg>
 #include <cstdio>
@@ -291,6 +292,9 @@ template <typename F>
 static F be(const char* n) { return (F)silica::driver::resolve(n); }
 #define SE_INIT() do { silica::config::load_once(); silica::driver::ensure(); } while (0)
 extern "C" {
+static_assert(EGL_TRUE == 1, "EGL_TRUE must be 1 for backend-result comparisons");
+static_assert(sizeof(EGLBoolean) == sizeof(unsigned int), "EGLBoolean width assumed by wrapper signatures");
+
 S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, const EGLint* attr) {
     SE_INIT();
     auto f = be<EGLContext (*)(EGLDisplay, EGLConfig, EGLContext, const EGLint*)>("eglCreateContext");
@@ -457,6 +461,19 @@ S_API EGLBoolean eglBindAPI(EGLenum api) {
                       r == EGL_TRUE ? "ok" : "FAILED");
     return r;
 }
+// Releasing the thread drops whatever it had current, so the remembered
+// frontend binding goes back to the default with it (working-renderer rule);
+// otherwise a recycled thread would keep a stale desktop marking.
+S_API EGLBoolean eglReleaseThread(void) {
+    SE_INIT();
+    auto rel = be<EGLBoolean (*)(void)>("eglReleaseThread");
+    const EGLBoolean r = rel ? rel() : EGL_FALSE;
+    if (r == EGL_TRUE) {
+        silica::egl::g_frontend_api = EGL_OPENGL_ES_API;
+        silica::egl::g_frontend_error = EGL_SUCCESS;
+    }
+    return r;
+}
 // What the frontend asked for, not what is bound underneath.
 S_API EGLenum eglQueryAPI(void) {
     SE_INIT();
@@ -468,11 +485,30 @@ S_API const char* silica_last_egl_diag(void) {
     return silica::egl::g_last_diag.c_str();
 }
 typedef void (*silica_proc_t)(void);
+// Every EGL entry point this library defines. An EGL name must resolve to
+// this layer's wrapper deterministically: falling through to a host entry for
+// one of these silently bypasses the frontend tracking, the error queue and
+// the desktop translation (the working renderer keeps the same explicit
+// table for exactly this reason).
+struct SilicaEglEntry { const char* name; silica_proc_t fn; };
+static const SilicaEglEntry kSilicaEglEntries[] = {
+    {"eglBindAPI", (silica_proc_t)eglBindAPI},
+    {"eglCreateContext", (silica_proc_t)eglCreateContext},
+    {"eglDestroyContext", (silica_proc_t)eglDestroyContext},
+    {"eglGetError", (silica_proc_t)eglGetError},
+    {"eglMakeCurrent", (silica_proc_t)eglMakeCurrent},
+    {"eglQueryAPI", (silica_proc_t)eglQueryAPI},
+    {"eglReleaseThread", (silica_proc_t)eglReleaseThread},
+    {nullptr, nullptr},
+};
 S_API silica_proc_t eglGetProcAddress(const char* name) {
     SE_INIT();
     if (!name || !*name) return nullptr;
-    // Own wrappers first (covers every gl* export plus the three context
-    // functions above) without a hand-maintained table.
+    for (const SilicaEglEntry* e = kSilicaEglEntries; e->name; ++e) {
+        if (strcmp(name, e->name) == 0) return e->fn;
+    }
+    // Own GL wrappers next (covers every gl* export) without a hand-maintained
+    // table; EGL names never reach here.
     void* self = dlopen("libsilica.so", RTLD_NOLOAD | RTLD_LOCAL);
     if (self) {
         void* p = dlsym(self, name);
