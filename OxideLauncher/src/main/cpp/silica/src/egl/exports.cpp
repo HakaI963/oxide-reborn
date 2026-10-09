@@ -174,6 +174,26 @@ void build_es_request(const CtxRequest& in, EGLint* out, int cap) {
     if (n < cap - 2) out[n++] = EGL_NONE;
 }
 
+// ---- frontend API virtualization -------------------------------------------
+// The backend only speaks ES. When the app asks for desktop GL we bind ES
+// underneath and remember what the frontend asked for, so later queries and
+// context decisions each see a coherent answer. Per-thread, like all EGL
+// binding state.
+thread_local EGLenum g_frontend_api = EGL_OPENGL_ES_API;
+// Latest refusal in plain text for the SDL hook to surface through its own
+// (visible) log channel. Valid until the next EGL call on this thread; the
+// caller must log or copy it immediately.
+thread_local std::string g_last_diag;
+
+void set_last_diag(const char* fmt, ...) {
+    char line[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    g_last_diag = line;
+}
+
 // ---- diagnostics that survive the launcher console --------------------------
 // __android_log_print under the "silica" tag does not reach the log the user
 // pastes, so every decisive EGL fact is also appended to a file the launcher
