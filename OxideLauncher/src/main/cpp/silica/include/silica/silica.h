@@ -10,6 +10,8 @@
 extern "C" {
 #endif
 SILICA_API const char* silica_version(void);
+// Baked build identifier (commit + date) for runtime verification.
+SILICA_API const char* silica_build_id(void);
 // Probe-safe strings: never null; fall back to cached probe + log.
 SILICA_API const char* silica_renderer_string(void);
 SILICA_API const char* silica_version_string(void);

@@ -89,6 +89,9 @@ extern "C" {
 S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, const EGLint* attr) {
     SE_INIT();
     auto f = be<EGLContext (*)(EGLDisplay, EGLConfig, EGLContext, const EGLint*)>("eglCreateContext");
+    SLOG(INFO, "SILICA_EGL_DIAG entry backend=%p dpy=%p cfg=%p share=%s attribs=[%s]",
+         (void*)f, (void*)dpy, (void*)cfg, share == EGL_NO_CONTEXT ? "null" : "set",
+         silica::egl::describe_ctx_attribs(attr).c_str());
     if (!f) {
         // Entry missing, not a backend refusal: say exactly that. The backend
         // error flag is untouched (nothing was called).
@@ -96,6 +99,7 @@ S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext shar
         return EGL_NO_CONTEXT;
     }
     EGLContext ctx = f(dpy, cfg, share, attr);
+    SLOG(INFO, "SILICA_EGL_DIAG exit ctx=%p", (void*)ctx);
     if (ctx == EGL_NO_CONTEXT) {
         std::lock_guard<std::mutex> l(silica::egl::g_mu);
         // No backend eglGetError call here by design: the flag stays queued

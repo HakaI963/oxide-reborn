@@ -12,6 +12,7 @@
 // - Diagnostics: every open and every first-resolution logs path, flags and
 //   outcome. Pointers only (%p); no app, path-beyond-soname, or user data.
 #include "silica/driver.h"
+#include "silica/silica.h"
 #include <dlfcn.h>
 #include <mutex>
 #include <string>
@@ -88,7 +89,7 @@ void init_once() {
              egl_used ? egl_used : "(none)", gles_used ? gles_used : "(none)",
              g_angle ? 1 : 0, g_host_proc ? 1 : 0);
     g_identity = buf;
-    SLOG(INFO, "silica: backend %s", g_identity.c_str());
+    SLOG(INFO, "silica: build %s backend %s", silica_build_id(), g_identity.c_str());
     if (!g_egl || !g_gles || !g_host_proc) {
         SLOG(ERROR, "silica: backend incomplete (%s); EGL bootstrap cannot proceed", g_identity.c_str());
     }
