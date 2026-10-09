@@ -66,7 +66,7 @@ class RendererVersionGateTest {
 
     private val expectedRendererIds: Set<String> = setOf(
         "opengles3_oxide_copper",
-        "opengles3_oxide_silica",
+        "opengles3_oxide_onigami",
         "opengles3_oxide_ltw",
         "opengles2_oxide_holy"
     )
