@@ -119,8 +119,11 @@ libsilica.so exports (own code only):
 
 1. Probe-cache fallback for GL_RENDERER/GL_VERSION (+glGetStringi empty answer)
    with an explicit log line instead of strlen(nullptr).
-2. EGL refusal logging on every failing path + error rearm preserved for the
-   app's eglGetError.
+2. EGL refusal logging on every failing path. No error rearm: Silica does not
+   export eglGetError (the host owns the display path), so reading the backend
+   flag for a log line would consume what the app must read and forge
+   EGL_SUCCESS (device-proven Iris crash). Refusals log decoded arguments and
+   leave the flag queued.
 3. Single-driver consistency (ANGLE-half repair + log).
 4. makeCurrent failure states the cause (GL without a current context).
 5. Apple ARB-alias guard equivalent: n/a on Android (no alias attributes used).
