@@ -324,6 +324,17 @@ static void silicaLogChosenConfig(EGLDisplay dpy, EGLConfig cfg) {
              (renderable & 0x0004) != 0, (renderable & 0x0040) != 0);
 }
 
+// True when this config can actually back an ES 3 context. Read from the
+// config itself, never inferred from what was requested.
+static bool configSupportsEs3(EGLDisplay dpy, EGLConfig cfg) {
+    typedef EGLBoolean (*GCA)(EGLDisplay, EGLConfig, EGLint, EGLint *);
+    GCA gca = (GCA)dlsym(RTLD_DEFAULT, "eglGetConfigAttrib");
+    if (gca == NULL || dpy == NULL || cfg == NULL) return true; // cannot tell: do not interfere
+    EGLint renderable = 0;
+    if (gca(dpy, cfg, 0x3040 /* EGL_RENDERABLE_TYPE */, &renderable) != EGL_TRUE) return true;
+    return (renderable & 0x0040 /* EGL_OPENGL_ES3_BIT */) != 0;
+}
+
 static EGLBoolean proxyEglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list, EGLConfig *configs,
                                        EGLint config_size, EGLint *num_config) {
     if (sOrigEglChooseConfig == NULL) {
@@ -332,10 +343,29 @@ static EGLBoolean proxyEglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list
     }
 
     EGLBoolean result = sOrigEglChooseConfig(dpy, attrib_list, configs, config_size, num_config);
-    if (result && num_config != NULL && *num_config > 0) {
-        if (configs != NULL && config_size > 0) silicaLogChosenConfig(dpy, configs[0]);
+    if (result && num_config != NULL && *num_config > 0 && configs != NULL && config_size > 0) {
+        silicaLogChosenConfig(dpy, configs[0]);
+        // The first request can succeed and still hand back a config that cannot
+        // back the EGL_CONTEXT_CLIENT_VERSION 3 context that follows, which the
+        // backend refuses with EGL_BAD_MATCH. Only re-ask when the config really
+        // lacks ES3, so a perfectly good config is never discarded.
+        if (sdlGlesCompatEnabled() && !configSupportsEs3(dpy, configs[0])) {
+            EGLint fixed[64];
+            if (normalizeEglChooseConfigList(attrib_list, fixed, 64)) {
+                EGLint retryCount = 0;
+                EGLBoolean retry = sOrigEglChooseConfig(dpy, fixed, configs, config_size, &retryCount);
+                if (retry && retryCount > 0) {
+                    if (num_config != NULL) *num_config = retryCount;
+                    silicaLogChosenConfig(dpy, configs[0]);
+                    LOG_TO_I("SDL_Hook: eglChooseConfig re-asked for an ES3-capable config (count=%d)", retryCount);
+                    return retry;
+                }
+                LOG_TO_W("SDL_Hook: eglChooseConfig ES3 re-ask found nothing; keeping the original config");
+            }
+        }
         return result;
     }
+    if (result && num_config != NULL && *num_config > 0) return result;
     if (!sdlGlesCompatEnabled()) return result; // 兼容 fallback 仅限移动 ES 渲染器
 
     EGLint fixed[64];
