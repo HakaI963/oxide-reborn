@@ -41,6 +41,10 @@ import java.io.File
  */
 class SilicaEglContractTest {
 
+    private fun loaderSource(): String = locate(
+        "cpp/silica/src/driver/loader.cpp"
+    ).readText()
+
     private fun eglSource(): String = locate(
         "cpp/silica/src/egl/exports.cpp"
     ).readText()
@@ -314,6 +318,33 @@ class SilicaEglContractTest {
         org.junit.Assert.assertTrue(
             "the hook must surface it on the visible log channel",
             hook.contains("silicaLogLastDiag"),
+        )
+    }
+
+    @Test
+    fun backendEntriesResolveDlsymFirst() {
+        // Working-renderer contract: backend entries resolve via plain dlsym on
+        // the opened handle first, host dispatch second. A host
+        // eglGetProcAddress may refuse core entries such as eglBindAPI, which
+        // surfaced as could-not-bind failures.
+        val raw = loaderSource()
+        val dlsymAt = raw.indexOf("dlsym(g_egl, name)")
+        val hostAt = raw.indexOf("host_proc(name)")
+        org.junit.Assert.assertTrue(
+            "dlsym on the backend handle must precede host dispatch",
+            dlsymAt > 0 && hostAt > 0 && dlsymAt < hostAt,
+        )
+    }
+
+    @Test
+    fun boundDesktopFrontendMarksEveryCreationAsDesktop() {
+        // Working-renderer rule: the decision keys off the tracked frontend
+        // API, so plain-looking retries after a desktop bind are still
+        // translated instead of passing through to a refusal.
+        val body = code(eglSource())
+        org.junit.Assert.assertTrue(
+            "the desktop decision must consult the tracked frontend API",
+            body.contains("g_frontend_api"),
         )
     }
 }
