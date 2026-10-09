@@ -412,6 +412,47 @@ S_API EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read
     }
     return r;
 }
+// The backend only speaks ES. A desktop bind request is honoured for the
+// frontend (TRUE, and remembered) while ES is what is bound underneath, so the
+// backend is never left in an API mode its configs cannot satisfy. Without
+// this, one app-side eglBindAPI(EGL_OPENGL_API) poisons every later context
+// creation with EGL_BAD_MATCH.
+S_API EGLBoolean eglBindAPI(EGLenum api) {
+    SE_INIT();
+    const EGLenum backend_api = (api == EGL_OPENGL_API) ? EGL_OPENGL_ES_API : api;
+    auto bind = be<EGLBoolean (*)(EGLenum)>("eglBindAPI");
+    if (!bind) {
+        silica::egl::set_frontend_error(EGL_BAD_MATCH);
+        silica::egl::set_last_diag("eglBindAPI: no backend entry");
+        return EGL_FALSE;
+    }
+    const EGLBoolean r = bind(backend_api);
+    if (r == EGL_TRUE) {
+        silica::egl::g_frontend_api = api;
+    } else {
+        const EGLint e = silica::egl::capture_backend_error();
+        silica::egl::set_last_diag("eglBindAPI(%s) refused with %s",
+                                   api == EGL_OPENGL_API ? "OPENGL" :
+                                   api == EGL_OPENGL_ES_API ? "OPENGL_ES" : "other",
+                                   silica::egl::egl_error_name(e));
+    }
+    silica::egl::diag("silica: eglBindAPI frontend=%s backend=%s -> %s",
+                      api == EGL_OPENGL_API ? "OPENGL" :
+                      api == EGL_OPENGL_ES_API ? "OPENGL_ES" : "other",
+                      backend_api == EGL_OPENGL_ES_API ? "OPENGL_ES" : "other",
+                      r == EGL_TRUE ? "ok" : "FAILED");
+    return r;
+}
+// What the frontend asked for, not what is bound underneath.
+S_API EGLenum eglQueryAPI(void) {
+    SE_INIT();
+    return silica::egl::g_frontend_api;
+}
+// Latest refusal in plain text. Valid until the next EGL call on this thread.
+S_API const char* silica_last_egl_diag(void) {
+    SE_INIT();
+    return silica::egl::g_last_diag.c_str();
+}
 typedef void (*silica_proc_t)(void);
 S_API silica_proc_t eglGetProcAddress(const char* name) {
     SE_INIT();
