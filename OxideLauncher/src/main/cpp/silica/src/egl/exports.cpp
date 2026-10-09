@@ -333,12 +333,15 @@ S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext shar
         silica::egl::diag("silica: ctx desktop %d.%d profile=0x%x flags=0x%x -> ES version %d (config supports %d)",
                           req.major, req.minor, (unsigned)req.profile, (unsigned)req.flags, want, cfg_es);
     }
-    // The backend only speaks ES, so this thread must be bound to ES before any
-    // context is asked for. Desktop applications bind EGL_OPENGL_API as a matter
-    // of course; left in place, that binding makes even a minimal valid ES2
-    // request fail with EGL_BAD_MATCH against an ES-only config -- which is the
-    // observed all-three-attempts-fail. Binding ES when already ES is a no-op.
-    {
+    // The backend only speaks ES. A desktop request (or a thread whose frontend
+    // is bound to desktop GL) must be rebound to ES first: left in place, that
+    // binding makes even a minimal valid ES2 request fail with EGL_BAD_MATCH
+    // against an ES-only config. Plain ES requests skip this entirely, so the
+    // vanilla path never depends on bind resolution -- exactly the last-working
+    // behaviour (this gate is the regression fix: an unconditional bind made
+    // every creation, vanilla included, fail when the bind entry did not
+    // resolve).
+    if (req.desktop || silica::egl::g_frontend_api == EGL_OPENGL_API) {
         auto bind = be<EGLBoolean (*)(EGLenum)>("eglBindAPI");
         if (!bind) {
             silica::egl::set_frontend_error(EGL_BAD_MATCH);
