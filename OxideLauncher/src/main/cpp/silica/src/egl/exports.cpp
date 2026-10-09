@@ -277,14 +277,30 @@ S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext shar
     // Desktop requests are translated to ES (see file header). ES requests pass
     // through untouched, so the vanilla path is unchanged.
     const silica::egl::CtxRequest req = silica::egl::analyze_ctx(attr);
+    // Read what the config can actually render before touching attributes. A
+    // plain ES2 request failing with BAD_MATCH points at the config, not the list.
+    const silica::egl::ConfigCaps caps = silica::egl::probe_config(dpy, cfg);
+    const int cfg_es = silica::egl::config_es_version(caps);
+    silica::egl::log_display_identity(dpy);
+    silica::egl::diag("silica: ctx tid=%d dpy=%p cfg=%p requested=[%s] cfg_renderable=0x%x cfg_es=%d cfg_surface=0x%x cfg_conformant=0x%x",
+                      (int)gettid(), (void*)dpy, (void*)cfg,
+                      silica::egl::describe_ctx_attribs(attr).c_str(),
+                      (unsigned)caps.renderable, cfg_es, (unsigned)caps.surface_type,
+                      (unsigned)caps.conformant);
+
     const EGLint* backend_attr = attr;
     EGLint translated[3] = {EGL_NONE, EGL_NONE, EGL_NONE};
     if (req.desktop) {
-        silica::egl::build_es_request(req, translated, 3);
+        // Version comes from the config, not the frontend's ask: a desktop 3.3
+        // request must not become an ES 3 request this config cannot honour.
+        int want = cfg_es > 0 ? cfg_es : 3;
+        if (cfg_es == 0 && !caps.readable) want = 3; // unreadable config: keep prior behaviour
+        translated[0] = EGL_CONTEXT_CLIENT_VERSION;
+        translated[1] = want;
+        translated[2] = EGL_NONE;
         backend_attr = translated;
-        SLOG(INFO, "silica: eglCreateContext desktop request %d.%d profile=0x%x flags=0x%x -> ES request [%s]",
-             req.major, req.minor, (unsigned)req.profile, (unsigned)req.flags,
-             silica::egl::describe_ctx_attribs(translated).c_str());
+        silica::egl::diag("silica: ctx desktop %d.%d profile=0x%x flags=0x%x -> ES version %d (config supports %d)",
+                          req.major, req.minor, (unsigned)req.profile, (unsigned)req.flags, want, cfg_es);
         // The driver must be in ES mode for the context about to be created;
         // without this the backend rejects an ES request while bound to GL.
         auto bind = be<EGLBoolean (*)(EGLenum)>("eglBindAPI");
@@ -308,14 +324,17 @@ S_API EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext shar
         // Real backend code, read once into the queue the app reads from.
         const EGLint e = silica::egl::capture_backend_error();
         std::lock_guard<std::mutex> l(silica::egl::g_mu);
-        SLOG(ERROR, "silica: eglCreateContext refused dpy=%p cfg=%p share=%s requested=[%s] sent=[%s] with %s",
-             (void*)dpy, (void*)cfg, share == EGL_NO_CONTEXT ? "null" : "set",
-             silica::egl::describe_ctx_attribs(attr).c_str(),
-             silica::egl::describe_ctx_attribs(backend_attr).c_str(),
-             silica::egl::egl_error_name(e));
+        silica::egl::diag("silica: ctx REFUSED with %s requested=[%s] sent=[%s] cfg_renderable=0x%x cfg_es=%d cfg_surface=0x%x share=%s",
+                          silica::egl::egl_error_name(e),
+                          silica::egl::describe_ctx_attribs(attr).c_str(),
+                          silica::egl::describe_ctx_attribs(backend_attr).c_str(),
+                          (unsigned)caps.renderable, cfg_es, (unsigned)caps.surface_type,
+                          share == EGL_NO_CONTEXT ? "null" : "set");
     } else if (silica::config::diagnostics()) {
-        SLOG(DEBUG, "silica: eglCreateContext ok ctx=%p dpy=%p share=%s [%s]", (void*)ctx, (void*)dpy,
-             share == EGL_NO_CONTEXT ? "null" : "set", silica::egl::describe_ctx_attribs(attr).c_str());
+        silica::egl::diag("silica: ctx OK handle=%p tid=%d cfg_es=%d requested=[%s] sent=[%s]",
+                          (void*)ctx, (int)gettid(), cfg_es,
+                          silica::egl::describe_ctx_attribs(attr).c_str(),
+                          silica::egl::describe_ctx_attribs(backend_attr).c_str());
     }
     return ctx;
 }
