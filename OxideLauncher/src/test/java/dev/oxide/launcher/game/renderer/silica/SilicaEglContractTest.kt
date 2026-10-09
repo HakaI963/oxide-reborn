@@ -221,4 +221,40 @@ class SilicaEglContractTest {
             body.contains("if (req.desktop)"),
         )
     }
+
+    @Test
+    fun desktopRenderableTypeMapsToEs3NotEs2() {
+        // Root cause of the Iris EGL_BAD_MATCH, proven against the working
+        // reference: it maps a desktop EGL_OPENGL_BIT request onto
+        // EGL_OPENGL_ES3_BIT (0x0040), never ES2. Downgrading to ES2_BIT here
+        // produced an ES2-only config, and the CLIENT_VERSION=3 context that
+        // followed was refused against it -- as was the plain ES2 retry, because
+        // the config was the thing that could not match.
+        val body = code(hookSource())
+        assertFalse(
+            "the compat retry must not hand SDL an ES2-only config",
+            Regex("\\|\\s*EGL_OPENGL_ES2_BIT\\s*;").containsMatchIn(body),
+        )
+        assertTrue(
+            "a desktop renderable request must become ES3",
+            Regex("\\|\\s*EGL_OPENGL_ES3_BIT\\s*;").containsMatchIn(body),
+        )
+    }
+
+    @Test
+    fun aConfigWithoutEs3IsReAskedRatherThanAccepted() {
+        val body = code(hookSource())
+        assertTrue(
+            "config ES3 support must be read from the config, not assumed",
+            body.contains("configSupportsEs3"),
+        )
+        assertTrue(
+            "the read must use EGL_RENDERABLE_TYPE",
+            Regex("0x3040").containsMatchIn(body),
+        )
+        assertTrue(
+            "an ES2-only config must trigger a re-ask, not silent acceptance",
+            body.contains("ES3 re-ask") || body.contains("re-asked for an ES3-capable config"),
+        )
+    }
 }
