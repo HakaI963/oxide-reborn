@@ -75,7 +75,7 @@ jobs:
           SYM="symbols-${{ matrix.abi }}.txt"
           "$NM" -D --defined-only "$SO" > "$SYM"
           echo "nm exit: $?"
-          for sym in silica_version silica_build_id eglGetProcAddress eglGetError eglBindAPI eglQueryAPI silica_last_egl_diag eglMakeCurrent eglCreateContext glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus; do
+          for sym in silica_version silica_build_id eglGetProcAddress eglGetError eglBindAPI eglQueryAPI eglReleaseThread silica_last_egl_diag eglMakeCurrent eglCreateContext glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus; do
             if grep -q " $sym" "$SYM"; then
               echo "OK: exports $sym"
             else

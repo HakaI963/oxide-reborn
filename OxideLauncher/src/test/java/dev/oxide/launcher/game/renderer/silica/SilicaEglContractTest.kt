@@ -347,4 +347,60 @@ class SilicaEglContractTest {
             body.contains("g_frontend_api"),
         )
     }
+
+    @Test
+    fun eglNamesResolveToOurWrappers() {
+        // Working-renderer rule: an EGL name must resolve to this layer's
+        // wrapper deterministically, never to a host entry via dlopen games.
+        // A silent fall-through bypasses tracking, the error queue and the
+        // desktop translation.
+        val raw = eglSource()
+        org.junit.Assert.assertTrue(
+            "an explicit EGL entry table must exist",
+            raw.contains("kSilicaEglEntries"),
+        )
+        for (entry in listOf("eglBindAPI", "eglCreateContext", "eglGetError", "eglQueryAPI", "eglReleaseThread")) {
+            org.junit.Assert.assertTrue(
+                entry + " must be in the table",
+                raw.contains("\"" + entry + "\""),
+            )
+        }
+        val tableAt = raw.indexOf("kSilicaEglEntries[]")
+        val hostAt = raw.indexOf("driver::resolve(name)")
+        org.junit.Assert.assertTrue(
+            "the table must be consulted before host resolution",
+            tableAt > 0 && hostAt > 0 && tableAt < hostAt,
+        )
+    }
+
+    @Test
+    fun vanillaCreationsNeverTouchBindResolution() {
+        // Regression guard: an unconditional pre-create bind made every
+        // creation, vanilla included, depend on bind resolution. Plain ES
+        // requests must skip the bind entirely.
+        val body = code(eglSource())
+        org.junit.Assert.assertTrue(
+            "the pre-create bind must be gated on desktop need",
+            body.contains("req.desktop"),
+        )
+        val gateAt = body.indexOf("g_frontend_api == EGL_OPENGL_API")
+        val bindAt = body.indexOf("bind(EGL_OPENGL_ES_API")
+        org.junit.Assert.assertTrue(
+            "the bind must sit inside the desktop-need gate",
+            gateAt > 0 && bindAt > gateAt,
+        )
+    }
+
+    @Test
+    fun releasingTheThreadResetsTrackedFrontendState() {
+        val body = code(eglSource())
+        org.junit.Assert.assertTrue(
+            "eglReleaseThread must be exported",
+            body.contains("eglReleaseThread"),
+        )
+        org.junit.Assert.assertTrue(
+            "release must reset the remembered frontend binding",
+            body.contains("g_frontend_api = EGL_OPENGL_ES_API"),
+        )
+    }
 }
