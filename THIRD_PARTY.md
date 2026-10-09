@@ -191,7 +191,7 @@ covered by the Maven dependency table below:
 | flite (bundled native TTS) | Copyright © 2005-2014 Carnegie Mellon University | BSD 3-Clause License | [Link↗](https://github.com/festvox/flite) |
 
 
-## Silica phase 1 native ports (1.13.0, still MobileGlues-derived — notices stay)
+## ONIGAMI compiler stack (1.14.0, third-party libraries)
 
 Ported from upstream MobileGlues c07ae39..fcdf914 + 8bcf28a into
 OxideLauncher/src/main/cpp/copperoxide/upstream/ (marked 'Ported from upstream'):
