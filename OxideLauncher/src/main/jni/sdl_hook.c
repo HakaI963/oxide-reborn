@@ -113,8 +113,10 @@ static SDL_Window *custom_SDL_GetWindowFromID_Func(uint32_t id) {
 
 // --- 移动渲染器（ES 实现）下 SDL 创建 GL 上下文的宿主 EGL 兼容 ---
 
-// 部分宿主 libEGL 不接受 RENDERABLE_TYPE 携带 ES3_BIT/OPENGL_BIT，
-// 归一化为 ES2_BIT；仅用于首选请求失败后的兼容重试
+// 部分宿主 libEGL 不接受 RENDERABLE_TYPE 携带 OPENGL_BIT，
+// 故把桌面 GL 归一化为 ES3_BIT（0x0040）——而非 ES2_BIT：配置必须能支撑
+// EGL_CONTEXT_CLIENT_VERSION 3，否则 eglCreateContext 必然 EGL_BAD_MATCH。
+// 仅用于首选请求失败后的兼容重试
 static EGLBoolean normalizeEglChooseConfigList(const EGLint *attrib_list, EGLint *fixed, int cap) {
     if (attrib_list == NULL) return 0;
     int n = 0;
@@ -128,9 +130,14 @@ static EGLBoolean normalizeEglChooseConfigList(const EGLint *attrib_list, EGLint
             break;
         }
         if (attr == EGL_RENDERABLE_TYPE) {
-            // 归一化为 ES2_BIT
+            // A desktop GL request maps onto ES3, never ES2: the ES3 bit is what
+            // makes the chosen config able to back an EGL_CONTEXT_CLIENT_VERSION 3
+            // context. Downgrading to ES2_BIT here handed SDL an ES2-only config,
+            // and the later CLIENT_VERSION=3 request against it was refused with
+            // EGL_BAD_MATCH -- including for the plain ES2 retry, because the
+            // config, not the attribute list, was the thing that could not match.
             if ((val & (EGL_OPENGL_ES3_BIT | EGL_OPENGL_BIT)) != 0 && (val & EGL_OPENGL_ES2_BIT) == 0) {
-                val = (val & ~(EGL_OPENGL_ES3_BIT | EGL_OPENGL_BIT)) | EGL_OPENGL_ES2_BIT;
+                val = (val & ~(EGL_OPENGL_ES3_BIT | EGL_OPENGL_BIT)) | EGL_OPENGL_ES3_BIT;
             }
         }
         fixed[n] = attr;
