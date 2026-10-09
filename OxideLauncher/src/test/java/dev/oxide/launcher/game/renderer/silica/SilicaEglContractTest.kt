@@ -100,10 +100,10 @@ class SilicaEglContractTest {
 
     @Test
     fun missingBackendEntryIsNotReportedAsRefusal() {
-        val body = code(eglSource())
+        // Phrasing lives in the log strings: check the raw source.
         assertTrue(
             "a null backend entry must be distinguished from a backend refusal",
-            body.contains("has no backend entry"),
+            eglSource().contains("has no backend entry"),
         )
     }
 }
