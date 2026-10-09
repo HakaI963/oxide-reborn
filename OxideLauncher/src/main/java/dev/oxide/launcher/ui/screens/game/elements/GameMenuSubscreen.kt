@@ -62,7 +62,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.R
 import dev.oxide.launcher.game.renderer.Renderers
-import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
+import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
 import dev.oxide.launcher.game.sdl.SdlBridge
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.enums.FpsDisplayMode
@@ -398,30 +398,30 @@ private fun LazyListScope.gameSection(
             onCommit = onRefreshWindowSize,
         )
     }
-    silicaGameSection()
+    onigamiGameSection()
 }
 
 /**
- * In-game Silica panel: ONLY when Silica is the active renderer.
+ * In-game Onigami panel: ONLY when Onigami is the active renderer.
  *
- * Phase 1 honesty: Silica config (mode/cache/upscale) is read at context init,
- * so every Silica-specific row here is restart-required and shown read-only with
+ * Phase 1 honesty: Onigami config (mode/cache/upscale) is read at context init,
+ * so every Onigami-specific row here is restart-required and shown read-only with
  * an explicit restart note. Live-applied rows are limited to what is proven
  * safe mid-game (global resolution scale above, via onRefreshWindowSize).
  * Frame generation and frame pacing are NOT offered as toggles: no measured
  * backend exists in phase 1, and a toggle without a backend would be fake.
  */
-private fun LazyListScope.silicaGameSection() {
+private fun LazyListScope.onigamiGameSection() {
     if (!Renderers.isCurrentRendererValid()) return
-    if (Renderers.getCurrentRenderer() !== SilicaRenderer) return
-    group(R.string.oxide_set_section_graphics, "silica")
-    item(key = "silicaActive") {
-        GameMenuNoteRow("Silica active: profile=" + AllSettings.silicaPerformanceMode.state +
-            ", vault=" + AllSettings.silicaShaderCacheMb.state + "MB" +
-            ", coalescing=" + (if (AllSettings.silicaCoalescing.state) "on" else "off") +
-            ". Silica changes need a restart (read at context start).")
+    if (Renderers.getCurrentRenderer() !== OnigamiRenderer) return
+    group(R.string.oxide_set_section_graphics, "onigami")
+    item(key = "onigamiActive") {
+        GameMenuNoteRow("Onigami active: profile=" + AllSettings.onigamiPerformanceMode.state +
+            ", vault=" + AllSettings.onigamiShaderCacheMb.state + "MB" +
+            ", coalescing=" + (if (AllSettings.onigamiCoalescing.state) "on" else "off") +
+            ". Onigami changes need a restart (read at context start).")
     }
-    item(key = "silicaLimits") {
+    item(key = "onigamiLimits") {
         GameMenuNoteRow("Restart needed for: profile, vault, coalescing, diagnostics. Frame generation and upscaling are not offered until measured-positive backends exist.")
     }
 }
@@ -785,7 +785,7 @@ private fun LazyListScope.gyroscopeSection(available: Boolean) {
  *
  * The key is derived from the string resource plus the parent section that
  * owns this occurrence: the same resource may legitimately head two sections
- * (e.g. the graphics header and the Silica panel), and bare "group:$labelRes"
+ * (e.g. the graphics header and the Onigami panel), and bare "group:$labelRes"
  * then crashes LazyColumn with a duplicate key. The suffix is a fixed section
  * id, never random and never a list index, so identity is stable across
  * recomposition and insertion order changes elsewhere cannot collide with it.
