@@ -91,27 +91,33 @@ class SilicaEglContractTest {
     }
 
     @Test
-    fun wrappersNeverConsumeTheBackendErrorFlag() {
+    fun theBackendErrorIsCapturedOnceIntoAQueueTheAppActuallyReads() {
+        // The application resolves eglGetError through POJAVEXEC_EGL, which is
+        // libsilica for this renderer, so the exported read below is the one the
+        // app performs. That is why a read that only logged and dropped the code
+        // reported EGL_SUCCESS forever: the real code went nowhere the app looked.
         val body = code(eglSource())
-        assertFalse(
-            "resolving backend eglGetError eats the flag the app must read",
-            body.contains("resolve(\"eglGetError\")"),
+        val raw = eglSource()
+        assertTrue(
+            "a real backend code must be captured after a failed call",
+            body.contains("capture_backend_error"),
         )
-        assertFalse(
-            "rearm-style helpers must not return to this file",
-            Regex("\\brearm\\s*\\(").containsMatchIn(body),
+        assertTrue(
+            "the queue must be per-thread, as EGL error state is",
+            Regex("thread_local\\s+EGLint\\s+g_frontend_error").containsMatchIn(raw),
         )
-        assertFalse(
-            "no direct backend eglGetError() call may remain in wrapper paths",
-            Regex("\\beglGetError\\s*\\(\\s*\\)").containsMatchIn(body),
+        assertTrue(
+            "eglGetError must be exported, or the app never sees the queued code",
+            Regex("S_API\\s+EGLint\\s+eglGetError\\s*\\(").containsMatchIn(raw),
+        )
+        assertTrue(
+            "the exported read must serve the queued code to the application",
+            body.contains("g_frontend_error"),
         )
     }
 
     @Test
-    fun refusalsLogDecodedArgsAndLeaveTheFlagQueued() {
-        // The decoder is code; the queued-flag promise lives inside log
-        // strings, so it is checked against the raw source, not the stripped
-        // code (stripping removes string contents by design).
+    fun refusalsLogDecodedArgumentsAndTheRealCode() {
         val body = code(eglSource())
         val raw = eglSource()
         assertTrue(
@@ -119,8 +125,12 @@ class SilicaEglContractTest {
             body.contains("describe_ctx_attribs"),
         )
         assertTrue(
-            "refusal logs must state the backend flag stays queued for the app",
-            raw.contains("left queued"),
+            "a refusal must report the real backend code, not a generic one",
+            raw.contains("egl_error_name"),
+        )
+        assertTrue(
+            "both the requested and the sent attribute lists must be logged",
+            raw.contains("requested=") && raw.contains("sent="),
         )
     }
 
@@ -164,6 +174,51 @@ class SilicaEglContractTest {
         org.junit.Assert.assertTrue(
             "retries must log decoded attribs and results",
             raw.contains("SILICA_EGL_DIAG attempt="),
+        )
+    }
+
+    @Test
+    fun desktopContextRequestsAreTranslatedToEsBeforeReachingTheBackend() {
+        // Device-proven cause: RenderPearl/Iris ask for a desktop core-profile
+        // context (PROFILE_MASK + FLAGS present) on a GLES-only device, and the
+        // backend refuses it. Dropping only the KHR version attributes did not
+        // help, which is why the retries all failed identically.
+        val body = code(eglSource())
+        assertTrue(
+            "a desktop request must be detected from profile mask / desktop flags",
+            body.contains("analyze_ctx"),
+        )
+        assertTrue(
+            "a desktop request must be rewritten as an ES request",
+            body.contains("build_es_request"),
+        )
+        assertTrue(
+            "the ES API must be bound before the context is created",
+            Regex("eglBindAPI|bind\\(EGL_OPENGL_ES_API\\)").containsMatchIn(body),
+        )
+        // Ordering is the whole point: binding after creation is too late.
+        val raw = eglSource()
+        val bindAt = raw.indexOf("EGL_OPENGL_ES_API")
+        val createAt = raw.indexOf("f(dpy, cfg, share, backend_attr)")
+        assertTrue(
+            "eglBindAPI(EGL_OPENGL_ES_API) must precede the backend create call",
+            bindAt > 0 && createAt > 0 && bindAt < createAt,
+        )
+    }
+
+    @Test
+    fun esContextRequestsArePassedThroughUnchanged() {
+        // The vanilla path must not change: only genuinely desktop requests are
+        // rewritten, so a plain EGL_CONTEXT_CLIENT_VERSION list still goes
+        // through byte-for-byte.
+        val body = code(eglSource())
+        assertTrue(
+            "the sent attributes must default to what the caller asked for",
+            body.contains("backend_attr = attr"),
+        )
+        assertTrue(
+            "only a desktop classification may switch to the translated list",
+            body.contains("if (req.desktop)"),
         )
     }
 }
