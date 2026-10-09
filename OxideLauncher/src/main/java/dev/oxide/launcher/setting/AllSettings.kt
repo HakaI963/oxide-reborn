@@ -198,6 +198,30 @@ object AllSettings : SettingsRegistry() {
      */
     val silicaDiagnostics = boolSetting("silicaDiagnostics", false)
 
+    /**
+     * Onigami performance mode: AUTO (default), BALANCED, PERFORMANCE, QUALITY.
+     * Every mode maps to real backend config keys only. Restart required
+     * (config is read at context init).
+     */
+    val onigamiPerformanceMode = stringSetting("onigamiPerformanceMode", "AUTO")
+
+    /**
+     * Onigami shader cache size, MB, 0 disables. Restart required.
+     */
+    val onigamiShaderCacheMb = intSetting("onigamiShaderCacheMb", 64, 0..512)
+
+    /**
+     * Onigami state coalescing: redundant binds/mode sets never reach the driver.
+     * Real toggle, read by libonigami.so at context init (restart required).
+     */
+    val onigamiCoalescing = boolSetting("onigamiCoalescing", true)
+
+    /**
+     * Onigami diagnostic logs: verbose per-failure lines in logcat. Real toggle,
+     * read by libonigami.so at context init (restart required).
+     */
+    val onigamiDiagnostics = boolSetting("onigamiDiagnostics", false)
+
     //Game
     /**
      * 版本隔离

@@ -19,7 +19,7 @@
 package dev.oxide.launcher.game.renderer
 
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
-import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
+import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
 import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
 import dev.oxide.launcher.utils.logging.Logger
@@ -45,11 +45,12 @@ object Renderers {
             currentRenderer = null
         }
 
-        // Copper Oxide stays first until libsilica.so actually renders;
-        // new installs fall back to renderers[0] and Silica is under construction.
+        // Onigami is Oxide's own GL-on-ES backend (libonigami.so); Copper Oxide stays
+        // first until libonigami.so is proven on-device;
+        // new installs fall back to renderers[0].
         addRenderers(
             CopperOxideRenderer,
-            SilicaRenderer,
+            OnigamiRenderer,
             LTWRenderer,
             HolyGL4ESRenderer
         )

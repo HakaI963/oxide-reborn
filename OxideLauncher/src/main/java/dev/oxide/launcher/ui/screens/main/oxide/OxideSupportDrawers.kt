@@ -75,7 +75,7 @@ import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
-import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
+import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.path.URL_GITHUB_DRIVER_PLUGINS
@@ -1129,43 +1129,43 @@ fun OxideRendererDrawer(
                     }
                 }
 
-                // Silica settings: only when Silica is selected. Restart behavior is
+                // Onigami settings: only when Onigami is selected. Restart behavior is
                 // explained in the in-game panel, not here.
-                if (oxideSilicaConfigVisible(storedRendererId)) {
+                if (oxideOnigamiConfigVisible(storedRendererId)) {
                     OxideSettingsGroup(
-                        title = "Silica",
+                        title = "Onigami",
                         metrics = metrics,
                     ) {
                         OxideEnumRow(
-                            label = "Silica profile",
+                            label = "Onigami profile",
                             hint = "Auto starts balanced. Performance trims submission overhead; Quality keeps full fidelity.",
                             metrics = metrics,
                             entries = listOf("AUTO", "BALANCED", "PERFORMANCE", "QUALITY"),
-                            selected = AllSettings.silicaPerformanceMode.state,
+                            selected = AllSettings.onigamiPerformanceMode.state,
                             nameOf = { it },
-                            onSelect = { AllSettings.silicaPerformanceMode.save(it) },
+                            onSelect = { AllSettings.onigamiPerformanceMode.save(it) },
                         )
                         OxideIntRow(
                             label = "Program vault",
                             hint = "On-disk budget for compiled programs in MB. 0 disables reuse.",
                             metrics = metrics,
-                            value = AllSettings.silicaShaderCacheMb.state,
+                            value = AllSettings.onigamiShaderCacheMb.state,
                             range = 0..512,
                             step = 16,
                             suffix = " MB",
-                            onValueChange = { AllSettings.silicaShaderCacheMb.save(it) },
+                            onValueChange = { AllSettings.onigamiShaderCacheMb.save(it) },
                         )
                         OxideToggleRow(
                             label = "State coalescing",
                             hint = "Drops redundant binds and mode sets before they reach the driver.",
-                            checked = AllSettings.silicaCoalescing.state,
-                            onCheckedChange = { AllSettings.silicaCoalescing.save(it) },
+                            checked = AllSettings.onigamiCoalescing.state,
+                            onCheckedChange = { AllSettings.onigamiCoalescing.save(it) },
                         )
                         OxideToggleRow(
                             label = "Diagnostic logs",
-                            hint = "Verbose Silica lines in logcat for context, query and loader events.",
-                            checked = AllSettings.silicaDiagnostics.state,
-                            onCheckedChange = { AllSettings.silicaDiagnostics.save(it) },
+                            hint = "Verbose Onigami lines in logcat for context, query and loader events.",
+                            checked = AllSettings.onigamiDiagnostics.state,
+                            onCheckedChange = { AllSettings.onigamiDiagnostics.save(it) },
                         )
                     }
                 }
@@ -1365,9 +1365,9 @@ internal fun oxideZinkSettingVisible(vulkanSupported: Boolean): Boolean =
 internal fun oxideCopperConfigVisible(storedRendererId: String): Boolean =
     storedRendererId == CopperOxideRenderer.getUniqueIdentifier()
 
-/** Silica section appears only when the stored renderer is Silica. Pure, testable. */
-internal fun oxideSilicaConfigVisible(storedRendererId: String): Boolean =
-    storedRendererId == SilicaRenderer.getUniqueIdentifier()
+/** Onigami section appears only when the stored renderer is Onigami. Pure, testable. */
+internal fun oxideOnigamiConfigVisible(storedRendererId: String): Boolean =
+    storedRendererId == OnigamiRenderer.getUniqueIdentifier()
 
 /**
  * Copper 调优子行是否出现
