@@ -259,4 +259,56 @@ class SilicaEglContractTest {
             hookSource().contains("re-asked for an ES3-capable config"),
         )
     }
+
+    @Test
+    fun frontendApiIsVirtualizedOverAnEsOnlyBackend() {
+        // The backend only speaks ES. A desktop bind must bind ES underneath
+        // while the frontend still sees OPENGL, or one app-side
+        // eglBindAPI(EGL_OPENGL_API) poisons every later context creation with
+        // EGL_BAD_MATCH against an ES-only config.
+        val raw = eglSource()
+        org.junit.Assert.assertTrue(
+            "eglBindAPI must be exported to interpose the app's bind",
+            Regex("S_API\\s+EGLBoolean\\s+eglBindAPI\\s*\\(").containsMatchIn(raw),
+        )
+        org.junit.Assert.assertTrue(
+            "a desktop bind must bind ES underneath",
+            raw.contains("EGL_OPENGL_ES_API : api") || raw.contains("(api == EGL_OPENGL_API)"),
+        )
+        org.junit.Assert.assertTrue(
+            "eglQueryAPI must report the frontend API, not the backend binding",
+            Regex("S_API\\s+EGLenum\\s+eglQueryAPI").containsMatchIn(raw),
+        )
+    }
+
+    @Test
+    fun everyContextCreationBindsEsFirst() {
+        // Attempts 2 and 3 (plain ES requests) failed with BAD_MATCH too, which
+        // attributes alone cannot explain. The bind must precede every backend
+        // create, not only desktop-translated ones.
+        val raw = eglSource()
+        val body = code(raw)
+        org.junit.Assert.assertTrue(
+            "an ES bind must precede the backend create call",
+            raw.indexOf("bind(EGL_OPENGL_ES_API)") < raw.indexOf("f(dpy, cfg, share, backend_attr)"),
+        )
+        org.junit.Assert.assertFalse(
+            "the bind must not be gated on desktop-only requests",
+            Regex("if\\s*\\(req\\.desktop\\)[^}]*bind\\(EGL_OPENGL_ES_API\\)").containsMatchIn(body),
+        )
+    }
+
+    @Test
+    fun refusalsAreSurfacedThroughTheVisibleChannel() {
+        val raw = eglSource()
+        val hook = hookSource()
+        org.junit.Assert.assertTrue(
+            "a last-diagnostic accessor must exist",
+            Regex("silica_last_egl_diag").containsMatchIn(raw),
+        )
+        org.junit.Assert.assertTrue(
+            "the hook must surface it on the visible log channel",
+            hook.contains("silicaLogLastDiag"),
+        )
+    }
 }
