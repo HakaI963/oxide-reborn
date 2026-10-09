@@ -109,12 +109,17 @@ void* host_proc(const char* name) {
 }
 void* resolve(const char* name) {
     if (!ensure() || !name) return nullptr;
-    // Host dispatch first (correct per-implementation entry), dlsym second.
-    void* p = host_proc(name);
+    // dlsym-first on the opened backend handles, host dispatch second. This is
+    // the working renderer's contract (its proc_address is a plain dlsym): a
+    // core entry such as eglBindAPI is guaranteed present in the backend's own
+    // dynamic symbol table, while a host eglGetProcAddress may refuse core
+    // entries on some implementations. Extensions, which dlsym cannot see,
+    // still resolve through the host dispatch fallback.
+    void* p = g_egl ? dlsym(g_egl, name) : nullptr;
     if (p) return p;
-    p = g_egl ? dlsym(g_egl, name) : nullptr;
+    p = g_gles ? dlsym(g_gles, name) : nullptr;
     if (p) return p;
-    return g_gles ? dlsym(g_gles, name) : nullptr;
+    return host_proc(name);
 }
 bool angle_in_use() { ensure(); return g_angle; }
 const char* identity() { ensure(); return g_identity.c_str(); }
