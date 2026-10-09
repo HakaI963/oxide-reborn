@@ -27,7 +27,7 @@ import java.io.File
 /**
  * 游戏内菜单 Lazy 列表键的唯一性回归测试。
  *
- * 背景：Silica 面板复用了图形分组的标题资源，导致同一 LazyColumn 里出现两个
+ * 背景：Onigami 面板复用了图形分组的标题资源，导致同一 LazyColumn 里出现两个
  * key 都是 "group:2131888323" 的 header，Compose 在测量时抛
  * IllegalArgumentException（Key was already used）。标题文字可以重复，
  * key 绝不可以。
@@ -118,13 +118,13 @@ class GameMenuKeysTest {
 
     @Test
     fun sharedHeaderResourcesCarryTheirOwningSection() {
-        // 本次崩溃的精确形态：图形分组标题同时出现在主区域与 Silica 面板。
+        // 本次崩溃的精确形态：图形分组标题同时出现在主区域与 Onigami 面板。
         // 两个 occurrence 必须带不同的固定段后缀，而不是共享裸 key。
         val source = menuSource()
         val graphicsGroups = Regex("group\\(R\\.string\\.oxide_set_section_graphics(?:\\s*,\\s*\"([^\"]+)\")?\\)")
             .findAll(source).toList()
         assertTrue(
-            "expected the graphics header in both the main section and the Silica panel",
+            "expected the graphics header in both the main section and the Onigami panel",
             graphicsGroups.size >= 2,
         )
         val keys = graphicsGroups.map { groupKey("oxide_set_section_graphics", it.groupValues[1].ifEmpty { null }) }
@@ -133,8 +133,8 @@ class GameMenuKeysTest {
             keys.size, keys.toSet().size,
         )
         assertTrue(
-            "the Silica panel must own its header occurrence via a fixed section id",
-            keys.any { it.endsWith(":silica") },
+            "the Onigami panel must own its header occurrence via a fixed section id",
+            keys.any { it.endsWith(":onigami") },
         )
     }
 }
