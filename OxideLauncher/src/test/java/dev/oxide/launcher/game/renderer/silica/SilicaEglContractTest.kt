@@ -83,14 +83,18 @@ class SilicaEglContractTest {
 
     @Test
     fun refusalsLogDecodedArgsAndLeaveTheFlagQueued() {
+        // The decoder is code; the queued-flag promise lives inside log
+        // strings, so it is checked against the raw source, not the stripped
+        // code (stripping removes string contents by design).
         val body = code(eglSource())
+        val raw = eglSource()
         assertTrue(
             "context refusals must carry decoded version/profile arguments",
             body.contains("describe_ctx_attribs"),
         )
         assertTrue(
             "refusal logs must state the backend flag stays queued for the app",
-            body.contains("left queued"),
+            raw.contains("left queued"),
         )
     }
 
