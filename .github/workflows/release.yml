@@ -194,14 +194,21 @@ jobs:
           echo "release APK integrity gates passed for ${{ matrix.arch }}"
 
       # Renderer gate: the release must ship ONIGAMI and must not ship the
-      # removed Silica backend. Fails the build rather than shipping wrong.
+      # removed Silica backend. A silent regression here would ship the wrong
+      # backend, so it fails the build instead of being reported later.
       - name: Verify renderer libraries in the release APK
         run: |
           set -euo pipefail
           APK=$(ls OxideLauncher/build/outputs/apk/release/*.apk | head -1)
-          LIST=$(unzip -Z1 $APK | grep '^lib/.*\.so
-
-
+          LIST=$(unzip -Z1 "$APK" | grep '^lib/' || true)
+          ONIGAMI=$(printf '%s\n' "$LIST" | grep -c libonigami || true)
+          SILICA=$(printf '%s\n' "$LIST" | grep -c libsilica || true)
+          echo libonigami_so_entries=$ONIGAMI
+          echo libsilica_so_entries=$SILICA
+          test "$ONIGAMI" -ge 1 || { echo '::error::libonigami.so is missing from the release APK'; exit 1; }
+          test "$SILICA" -eq 0 || { echo '::error::libsilica.so must not be in the release APK'; exit 1; }
+          printf '%s\n' "$LIST" | grep libonigami | sort
+          echo renderer gate passed for ${{ matrix.arch }}
       - name: Upload release APK (${{ matrix.arch }})
         uses: actions/upload-artifact@v7
         with:
