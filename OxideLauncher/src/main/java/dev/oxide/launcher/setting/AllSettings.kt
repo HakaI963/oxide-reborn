@@ -175,30 +175,6 @@ object AllSettings : SettingsRegistry() {
     val copperOxideExtDsa = boolSetting("copperOxideExtDsa", true)
 
     /**
-     * Silica performance mode: AUTO (default), BALANCED, PERFORMANCE, QUALITY.
-     * Every mode maps to real backend config keys only. Restart required
-     * (config is read at context init).
-     */
-    val silicaPerformanceMode = stringSetting("silicaPerformanceMode", "AUTO")
-
-    /**
-     * Silica shader cache size, MB, 0 disables. Restart required.
-     */
-    val silicaShaderCacheMb = intSetting("silicaShaderCacheMb", 64, 0..512)
-
-    /**
-     * Silica state coalescing: redundant binds/mode sets never reach the driver.
-     * Real toggle, read by libsilica.so at context init (restart required).
-     */
-    val silicaCoalescing = boolSetting("silicaCoalescing", true)
-
-    /**
-     * Silica diagnostic logs: verbose per-failure lines in logcat. Real toggle,
-     * read by libsilica.so at context init (restart required).
-     */
-    val silicaDiagnostics = boolSetting("silicaDiagnostics", false)
-
-    /**
      * Onigami performance mode: AUTO (default), BALANCED, PERFORMANCE, QUALITY.
      * Every mode maps to real backend config keys only. Restart required
      * (config is read at context init).
