@@ -461,6 +461,12 @@ O_API void glTexParameteri(GLenum t, GLenum p, GLint v) {
     onigami::gles_procs().TexParameteri(t, p, v);
 }
 O_API void glTexImage2D(GLenum t, GLint l, GLint i, GLsizei w, GLsizei h, GLint b, GLenum f, GLenum y, const void* d) {
+    if (is_proxy_target(t)) {
+        static bool logged = false;
+        if (!logged) { logged = true;
+            onigami::diag_printf("onigami: proxy texture target seen; forwarded unchanged");
+        }
+    }
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().TexImage2D) return;
     onigami::gles_procs().TexImage2D(t, l, i, w, h, b, f, y, d);
 }
