@@ -10,6 +10,7 @@ struct TranslateResult {
   bool passthrough = false; // true when source was already ESSL
   std::string essl;
   std::string log;
+  bool needsTexBufferExt = false; // desktop buffer samplers (samplerBuffer family) detected
 };
 bool is_essl_source(const char* src);
 Stage stage_from_gl(GLenum type);

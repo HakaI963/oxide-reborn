@@ -51,6 +51,19 @@ std::string word_replace(const std::string& line, const std::string& from, const
     }
     return out + tail;
 }
+// Whole-word test used to detect constructs (e.g. buffer samplers) without
+// matching substrings of longer identifiers.
+bool has_word(const std::string& line, const std::string& w) {
+    size_t p = 0;
+    while ((p = line.find(w, p)) != std::string::npos) {
+        bool before = (p == 0) || (!isalnum((unsigned char)line[p - 1]) && line[p - 1] != '_');
+        size_t e = p + w.size();
+        bool after = (e >= line.size()) || (!isalnum((unsigned char)line[e]) && line[e] != '_');
+        if (before && after) return true;
+        p++;
+    }
+    return false;
+}
 } // namespace
 unsigned long long fnv1a64(const char* data, size_t len) {
     unsigned long long h = 1469598103934665603ULL;
@@ -130,9 +143,10 @@ TranslateResult translate_shader(GLenum glType, const char* src) {
             return r;
         }
     }
-    std::ostringstream out;
-    out << "#version 310 es\n";
+    std::ostringstream body;
     bool precision_seen = false;
+    bool need_tex_buffer = false;
+    bool saw_tex_buffer_ext = false;
     bool fragcolor_declared = false;
     bool fragdata_seen[4] = {false, false, false, false};
     bool in_block_comment = false;
@@ -147,7 +161,7 @@ TranslateResult translate_shader(GLenum glType, const char* src) {
         if (in_block_comment) {
             size_t e = scan.find("*/");
             if (e == std::string::npos) {
-                out << line << "\n";
+                body << line << "\n";
                 continue;
             }
             in_block_comment = false;
@@ -162,16 +176,26 @@ TranslateResult translate_shader(GLenum glType, const char* src) {
             }
         }
         if (in_block_comment) {
-            out << line << "\n";
+            body << line << "\n";
             continue;
         }
         if (starts_with(line, "#version")) continue; // replaced by 310 es header
         if (starts_with(line, "#extension")) {
-            out << line << "\n"; // preserved verbatim
+            if (line.find("GL_EXT_texture_buffer") != std::string::npos) saw_tex_buffer_ext = true;
+            body << line << "\n"; // preserved verbatim
             continue;
         }
         if (t.find("precision") == 0 && t.find(";") != std::string::npos) precision_seen = true;
         std::string code = line;
+        // Desktop buffer-texture samplers need GL_EXT_texture_buffer plus
+        // explicit sampler precision in ESSL. Checked on the code part only
+        // (before any // comment) so comments cannot trigger it.
+        {
+            std::string check_part = code.substr(0, code.find("//"));
+            if (has_word(check_part, "samplerBuffer") || has_word(check_part, "isamplerBuffer") ||
+                has_word(check_part, "usamplerBuffer"))
+                need_tex_buffer = true;
+        }
         if (legacy) {
             if (st == Stage::Vertex) {
                 code = word_replace(code, "attribute", "in");
@@ -187,7 +211,7 @@ TranslateResult translate_shader(GLenum glType, const char* src) {
         if (is_frag) {
             if (code.find("gl_FragColor") != std::string::npos) {
                 if (!fragcolor_declared) {
-                    out << "layout(location = 0) out vec4 onigami_fragColor;\n";
+                    body << "layout(location = 0) out vec4 onigami_fragColor;\n";
                     fragcolor_declared = true;
                 }
                 code = word_replace(code, "gl_FragColor", "onigami_fragColor");
@@ -195,27 +219,31 @@ TranslateResult translate_shader(GLenum glType, const char* src) {
             for (int k = 0; k < 4; k++) {
                 std::string name = "gl_FragData[" + std::to_string(k) + "]";
                 if (code.find(name) != std::string::npos && !fragdata_seen[k]) {
-                    out << "layout(location = " + std::to_string(k) + ") out vec4 onigami_fragData" + std::to_string(k) + ";\n";
+                    body << "layout(location = " + std::to_string(k) + ") out vec4 onigami_fragData" + std::to_string(k) + ";\n";
                     fragdata_seen[k] = true;
                 }
                 if (fragdata_seen[k])
                     code = word_replace(code, name, "onigami_fragData" + std::to_string(k));
             }
         }
-        out << code << "\n";
+        body << code << "\n";
     }
-    if (!precision_seen) {
-        // Backend precision contract, applied once and explicitly.
-        std::string body = out.str();
-        std::string header = "#version 310 es\nprecision highp float;\nprecision highp int;\n";
-        body = body.substr(body.find("\n") + 1);
-        out.str("");
-        out.clear();
-        out << header << body;
-    }
+    // Compose: #version MUST be the first line; the texture-buffer extension
+    // (when desktop buffer samplers were detected and the source did not
+    // declare it) comes next, then the precision contract, then the body.
+    std::ostringstream final_out;
+    final_out << "#version 310 es\n";
+    if (need_tex_buffer && !saw_tex_buffer_ext)
+        final_out << "#extension GL_EXT_texture_buffer : require\n";
+    if (!precision_seen)
+        final_out << "precision highp float;\nprecision highp int;\n";
+    if (need_tex_buffer)
+        final_out << "precision highp samplerBuffer;\nprecision highp isamplerBuffer;\nprecision highp usamplerBuffer;\n";
+    final_out << body.str();
     r.ok = true;
     r.passthrough = false;
-    r.essl = out.str();
+    r.essl = final_out.str();
+    r.needsTexBufferExt = need_tex_buffer;
     r.log = legacy ? "desktop legacy migrated to ESSL 310" : "desktop modern mapped to ESSL 310";
     return r;
 }
