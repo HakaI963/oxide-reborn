@@ -154,3 +154,12 @@ jobs:
             OxideLauncher/src/main/cpp/onigami/src/shader_translate.cpp \
             -o /tmp/test_translator
           /tmp/test_translator
+          g++ -std=c++20 -Wall -Wextra -Werror \
+            -IOxideLauncher/src/main/cpp/onigami/include \
+            -IOxideLauncher/src/main/cpp/onigami/tests/host_include \
+            -IOxideLauncher/src/main/cpp/onigami/src \
+            OxideLauncher/src/main/cpp/onigami/tests/host/test_state_cache.cpp \
+            OxideLauncher/src/main/cpp/onigami/src/state_cache.cpp \
+            OxideLauncher/src/main/cpp/onigami/tests/host/stub_config.cpp \
+            -o /tmp/test_state_cache
+          /tmp/test_state_cache
