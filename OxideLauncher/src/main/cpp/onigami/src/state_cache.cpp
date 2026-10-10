@@ -43,28 +43,38 @@ bool StateCache::check_bind_buffer(GLenum t, GLuint b) {
         has_ab_ = true;
         return false;
     }
-    if (t == GL_ELEMENT_ARRAY_BUFFER) {
-        if (has_eb_ && eb_ == b) {
-            hits_++;
-            return true;
-        }
-        eb_ = b;
-        has_eb_ = true;
-        return false;
-    }
+    // ELEMENT_ARRAY_BUFFER is VAO-scoped backend state (unlike the
+    // context-global ARRAY_BUFFER binding), so a global last-value cache
+    // cannot mirror it across VAO switches: skipping a re-bind draws with
+    // the wrong index buffer (streaks / slivers / covering triangles).
+    // Index binds are therefore always forwarded.
+    if (t == GL_ELEMENT_ARRAY_BUFFER) return false;
     return false;
 }
+// TEXTURE_2D bindings are per-texture-unit state: the same id bound on
+// two different units must both reach the driver. The active unit is
+// recorded by note_active_unit (called from the glActiveTexture wrapper).
 bool StateCache::check_bind_texture(GLenum t, GLuint x) {
     if (!coalescing()) return false;
     if (t != GL_TEXTURE_2D) return false;
     std::lock_guard<std::mutex> l(m_);
-    if (has_tex_ && tex_ == x) {
+    GLuint key = (active_unit_ << 8) | 0xE1u;
+    auto it = tex2d_by_unit_.find(key);
+    if (it != tex2d_by_unit_.end() && it->second == x) {
         hits_++;
         return true;
     }
-    tex_ = x;
-    has_tex_ = true;
+    tex2d_by_unit_[key] = x;
     return false;
+}
+void StateCache::note_active_unit(GLenum unit) {
+    if (unit < 0x84C0u || unit >= 0x84C0u + 32) return;
+    std::lock_guard<std::mutex> l(m_);
+    active_unit_ = unit - 0x84C0u;
+}
+GLuint StateCache::bound_vertex_array() {
+    std::lock_guard<std::mutex> l(m_);
+    return has_vao_ ? vao_ : 0;
 }
 // DRAW and READ bindings are independent state in GL; tracking them
 // separately is required, otherwise a READ bind can suppress a later DRAW

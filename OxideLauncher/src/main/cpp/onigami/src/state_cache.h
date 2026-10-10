@@ -13,6 +13,7 @@ class StateCache {
     bool check_use_program(GLuint p);
     bool check_bind_buffer(GLenum target, GLuint b);
     bool check_bind_texture(GLenum target, GLuint t);
+    void note_active_unit(GLenum unit);
     bool check_bind_framebuffer(GLenum target, GLuint f);
     bool check_bind_vertex_array(GLuint v);
     bool check_cap(GLenum cap, bool enable);
@@ -20,6 +21,7 @@ class StateCache {
     void note_skip();
     void invalidate();
     GLuint bound_framebuffer();
+    GLuint bound_vertex_array();
  private:
     std::mutex m_;
     unsigned long long hits_ = 0;
@@ -30,8 +32,8 @@ class StateCache {
     bool has_eb_ = false;
     GLuint ab_ = 0;
     GLuint eb_ = 0;
-    bool has_tex_ = false;
-    GLuint tex_ = 0;
+    GLuint active_unit_ = 0;
+    std::unordered_map<GLuint, GLuint> tex2d_by_unit_;
     bool has_draw_fbo_ = false;
     GLuint draw_fbo_ = 0;
     bool has_read_fbo_ = false;
