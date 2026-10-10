@@ -19,6 +19,7 @@ class StateCache {
     bool check_viewport(GLint x, GLint y, GLsizei w, GLsizei h);
     void note_skip();
     void invalidate();
+    GLuint bound_framebuffer();
  private:
     std::mutex m_;
     unsigned long long hits_ = 0;

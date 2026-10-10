@@ -65,6 +65,7 @@ const char* kOwnNames[] = {
     "glTexImage3D",
     "glGenQueries", "glBeginQuery", "glEndQuery",
     "glFenceSync", "glClientWaitSync", "glDeleteSync",
+    "glDrawBuffer", "glDrawBuffers", "glReadBuffer",
     nullptr,
 };
 std::mutex g_m;

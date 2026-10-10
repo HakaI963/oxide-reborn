@@ -113,6 +113,10 @@ bool StateCache::check_viewport(GLint x, GLint y, GLsizei w, GLsizei h) {
     has_vp_ = true;
     return false;
 }
+GLuint StateCache::bound_framebuffer() {
+    std::lock_guard<std::mutex> l(m_);
+    return has_fbo_ ? fbo_ : 0;
+}
 void StateCache::invalidate() {
     std::lock_guard<std::mutex> l(m_);
     has_prog_ = has_ab_ = has_eb_ = has_tex_ = has_fbo_ = has_vao_ = has_vp_ = false;
