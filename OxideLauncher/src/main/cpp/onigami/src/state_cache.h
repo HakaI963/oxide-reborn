@@ -13,7 +13,7 @@ class StateCache {
     bool check_use_program(GLuint p);
     bool check_bind_buffer(GLenum target, GLuint b);
     bool check_bind_texture(GLenum target, GLuint t);
-    bool check_bind_framebuffer(GLuint f);
+    bool check_bind_framebuffer(GLenum target, GLuint f);
     bool check_bind_vertex_array(GLuint v);
     bool check_cap(GLenum cap, bool enable);
     bool check_viewport(GLint x, GLint y, GLsizei w, GLsizei h);
@@ -32,8 +32,10 @@ class StateCache {
     GLuint eb_ = 0;
     bool has_tex_ = false;
     GLuint tex_ = 0;
-    bool has_fbo_ = false;
-    GLuint fbo_ = 0;
+    bool has_draw_fbo_ = false;
+    GLuint draw_fbo_ = 0;
+    bool has_read_fbo_ = false;
+    GLuint read_fbo_ = 0;
     bool has_vao_ = false;
     GLuint vao_ = 0;
     bool has_vp_ = false;

@@ -66,15 +66,24 @@ bool StateCache::check_bind_texture(GLenum t, GLuint x) {
     has_tex_ = true;
     return false;
 }
-bool StateCache::check_bind_framebuffer(GLuint f) {
+// DRAW and READ bindings are independent state in GL; tracking them
+// separately is required, otherwise a READ bind can suppress a later DRAW
+// bind (or vice versa) and draws silently land on the wrong framebuffer.
+bool StateCache::check_bind_framebuffer(GLenum target, GLuint f) {
     if (!coalescing()) return false;
+    bool* has;
+    GLuint* cur;
+    if (target == 0x8CA8u) { has = &has_read_fbo_; cur = &read_fbo_; }
+    else if (target == 0x8CA9u) { has = &has_draw_fbo_; cur = &draw_fbo_; }
+    else { has = &has_draw_fbo_; cur = &draw_fbo_; }
     std::lock_guard<std::mutex> l(m_);
-    if (has_fbo_ && fbo_ == f) {
+    if (*has && *cur == f) {
         hits_++;
         return true;
     }
-    fbo_ = f;
-    has_fbo_ = true;
+    *cur = f;
+    *has = true;
+    if (target == 0x8D40u) { has_draw_fbo_ = true; draw_fbo_ = f; has_read_fbo_ = true; read_fbo_ = f; }
     return false;
 }
 bool StateCache::check_bind_vertex_array(GLuint v) {
@@ -114,6 +123,7 @@ bool StateCache::check_viewport(GLint x, GLint y, GLsizei w, GLsizei h) {
     return false;
 }
 GLuint StateCache::bound_framebuffer() {
+    // DRAW binding: the target that draw-buffer state applies to.
     std::lock_guard<std::mutex> l(m_);
     return has_fbo_ ? fbo_ : 0;
 }
