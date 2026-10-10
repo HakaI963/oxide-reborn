@@ -117,6 +117,33 @@ int main() {
         onigami::TranslateResult r = translate_shader(GL_VERTEX_SHADER, with_cr.c_str());
         check(r.ok && r.essl.compare(0, 15, "#version 310 es") == 0, "CRLF input keeps version first");
     }
+    // 7. Buffer-sampler constructs (minecraft:core/clouds shape, 26.x):
+    //    desktop isamplerBuffer + texelFetch must gain the EXT directive
+    //    (exactly once, after #version, before use) plus sampler precision.
+    //    (Constructed to mirror the 26.3 clouds constructs from the device
+    //    log; byte-exact 26.x sources arrive via the on-device capture.)
+    {
+        const char* cloudsVert =
+            "#version 150\n\nin vec3 Position;\n\nuniform mat4 ModelViewMat;\nuniform mat4 ProjMat;\nuniform isamplerBuffer DataSampler;\n\nout vec4 vertexColor;\n\nvoid main() {\n    ivec4 data = texelFetch(DataSampler, 0);\n    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n    vertexColor = vec4(float(data.x) / 255.0);\n}\n";
+        onigami::TranslateResult r = translate_shader(GL_VERTEX_SHADER, cloudsVert);
+        check(r.ok && !r.passthrough, "clouds-like vertex translates");
+        check(r.needsTexBufferExt, "clouds-like vertex flags texture-buffer need");
+        check(count_occurrences(r.essl, "GL_EXT_texture_buffer") == 1, "exactly one texture-buffer extension directive");
+        size_t vpos = r.essl.find("#version 310 es");
+        size_t epos = r.essl.find("#extension GL_EXT_texture_buffer : require");
+        size_t upos = r.essl.find("uniform isamplerBuffer DataSampler;");
+        check(epos != std::string::npos && epos > vpos && upos != std::string::npos && epos < upos,
+            "extension directive sits between version and declaration");
+        check(r.essl.find("precision highp isamplerBuffer;") != std::string::npos, "isamplerBuffer precision declared");
+        check(r.essl.find("texelFetch(DataSampler, 0)") != std::string::npos, "texelFetch call preserved");
+        check(count_occurrences(r.essl, "#version") == 1, "clouds-like output has exactly one #version");
+    }
+    // 8. Shaders without buffer samplers must NOT gain the directive.
+    {
+        onigami::TranslateResult r = translate_shader(GL_VERTEX_SHADER, kGuiVert);
+        check(!r.needsTexBufferExt, "gui vertex has no texture-buffer need");
+        check(r.essl.find("GL_EXT_texture_buffer") == std::string::npos, "gui output gains no extension directive");
+    }
     if (g_fail == 0) {
         printf("ALL TRANSLATOR TESTS PASSED\n");
         return 0;
