@@ -184,13 +184,7 @@ jobs:
             -IOxideLauncher/src/main/cpp/onigami/include \
             -IOxideLauncher/src/main/cpp/onigami/tests/host_include \
             -IOxideLauncher/src/main/cpp/onigami/src \
-            OxideLauncher/src/main/cpp/onigami/src/gl_frontend.cpp \
-            OxideLauncher/src/main/cpp/onigami/src/gl_longtail.cpp \
-            OxideLauncher/src/main/cpp/onigami/src/state_cache.cpp \
-            OxideLauncher/src/main/cpp/onigami/src/backend.cpp \
-            OxideLauncher/src/main/cpp/onigami/src/config.cpp \
-            OxideLauncher/src/main/cpp/onigami/src/shader_translate.cpp \
-            OxideLauncher/src/main/cpp/onigami/src/program_store.cpp \
+            OxideLauncher/src/main/cpp/onigami/src/*.cpp \
             -o /tmp/libonigami_probe.so
           g++ -std=c++20 -Wall -Wextra -I. \
             -IOxideLauncher/src/main/cpp/onigami/include \
