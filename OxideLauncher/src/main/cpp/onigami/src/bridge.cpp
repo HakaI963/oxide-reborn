@@ -2,6 +2,7 @@
 #include "onigami/bridge.h"
 #include "onigami/backend.h"
 #include "onigami/config.h"
+#include "onigami/vault.h"
 #include <mutex>
 #include <string>
 namespace {
