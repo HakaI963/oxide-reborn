@@ -9,8 +9,8 @@ The native CI workflow fails the build if foreign renderer symbols appear.
 
 | Component | Pin (commit) | Upstream URL | License | Purpose |
 |---|---|---|---|---|
-| glslang | `f5f664dee8146676b04a332a7233959fc3ce9681` | https://github.com/KhronosGroup/glslang | BSD-3-Clause-style (`LICENSE.txt`) with Apache-2.0 headers on newer contributions — verify at vendor time | Parse + link desktop GLSL, emit SPIR-V |
-| SPIRV-Cross | `a0fba56c34a6700f1724bf9b751da5b488a3775c` | https://github.com/KhronosGroup/SPIRV-Cross | Apache-2.0 (`LICENSE`) | Convert SPIR-V to ESSL for the ES driver |
+| glslang | `vulkan-sdk-1.4.363.0` | https://github.com/KhronosGroup/glslang | BSD-3-Clause-style (`LICENSE.txt`) with Apache-2.0 headers on newer contributions — verify at vendor time | Parse + link desktop GLSL, emit SPIR-V |
+| SPIRV-Cross | `vulkan-sdk-1.4.363.0` | https://github.com/KhronosGroup/SPIRV-Cross | Apache-2.0 (`LICENSE`) | Convert SPIR-V to ESSL for the ES driver |
 
 > Nothing in this section is legal advice. License texts of the pinned commits
 > apply as shipped upstream; their notices are preserved in the build tree and
