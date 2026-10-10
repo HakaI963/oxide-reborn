@@ -139,7 +139,8 @@ GLuint StateCache::bound_framebuffer() {
 }
 void StateCache::invalidate() {
     std::lock_guard<std::mutex> l(m_);
-    has_prog_ = has_ab_ = has_eb_ = has_tex_ = has_draw_fbo_ = has_read_fbo_ = has_vao_ = has_vp_ = false;
+    has_prog_ = has_ab_ = has_eb_ = has_draw_fbo_ = has_read_fbo_ = has_vao_ = has_vp_ = false;
+    tex2d_by_unit_.clear();
     caps_.clear();
 }
 } // namespace onigami
