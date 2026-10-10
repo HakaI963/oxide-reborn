@@ -286,6 +286,10 @@ O_API void glCompileShader(GLuint s) {
             return; // never submitted; backend shader stays uncompiled (honest failure)
         }
         essl = tr.essl;
+        if (tr.needsTexBufferExt) {
+            bool present = backend_has_extension("GL_EXT_texture_buffer");
+            onigami::diag_printf("onigami: texture-buffer directive emitted; backend advertises ext: %s", present ? "yes" : "NO-unsupported");
+        }
         onigami::vault_store(key, essl.data(), essl.size());
     }
     const char* p = essl.c_str();
@@ -477,7 +481,15 @@ O_API void glGenFramebuffers(GLsizei n, GLuint* f) {
 O_API GLenum glCheckFramebufferStatus(GLenum t) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().CheckFramebufferStatus)
         return GL_FRAMEBUFFER_UNSUPPORTED;
-    return onigami::gles_procs().CheckFramebufferStatus(t);
+    GLenum st = onigami::gles_procs().CheckFramebufferStatus(t);
+    if (st != GL_FRAMEBUFFER_COMPLETE) {
+        static GLenum last_t = 0, last_s = 0;
+        if (t != last_t || st != last_s) {
+            last_t = t; last_s = st;
+            onigami::diag_printf("onigami: framebuffer incomplete");
+        }
+    }
+    return st;
 }
 O_API void glFramebufferTexture2D(GLenum t, GLenum a, GLenum x, GLuint r, GLint l) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().FramebufferTexture2D) return;
