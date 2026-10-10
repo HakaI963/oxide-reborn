@@ -180,6 +180,38 @@ Still needs the device: vanilla menu/world/clouds rendering, Sodium runs,
 white-screen attribution (new capture + draw-buffer/FBO logs will identify
 it), Iris packs. See the device-test matrix below - all NOT TESTED.
 
+## Device round 3: geometry corruption (recording 2026-10-10, menu streaks + half-black world)
+
+Recording frames: GUI logo/buttons/icons render correctly (GUI shaders,
+textures, blending proven working); the panorama background smears into
+diagonal streaks; in-world the left half renders textured terrain while the
+right half is razor-straight black; later frames show threads, a sky-colored
+screen and distorted GUI. Shaders/textures/uniforms work - vertex/index data
+reaching the draws is wrong, worsening over time.
+
+Root causes found by auditing state tracking (spec-level, not guesses):
+
+1. ELEMENT_ARRAY_BUFFER was deduplicated with a global last-value cache,
+   but the backend stores the index binding PER-VAO. After any VAO switch,
+   re-binding the same index id was skipped and draws used the wrong index
+   buffer: streaks, slivers, covering triangles. Fix: index binds always
+   forward (src/state_cache.cpp). ARRAY_BUFFER dedup is unaffected: that
+   binding is context-global, so the global cache mirrors it exactly.
+2. TEXTURE_2D binds were deduplicated across texture units (the active unit
+   was never recorded): the same texture id on two units skipped the second
+   bind. Fix: per-unit tracking via note_active_unit from the
+   glActiveTexture wrapper.
+3. Bind logging added (FBO target+id, viewport rect on every forward) so the
+   next device log shows exactly which target each pass bound and what
+   viewport followed - this attributes the half-black split directly.
+4. Bisection path: the existing onigamiCoalescing setting disables ALL
+   dedup. If artifacts persist with it OFF, state tracking is exonerated
+   and the fault lies in translation - report the capture files.
+
+Pinned by 30 new host assertions (67 total pass on CI): EB never deduped
+across VAO switches, per-unit textures, DRAW/READ independence, VAO
+tracking, invalidate semantics.
+
 ## How to classify a run
 
 PASS — game reached a rendered world with the listed feature verified in the
