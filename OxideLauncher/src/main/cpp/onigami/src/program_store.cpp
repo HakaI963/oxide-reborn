@@ -19,10 +19,12 @@ namespace {
 std::string vault_dir() { return data_dir() + "/program_vault"; }
 std::string vault_path(const std::string& key_hex) { return vault_dir() + "/" + key_hex + ".essl"; }
 } // namespace
+int translator_schema_version() { return 2; }
 std::string vault_key_hex(const char* a, const char* b) {
     std::string cat;
     if (a) cat += a;
     cat += "\x1f";
+    cat += "schema=" + std::to_string(translator_schema_version()) + "\x1f";
     if (b) cat += b;
     unsigned long long h = fnv1a64(cat.data(), cat.size());
     char buf[17];

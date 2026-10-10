@@ -19,6 +19,7 @@ ONIGAMI_API int onigami_on_process_start(const char* data_dir) {
     g_data_dir = data_dir ? data_dir : "";
     onigami::diag_printf("onigami: process_start dir=%s", g_data_dir.c_str());
     onigami::apply_config(onigami::load_config());
+    onigami::diag_printf("onigami: build=%s translator_schema=%d", onigami_build_id(), onigami::translator_schema_version());
     return 0;
 }
 ONIGAMI_API int onigami_on_surface(void* w, int width, int height) {
