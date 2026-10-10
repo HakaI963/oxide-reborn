@@ -43,6 +43,19 @@ Renderer gate on the fixed build (universal APK, machine-verified):
 libonigami_so_entries=4
 (lib/arm64-v8a, lib/armeabi-v7a, lib/x86, lib/x86_64), libsilica_so_entries=0.
 
+Release APK artifacts WITH GEOMETRY FIXES (run 38028569323, HEAD d3486821):
+
+- release-apk-arm64 (153 MB, gate: 1 libonigami.so, 0 libsilica.so) <- use this on the POCO F7
+- release-apk-all (275 MB)
+- release-apk-arm (145 MB)
+- release-apk-x86_64 (156 MB)
+- release-apk-x86 (146 MB)
+
+Watch in the new log for: `onigami: bind FBO ...`, `onigami: viewport ...`
+(only when Onigami diagnostics are ON), and the absence of the streak/sliver
+artifacts in menu and world. If streaks persist, toggle the Onigami state
+coalescing setting OFF and retest to bisect state-vs-shader causes.
+
 Release APK artifacts WITH ALL ROUND-2 FIXES + NEW PINS (run 38024364412):
 
 - release-apk-all (275 MB, gate: 4 libonigami.so, 0 libsilica.so)
