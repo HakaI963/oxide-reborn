@@ -99,6 +99,37 @@ adb logcat -s onigami:V
 - No FPS, frame-generation or upscaling claims are made anywhere. No measured
   performance numbers exist yet, so none are published.
 
+## Device round 2: 26.3 clouds failure (log dated 2026-10-10, POCO F7)
+
+Dispatch fix confirmed on-device: the game log shows ONIGAMI's mapped
+version string (`4.6 (Compatibility Profile) ONIGAMI translated ES3.2`) -
+the GUI `Invalid #version` failure is gone.
+
+New primary failure, `minecraft:core/clouds` vertex shader at transformed
+line 38: `isamplerBuffer` with no `GL_EXT_texture_buffer` directive and no
+sampler precision. The `_uniform_00_04` / `texelFetch` errors cascade from
+the dead declaration. Fix (general construct handling, not a clouds
+special-case): the translator detects samplerBuffer-family words on code
+lines and emits `#extension GL_EXT_texture_buffer : require` plus highp
+sampler precisions right after `#version`; `needsTexBufferExt` flows to the
+frontend, which logs whether the backend actually advertises the extension
+(honest capability reporting: if absent, the log says unsupported and the
+backend fails loudly). Pinned by 9 new host assertions (37 total, executed).
+
+State fixes from the same log: 34895 (TEXTURE_CUBE_MAP_SEAMLESS) and 34370
+(PROGRAM_POINT_SIZE) init-time enables are now skipped as always-on no-ops
+(no-op on desktop GL 3.2+ too; backend INVALID_ENUM removed); 32868
+(GL_PROXY_TEXTURE_2D) is Mojang's own max-texture probe, which already falls
+back to 16384 - forwarded unchanged, logged once for attribution. Deletes
+now invalidate coalesced state (backend may recycle names - stale bindings
+drew to the wrong framebuffer), DRAW/READ FBO tracking was split (they are
+independent GL state), glDrawBuffers on framebuffer 0 with attachment enums
+is logged loudly, and incomplete-FBO status is logged with its code.
+
+Still needs the device: vanilla menu/world/clouds rendering, Sodium runs,
+white-screen attribution (new capture + draw-buffer/FBO logs will identify
+it), Iris packs. See the device-test matrix below - all NOT TESTED.
+
 ## How to classify a run
 
 PASS — game reached a rendered world with the listed feature verified in the
