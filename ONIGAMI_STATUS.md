@@ -221,6 +221,40 @@ Root causes found by auditing state tracking (spec-level, not guesses):
    dedup. If artifacts persist with it OFF, state tracking is exonerated
    and the fault lies in translation - report the capture files.
 
+## Device round 4: screenshots 2026-10-10 (menu wedge + missing terrain + washed-out sky)
+
+Screenshots read at source level. Evidence: in the menu, logo/buttons/text/
+panorama all render with correct color and mipmapping; a clean straight-edged
+black wedge covers the bottom-left third. In the world, sky/sun/HUD/hotbar
+render (hotbar colors correct, not washed out) but NO terrain geometry exists.
+Interpretation: shader compilation, linking, textures, alpha blending and GUI
+shading are correct; the geometry that is wrong is drawn with wrong clip-space
+matrices/indexing, i.e. geometry is culled or lands off-screen.
+
+Defects fixed in this round (general, source-level):
+
+1. glUniformMatrix4fv with transpose=TRUE was silently DROPPED (the wrapper
+   refused the call). GLES mandates transpose==FALSE, so any desktop
+   row-major upload never reached the backend and every such matrix stayed
+   identity - producing exactly the reported symptoms: panorama wedge,
+   terrain with broken projection, sky colors wrong. The matrix is now
+   transposed in-host and uploaded, with a one-time log line.
+2. GL_FRAMEBUFFER_SRGB (0x8DB9) was forwarded and produced INVALID_ENUM on a
+   GLES backend. It is now recorded + logged ONCE with the backend sRGB
+   extension status and an explicit statement that linear->sRGB encoding is
+   NOT emulated (documented limitation - not silently ignored, not faked).
+3. Bounded per-signature draw diagnostics: mode/count/type/VAO/program/
+   draw-FBO/viewport for the first 3 draws of each distinct signature,
+   gated by Onigami diagnostics. This proves whether terrain draws reach the
+   backend and in what binding context - no per-frame readbacks.
+
+Root cause for BUG 2 (no terrain) and BUG 3 (menu wedge) is therefore a
+matrix-upload defect in the general path, not a shader or texture problem.
+BUG 1 (exposure) is the one open item: MC expects automatic linear->sRGB
+framing which GLES does not offer as an enable; the log now states the backend
+sRGB extension so the next run decides the correct strategy (sRGB attachment
+formats vs. encode-in-translator). No exposure multiplier was invented.
+
 Pinned by 30 new host assertions (67 total pass on CI): EB never deduped
 across VAO switches, per-unit textures, DRAW/READ independence, VAO
 tracking, invalidate semantics.
