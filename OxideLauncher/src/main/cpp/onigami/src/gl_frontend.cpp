@@ -192,7 +192,7 @@ O_API void glActiveTexture(GLenum t) {
     onigami::gles_procs().ActiveTexture(t);
 }
 O_API void glBindFramebuffer(GLenum t, GLuint f) {
-    if (onigami::state_cache().check_bind_framebuffer(f)) return;
+    if (onigami::state_cache().check_bind_framebuffer(t, f)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindFramebuffer) return;
     onigami::gles_procs().BindFramebuffer(t, f);
 }

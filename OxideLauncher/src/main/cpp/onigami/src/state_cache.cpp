@@ -125,7 +125,7 @@ bool StateCache::check_viewport(GLint x, GLint y, GLsizei w, GLsizei h) {
 GLuint StateCache::bound_framebuffer() {
     // DRAW binding: the target that draw-buffer state applies to.
     std::lock_guard<std::mutex> l(m_);
-    return has_fbo_ ? fbo_ : 0;
+    return has_draw_fbo_ ? draw_fbo_ : 0;
 }
 void StateCache::invalidate() {
     std::lock_guard<std::mutex> l(m_);
