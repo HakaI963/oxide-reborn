@@ -188,6 +188,7 @@ O_API void glBindTexture(GLenum t, GLuint x) {
     onigami::gles_procs().BindTexture(t, x);
 }
 O_API void glActiveTexture(GLenum t) {
+    onigami::state_cache().note_active_unit(t);
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().ActiveTexture) return;
     onigami::gles_procs().ActiveTexture(t);
 }
@@ -195,6 +196,8 @@ O_API void glBindFramebuffer(GLenum t, GLuint f) {
     if (onigami::state_cache().check_bind_framebuffer(t, f)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindFramebuffer) return;
     onigami::gles_procs().BindFramebuffer(t, f);
+    if (onigami::current_config().diagnostics)
+        onigami::diag_printf("onigami: bind FBO target=0x%x id=%u", t, f);
 }
 O_API void glBindRenderbuffer(GLenum t, GLuint r) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindRenderbuffer) return;
@@ -226,6 +229,8 @@ O_API void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
     if (onigami::state_cache().check_viewport(x, y, w, h)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Viewport) return;
     onigami::gles_procs().Viewport(x, y, w, h);
+    if (onigami::current_config().diagnostics)
+        onigami::diag_printf("onigami: viewport %d %d %dx%d", (int)x, (int)y, (int)w, (int)h);
 }
 O_API void glScissor(GLint x, GLint y, GLsizei w, GLsizei h) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Scissor) return;
