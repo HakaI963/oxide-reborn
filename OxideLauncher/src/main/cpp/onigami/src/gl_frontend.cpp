@@ -389,6 +389,7 @@ O_API void glGetProgramInfoLog(GLuint p, GLsizei m, GLsizei* l, GLchar* b) {
     onigami::gles_procs().GetProgramInfoLog(p, m, l, b);
 }
 O_API void glDeleteProgram(GLuint p) {
+    onigami::state_cache().invalidate();
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().DeleteProgram) return;
     onigami::gles_procs().DeleteProgram(p);
 }
@@ -571,26 +572,31 @@ O_API void glFinish(void) {
 }
 // ---- long tail: honest dlsym passthrough, no invented behavior ----
 O_API void glDeleteBuffers(GLsizei n, const GLuint* b) {
+    onigami::state_cache().invalidate();
     if (!b || n <= 0) return;
     auto fn = gsym<void (*)(GLsizei, const GLuint*)>("glDeleteBuffers");
     if (fn) fn(n, b);
 }
 O_API void glDeleteVertexArrays(GLsizei n, const GLuint* a) {
+    onigami::state_cache().invalidate();
     if (!a || n <= 0) return;
     auto fn = gsym<void (*)(GLsizei, const GLuint*)>("glDeleteVertexArrays");
     if (fn) fn(n, a);
 }
 O_API void glDeleteTextures(GLsizei n, const GLuint* t) {
+    onigami::state_cache().invalidate();
     if (!t || n <= 0) return;
     auto fn = gsym<void (*)(GLsizei, const GLuint*)>("glDeleteTextures");
     if (fn) fn(n, t);
 }
 O_API void glDeleteFramebuffers(GLsizei n, const GLuint* f) {
+    onigami::state_cache().invalidate();
     if (!f || n <= 0) return;
     auto fn = gsym<void (*)(GLsizei, const GLuint*)>("glDeleteFramebuffers");
     if (fn) fn(n, f);
 }
 O_API void glDeleteRenderbuffers(GLsizei n, const GLuint* r) {
+    onigami::state_cache().invalidate();
     if (!r || n <= 0) return;
     auto fn = gsym<void (*)(GLsizei, const GLuint*)>("glDeleteRenderbuffers");
     if (fn) fn(n, r);
