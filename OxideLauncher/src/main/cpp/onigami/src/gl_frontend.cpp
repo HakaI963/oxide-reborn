@@ -434,7 +434,28 @@ O_API void glUniform4fv(GLint l, GLsizei c, const GLfloat* v) {
 O_API void glUniformMatrix4fv(GLint l, GLsizei c, GLboolean t, const GLfloat* v) {
     if (l < 0 || !v) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().UniformMatrix4fv) return;
-    onigami::gles_procs().UniformMatrix4fv(l, c, t, v);
+    if (c <= 0) return;
+    if (t == GL_FALSE) {
+        onigami::gles_procs().UniformMatrix4fv(l, c, GL_FALSE, v);
+        return;
+    }
+    // GLES mandates transpose==FALSE; a desktop row-major upload is
+    // transposed here instead of being discarded (the old behaviour left
+    // identity matrices in place and silently broke all projection math).
+    thread_local std::vector<GLfloat> tmp;
+    tmp.resize((size_t)c * 16);
+    for (GLsizei i = 0; i < c; i++) {
+        const GLfloat* src = v + (size_t)i * 16;
+        GLfloat* dst = tmp.data() + (size_t)i * 16;
+        for (int r = 0; r < 4; r++)
+            for (int col = 0; col < 4; col++) dst[col * 4 + r] = src[r * 4 + col];
+    }
+    onigami::gles_procs().UniformMatrix4fv(l, c, GL_FALSE, tmp.data());
+    static bool logged = false;
+    if (!logged) {
+        logged = true;
+        onigami::diag_printf("onigami: glUniformMatrix4fv transpose=TRUE converted (%d matrix%s)", (int)c, c > 1 ? "es" : "");
+    }
 }
 // ---- resources ----
 O_API void glGenBuffers(GLsizei n, GLuint* b) {
