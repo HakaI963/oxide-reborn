@@ -135,3 +135,22 @@ jobs:
           git -c user.name="oxide-ci" -c user.email="oxide-ci@users.noreply.github.com" \
             commit -m "Onigami native: libonigami.so own backend (NDK 27.3, CMake 3.22.1, Release, no foreign linkage)"
           git push origin HEAD:${{ inputs.branch }}
+
+  host-test:
+    name: Host translator regression test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Build and run translator tests on host
+        run: |
+          set -euo pipefail
+          g++ --version
+          g++ -std=c++20 -Wall -Wextra -Werror \
+            -IOxideLauncher/src/main/cpp/onigami/include \
+            -IOxideLauncher/src/main/cpp/onigami/tests/host_include \
+            OxideLauncher/src/main/cpp/onigami/tests/host/test_translator.cpp \
+            OxideLauncher/src/main/cpp/onigami/src/shader_translate.cpp \
+            -o /tmp/test_translator
+          /tmp/test_translator
