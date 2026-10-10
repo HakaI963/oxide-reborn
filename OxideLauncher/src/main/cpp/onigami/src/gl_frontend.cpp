@@ -42,6 +42,30 @@ std::unordered_map<GLuint, ShRec> g_shaders;
 // GL_PROGRAM_POINT_SIZE (point size always comes from the shader in ES and
 // desktop core). Forwarding them makes the backend raise INVALID_ENUM for a
 // call that changes nothing, so they are skipped with a once-per-entry log.
+// 0x8DB9 GL_FRAMEBUFFER_SRGB: desktop automatic linear->sRGB framing. GLES
+// has no such enable (it is expressed by sRGB attachment formats instead),
+// so it cannot be honored as an enable here. Recorded + logged ONCE with the
+// backend sRGB extension status, so the log states exactly what framing the
+// app requested and whether this backend could express it - instead of
+// raising INVALID_ENUM and saying nothing.
+bool framebuffer_srgb_requested = false;
+bool backend_has_srgb_ext() {
+    if (!onigami::gles_procs().GetIntegerv || !onigami::gles_procs().GetStringi) return false;
+    GLint n = 0;
+    onigami::gles_procs().GetIntegerv(GL_NUM_EXTENSIONS, &n);
+    for (GLint i = 0; i < n && i < 512; i++) {
+        const char* e = (const char*)onigami::gles_procs().GetStringi(GL_EXTENSIONS, (GLuint)i);
+        if (e && (std::strcmp(e, "GL_EXT_sRGB") == 0 || std::strcmp(e, "GL_EXT_sRGB_write_control") == 0)) return true;
+    }
+    return false;
+}
+void log_srgb_state(const char* fn) {
+    static bool logged = false;
+    if (logged) return;
+    logged = true;
+    onigami::diag_printf("onigami: %s(GL_FRAMEBUFFER_SRGB) -> %s; backend sRGB ext=%s; linear->sRGB encoding NOT emulated by this backend path (documented limitation)",
+        fn, framebuffer_srgb_requested ? "ENABLE" : "disable", backend_has_srgb_ext() ? "present" : "absent");
+}
 bool desktop_noop_cap(GLenum c) { return c == 0x884Fu || c == 0x8642u; }
 void log_noop_cap_once(const char* fn, GLenum c) {
     static bool logged_seamless = false;
@@ -229,12 +253,14 @@ O_API void glBindVertexArray(GLuint v) {
     onigami::gles_procs().BindVertexArray(v);
 }
 O_API void glEnable(GLenum c) {
+    if (c == 0x8DB9u) { framebuffer_srgb_requested = true; log_srgb_state("glEnable"); return; }
     if (desktop_noop_cap(c)) { log_noop_cap_once("glEnable", c); return; }
     if (onigami::state_cache().check_cap(c, true)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Enable) return;
     onigami::gles_procs().Enable(c);
 }
 O_API void glDisable(GLenum c) {
+    if (c == 0x8DB9u) { framebuffer_srgb_requested = false; log_srgb_state("glDisable"); return; }
     if (desktop_noop_cap(c)) { log_noop_cap_once("glDisable", c); return; }
     if (onigami::state_cache().check_cap(c, false)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Disable) return;
@@ -242,6 +268,7 @@ O_API void glDisable(GLenum c) {
 }
 O_API GLboolean glIsEnabled(GLenum c) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().IsEnabled) return GL_FALSE;
+    if (c == 0x8DB9u) return framebuffer_srgb_requested ? GL_TRUE : GL_FALSE;
     if (desktop_noop_cap(c)) return GL_TRUE;
     return onigami::gles_procs().IsEnabled(c);
 }
