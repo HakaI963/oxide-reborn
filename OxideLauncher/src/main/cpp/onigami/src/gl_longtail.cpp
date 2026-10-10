@@ -182,7 +182,7 @@ Cls policy_class_for(const char* name) {
 // Resolution helpers
 // ---------------------------------------------------------------------------
 
-namespace {
+namespace detail {
 
 // dlsym on the libGLESv2 handle we already hold. Deliberately never
 // eglGetProcAddress: for a name this layer does not recognise, the backend's
@@ -232,7 +232,7 @@ void note_absent(const char* name, const char* reason) {
                          name, reason);
 }
 
-}  // namespace
+}  // namespace detail
 
 // ---------------------------------------------------------------------------
 // Multi-draw: exact expansion
@@ -241,13 +241,13 @@ void note_absent(const char* name, const char* reason) {
 void multi_draw_arrays(GLenum mode, const GLint* first, const GLsizei* count,
                        GLsizei drawcount) {
     if (!first || !count || drawcount <= 0) return;
-    if (void* ext = policy_target("glMultiDrawArraysEXT")) {
+    if (void* ext = detail::policy_target("glMultiDrawArraysEXT")) {
         auto fn = reinterpret_cast<void (*)(GLenum, const GLint*,
                                             const GLsizei*, GLsizei)>(ext);
         fn(mode, first, count, drawcount);
         return;
     }
-    auto draw = resolve<void (*)(GLenum, GLint, GLsizei)>("glDrawArrays");
+    auto draw = detail::resolve<void (*)(GLenum, GLint, GLsizei)>("glDrawArrays");
     if (!draw) return;
     for (GLsizei i = 0; i < drawcount; i++) draw(mode, first[i], count[i]);
 }
@@ -257,13 +257,13 @@ void multi_draw_elements(GLenum mode, const GLsizei* count, GLenum type,
     if (!count || !indices || drawcount <= 0) return;
     // Prefer the driver's own multi-draw only when the extension is genuinely
     // advertised; the policy records it as an ES name for that reason.
-    if (void* ext = policy_target("glMultiDrawElementsEXT")) {
+    if (void* ext = detail::policy_target("glMultiDrawElementsEXT")) {
         auto fn = reinterpret_cast<void (*)(GLenum, const GLsizei*, GLenum,
                                             const void* const*, GLsizei)>(ext);
         fn(mode, count, type, indices, drawcount);
         return;
     }
-    auto draw = resolve<void (*)(GLenum, GLsizei, GLenum, const void*)>(
+    auto draw = detail::resolve<void (*)(GLenum, GLsizei, GLenum, const void*)>(
         "glDrawElements");
     if (!draw) return;
     for (GLsizei i = 0; i < drawcount; i++)
@@ -275,7 +275,7 @@ void multi_draw_elements_base_vertex(GLenum mode, const GLsizei* count,
                                      GLsizei drawcount,
                                      const GLint* basevertex) {
     if (!count || !indices || drawcount <= 0) return;
-    auto draw = resolve<
+    auto draw = detail::resolve<
         void (*)(GLenum, GLsizei, GLenum, const void*, GLint)>(
         "glDrawElementsBaseVertex");
     if (draw) {
@@ -287,12 +287,12 @@ void multi_draw_elements_base_vertex(GLenum mode, const GLsizei* count,
     // No base-vertex form either. Emitting the plain command keeps the
     // geometry but drops the offset, so this is logged rather than silent:
     // silently wrong geometry is worse than visible trouble.
-    auto plain = resolve<void (*)(GLenum, GLsizei, GLenum, const void*)>(
+    auto plain = detail::resolve<void (*)(GLenum, GLsizei, GLenum, const void*)>(
         "glDrawElements");
     if (plain)
         for (GLsizei i = 0; i < drawcount; i++)
             plain(mode, count[i], type, indices[i]);
-    note_absent("glMultiDrawElementsBaseVertex",
+    detail::note_absent("glMultiDrawElementsBaseVertex",
                 "no GL_EXT base-vertex form, offsets dropped (visible anomaly, "
                 "not a silent wrong geo)");
 }
@@ -304,59 +304,22 @@ void multi_draw_elements_base_vertex(GLenum mode, const GLsizei* count,
 // ---------------------------------------------------------------------------
 
 extern "C" {
-
-using namespace onigami_longtail;
-
-O_API void glMultiDrawElements(GLenum mode, const GLsizei* count, GLenum type,
-                               const void* const* indices, GLsizei drawcount) {
-    multi_draw_elements(mode, count, type, indices, drawcount);
-}
-
-O_API void glMultiDrawElementsBaseVertex(GLenum mode, const GLsizei* count,
-                                         GLenum type,
-                                         const void* const* indices,
-                                         GLsizei drawcount,
-                                         const GLint* basevertex) {
-    multi_draw_elements_base_vertex(mode, count, type, indices, drawcount,
-                                    basevertex);
-}
-
-O_API void glMultiDrawElementsBaseVertexEXT(GLenum mode,
-                                            const GLsizei* count, GLenum type,
-                                            const void* const* indices,
-                                            GLsizei primcount,
-                                            const GLint* basevertex) {
-    multi_draw_elements_base_vertex(mode, count, type, indices, primcount,
-                                    basevertex);
-}
-
-O_API void glMultiDrawElementsEXT(GLenum mode, const GLsizei* count, GLenum type,
-                                  const void* const* indices,
-                                  GLsizei primcount) {
-    multi_draw_elements(mode, count, type, indices, primcount);
-}
-
-O_API void glMultiDrawArrays(GLenum mode, const GLint* first,
-                             const GLsizei* count, GLsizei drawcount) {
-    multi_draw_arrays(mode, first, count, drawcount);
-}
-
-O_API void glMultiDrawArraysEXT(GLenum mode, const GLint* first,
-                                const GLsizei* count, GLsizei primcount) {
-    multi_draw_arrays(mode, first, count, primcount);
-}
+// The multi-draw C entry points are defined in gl_frontend.cpp, which is the
+// single definition site for the exported GL ABI of this library. This file
+// owns the semantics (the expansion), and the frontend owns the symbol, so
+// there is exactly one of each and the link is clean.
 
 // ---- object creation: real names from the classic entry points -----------
 // Real objects, obtained from the classic ES entry points. Not a DSA path: no
 // DSA command is implemented, and the log says so once via the policy table.
 
 O_API void glCreateBuffers(GLsizei n, GLuint* buffers) {
-    auto gen = resolve<void (*)(GLsizei, GLuint*)>("glGenBuffers");
+    auto gen = onigami_longtail::detail::resolve<void (*)(GLsizei, GLuint*)>("glGenBuffers");
     if (gen && buffers) gen(n, buffers);
 }
 
 O_API void glCreateVertexArrays(GLsizei n, GLuint* arrays) {
-    auto gen = resolve<void (*)(GLsizei, GLuint*)>("glGenVertexArrays");
+    auto gen = onigami_longtail::detail::resolve<void (*)(GLsizei, GLuint*)>("glGenVertexArrays");
     if (gen && arrays) gen(n, arrays);
 }
 
@@ -364,33 +327,33 @@ O_API void glCreateTextures(GLenum target, GLsizei n, GLuint* textures) {
     // ES has no DSA: the target cannot be bound here, and claiming otherwise
     // would fabricate a capability the backend does not have.
     (void)target;
-    auto gen = resolve<void (*)(GLsizei, GLuint*)>("glGenTextures");
+    auto gen = onigami_longtail::detail::resolve<void (*)(GLsizei, GLuint*)>("glGenTextures");
     if (gen && textures) gen(n, textures);
 }
 
 O_API void glCreateSamplers(GLsizei n, GLuint* samplers) {
-    auto gen = resolve<void (*)(GLsizei, GLuint*)>("glGenSamplers");
+    auto gen = onigami_longtail::detail::resolve<void (*)(GLsizei, GLuint*)>("glGenSamplers");
     if (gen && samplers) gen(n, samplers);
 }
 
 O_API void glCreateFramebuffers(GLsizei n, GLuint* framebuffers) {
-    auto gen = resolve<void (*)(GLsizei, GLuint*)>("glGenFramebuffers");
+    auto gen = onigami_longtail::detail::resolve<void (*)(GLsizei, GLuint*)>("glGenFramebuffers");
     if (gen && framebuffers) gen(n, framebuffers);
 }
 
 O_API void glCreateRenderbuffers(GLsizei n, GLuint* renderbuffers) {
-    auto gen = resolve<void (*)(GLsizei, GLuint*)>("glGenRenderbuffers");
+    auto gen = onigami_longtail::detail::resolve<void (*)(GLsizei, GLuint*)>("glGenRenderbuffers");
     if (gen && renderbuffers) gen(n, renderbuffers);
 }
 
 O_API void glCreateQueries(GLenum target, GLsizei n, GLuint* ids) {
     (void)target;
-    auto gen = resolve<void (*)(GLsizei, GLuint*)>("glGenQueries");
+    auto gen = onigami_longtail::detail::resolve<void (*)(GLsizei, GLuint*)>("glGenQueries");
     if (gen && ids) gen(n, ids);
 }
 
 O_API void glCreateProgramPipelines(GLsizei n, GLuint* pipelines) {
-    auto gen = resolve<void (*)(GLsizei, GLuint*)>("glGenProgramPipelines");
+    auto gen = onigami_longtail::detail::resolve<void (*)(GLsizei, GLuint*)>("glGenProgramPipelines");
     if (gen && pipelines) gen(n, pipelines);
 }
 
@@ -402,18 +365,18 @@ O_API void glCreateProgramPipelines(GLsizei n, GLuint* pipelines) {
 O_API void glGetTexImage(GLenum target, GLint level, GLenum format, GLenum type,
                          void* pixels) {
     (void)target; (void)level; (void)format; (void)type; (void)pixels;
-    note_absent("glGetTexImage", "readback needs an FBO round-trip this layer "
+    onigami_longtail::detail::note_absent("glGetTexImage", "readback needs an FBO round-trip this layer "
                                 "does not implement");
 }
 
 O_API void glPushDebugGroup(GLenum source, GLuint id, GLsizei length,
                             const GLchar* message) {
     (void)source; (void)id; (void)length; (void)message;
-    note_absent("glPushDebugGroup", "no debug group marker on ES 3.2");
+    onigami_longtail::detail::note_absent("glPushDebugGroup", "no debug group marker on ES 3.2");
 }
 
 O_API void glPopDebugGroup(void) {
-    note_absent("glPopDebugGroup", "no debug group marker on ES 3.2");
+    onigami_longtail::detail::note_absent("glPopDebugGroup", "no debug group marker on ES 3.2");
 }
 
 }  // extern "C"

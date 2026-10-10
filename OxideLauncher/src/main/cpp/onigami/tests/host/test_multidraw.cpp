@@ -23,6 +23,16 @@
 #include <dlfcn.h>
 #include <vector>
 
+// The shared object built from the library's own frontend, which is where the
+// exported multi-draw symbols are defined. The workflow builds this probe so
+// the export assertion below runs against the real library ABI rather than
+// against this translation unit's own reach. nullptr means the assertion is
+// skipped (see onigami.yml).
+#ifndef ONIGAMI_TEST_PROBE_SO
+#define ONIGAMI_TEST_PROBE_SO nullptr
+#endif
+const char* onigami_test_probe_so = ONIGAMI_TEST_PROBE_SO;
+
 namespace {
 
 int g_fail = 0;
@@ -33,28 +43,6 @@ void check(bool cond, const char* name) {
         printf("FAIL: %s\n", name);
         g_fail++;
     }
-}
-
-// ---- stub driver, records what gl_longtail.cpp forwards --------------------
-struct Call {
-    unsigned mode;
-    GLsizei count;
-    unsigned type;
-    const void* indices;
-    GLint base;
-    enum Kind { kDrawElements, kDrawElementsBaseVertex, kDrawArrays } kind;
-};
-std::vector<Call> g_calls;
-
-extern "C" void glDrawElements(GLenum m, GLsizei c, GLenum t, const void* p) {
-    g_calls.push_back(Call{m, c, t, p, 0, Call::kDrawElements});
-}
-extern "C" void glDrawElementsBaseVertex(GLenum m, GLsizei c, GLenum t,
-                                         const void* p, GLint b) {
-    g_calls.push_back(Call{m, c, t, p, b, Call::kDrawElementsBaseVertex});
-}
-extern "C" void glDrawArrays(GLenum m, GLint f, GLsizei c) {
-    g_calls.push_back(Call{m, c, 0, nullptr, f, Call::kDrawArrays});
 }
 
 }  // namespace
@@ -108,17 +96,32 @@ int main() {
               onigami_longtail::Cls::kEmulate,
           "glMultiDrawArrays is emulated");
 
-    // The exported C entry points must exist and be reachable, so that
-    // eglGetProcAddress answers the application with ONIGAMI's symbol rather
-    // than a GLES driver pointer that does not exist. RTLD_DEFAULT reaches the
-    // executable's own exports here, exactly what eglGetProcAddress would
-    // resolve in the game process.
-    void* a = dlsym(RTLD_DEFAULT, "glMultiDrawElements");
-    void* b = dlsym(RTLD_DEFAULT, "glMultiDrawElementsBaseVertex");
-    void* c = dlsym(RTLD_DEFAULT, "glMultiDrawArrays");
-    check(a != nullptr, "glMultiDrawElements is exported by the library");
-    check(b != nullptr, "glMultiDrawElementsBaseVertex is exported");
-    check(c != nullptr, "glMultiDrawArrays is exported");
+     // The entry points must exist at the shared-library ABI level so that
+     // eglGetProcAddress answers ONIGAMI's own wrapper rather than falling
+     // through to a GLES driver that has no multi-draw in core. The definitions
+     // live in gl_frontend.cpp; the probe .so is that frontend, so opening it
+     // is the same look the game does. A symbol the frontend owns but does not
+     // export is one the game can never reach, which would make its semantics
+     // enforced for nobody.
+    if (onigami_test_probe_so[0] != '\0') {
+        // Loaded with RTLD_NOW; on failure the reason is printed so a broken
+        // probe path is visible rather than silently skipping the check.
+        void* lib = dlopen(onigami_test_probe_so, RTLD_NOW | RTLD_GLOBAL);
+        if (lib == nullptr) {
+            printf("  dlopen(%s) failed: %s\n", onigami_test_probe_so, dlerror());
+        }
+        check(lib != nullptr, "the library frontend can be loaded");
+        if (lib != nullptr) {
+            void* a = dlsym(lib, "glMultiDrawElements");
+            void* b = dlsym(lib, "glMultiDrawElementsBaseVertex");
+            void* c = dlsym(lib, "glMultiDrawArrays");
+            check(a != nullptr, "glMultiDrawElements is exported from the library");
+            check(b != nullptr, "glMultiDrawElementsBaseVertex is exported");
+            check(c != nullptr, "glMultiDrawArrays is exported");
+        }
+    } else {
+         printf("SKIP: no probe .so path, export check skipped\n");
+     }
 
     if (g_fail == 0) {
         printf("ALL MULTI-DRAW CONTRACT TESTS PASSED\n");
