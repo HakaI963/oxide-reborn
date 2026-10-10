@@ -50,7 +50,7 @@ int main() {
     check(state_cache().check_bind_texture(GL_TEXTURE_2D, 10), "unit0 cache intact");
     // 6. Invalidate drops everything (recycled names after deletes).
     state_cache().invalidate();
-    check(!state_cache().check_bind_buffer(GL_ARRAY_BUFFER, 2), "array forwards after invalidate");
+check(!state_cache().check_bind_buffer(GL_ARRAY_BUFFER, 2), "array forwards after invalidate");
     check(!state_cache().check_bind_vertex_array(3), "vao forwards after invalidate");
     check(!state_cache().check_bind_framebuffer(GL_DRAW_FRAMEBUFFER, 5), "fbo forwards after invalidate");
     check(!state_cache().check_bind_texture(GL_TEXTURE_2D, 10), "tex forwards after invalidate");
