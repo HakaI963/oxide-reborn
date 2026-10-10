@@ -72,6 +72,26 @@ bool backend_has_extension(const char* ext) {
     cache[ext] = found;
     return found;
 }
+// Bounded per-signature draw diagnostics: proves whether geometry reaches the
+// backend and in what binding context, without per-frame readbacks or floods.
+void diag_draw(const char* api, GLenum mode, GLsizei count, GLenum type, bool indexed) {
+    if (!onigami::current_config().diagnostics) return;
+    static std::unordered_map<std::string, int> seen;
+    static int total = 0;
+    if (++total > 400000) return;
+    char key[160];
+    snprintf(key, sizeof(key), "%s|%u|%d|%u|%u|%u", api, (unsigned)mode, (int)count, (unsigned)type,
+             (unsigned)onigami::state_cache().bound_vertex_array(), (unsigned)onigami::state_cache().bound_program());
+    if (++seen[key] > 3) return;
+    GLint vp[4] = {0, 0, 0, 0};
+    if (onigami::gles_procs().GetIntegerv) onigami::gles_procs().GetIntegerv(0x0BA2 /* GL_VIEWPORT */, vp);
+    onigami::diag_printf(
+        "onigami: draw %s mode=0x%x count=%d type=0x%x vao=%u prog=%u draw_fbo=%u viewport=%dx%d+%d,%d",
+        api, (unsigned)mode, (int)count, (unsigned)type,
+        (unsigned)onigami::state_cache().bound_vertex_array(),
+        (unsigned)onigami::state_cache().bound_program(),
+        (unsigned)onigami::state_cache().bound_framebuffer(), (int)vp[2], (int)vp[3], (int)vp[0], (int)vp[1]);
+}
 bool has_current_context() {
     if (!onigami::ensure_egl_loaded() || !onigami::egl_procs().GetCurrentContext) return false;
     return onigami::egl_procs().GetCurrentContext() != EGL_NO_CONTEXT;
@@ -591,18 +611,22 @@ O_API void glReadPixels(GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum
     onigami::gles_procs().ReadPixels(x, y, w, h, f, t, d);
 }
 O_API void glDrawArrays(GLenum m, GLint f, GLsizei c) {
+    diag_draw("glDrawArrays", m, c, 0, false);
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().DrawArrays) return;
     onigami::gles_procs().DrawArrays(m, f, c);
 }
 O_API void glDrawElements(GLenum m, GLsizei c, GLenum t, const void* p) {
+    diag_draw("glDrawElements", m, c, t, true);
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().DrawElements) return;
     onigami::gles_procs().DrawElements(m, c, t, p);
 }
 O_API void glDrawArraysInstanced(GLenum m, GLint f, GLsizei c, GLsizei n) {
+    diag_draw("glDrawArraysInstanced", m, c, 0, false);
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().DrawArraysInstanced) return;
     onigami::gles_procs().DrawArraysInstanced(m, f, c, n);
 }
 O_API void glDrawElementsInstanced(GLenum m, GLsizei c, GLenum t, const void* p, GLsizei n) {
+    diag_draw("glDrawElementsInstanced", m, c, t, true);
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().DrawElementsInstanced) return;
     onigami::gles_procs().DrawElementsInstanced(m, c, t, p, n);
 }
