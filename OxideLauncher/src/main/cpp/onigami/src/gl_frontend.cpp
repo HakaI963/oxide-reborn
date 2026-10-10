@@ -801,4 +801,26 @@ O_API void glDeleteSync(GLsync s) {
     auto fn = gsym<void (*)(GLsync)>("glDeleteSync");
     if (fn) fn(s);
 }
+O_API void glDrawBuffer(GLenum b) {
+    auto fn = gsym<void (*)(GLenum)>("glDrawBuffer");
+    if (fn) fn(b);
+}
+O_API void glDrawBuffers(GLsizei n, const GLenum* bufs) {
+    if (!bufs || n <= 0) return;
+    if (onigami::current_config().diagnostics && onigami::state_cache().bound_framebuffer() == 0) {
+        for (GLsizei i = 0; i < n; i++) {
+            GLenum b = bufs[i];
+            if (b != GL_NONE && b != GL_BACK && b != GL_FRONT) {
+                onigami::diag_printf("onigami: draw buffers on default FBO");
+                break;
+            }
+        }
+    }
+    auto fn = gsym<void (*)(GLsizei, const GLenum*)>("glDrawBuffers");
+    if (fn) fn(n, bufs);
+}
+O_API void glReadBuffer(GLenum b) {
+    auto fn = gsym<void (*)(GLenum)>("glReadBuffer");
+    if (fn) fn(b);
+}
 } // extern "C"
