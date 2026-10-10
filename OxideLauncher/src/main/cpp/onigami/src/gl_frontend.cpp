@@ -12,6 +12,11 @@
 #include "onigami/translate.h"
 #include "onigami/vault.h"
 #include "state_cache.h"
+#include "onigami/config.h"
+#include <cstdio>
+#include <cstring>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <GLES3/gl3.h>
 #include <dlfcn.h>
 #include <mutex>
@@ -40,12 +45,50 @@ F gsym(const char* n) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().handle) return nullptr;
     return (F)dlsym(onigami::gles_procs().handle, n);
 }
+std::string first_line(const char* s) {
+    if (!s) return "(null)";
+    std::string out;
+    for (const char* p = s; *p && *p != '\n' && out.size() < 160; p++) {
+        if (*p != '\r') out += *p;
+    }
+    return out;
+}
+// Device evidence: original + translated source + backend verdict, keyed by
+// the vault key so a failing shader can be identified from the launch log
+// alone. Bounded (300 files) and diagnostics-gated.
+void write_shader_capture(const std::string& key, const char* src, const char* essl, const char* log) {
+    if (!onigami::current_config().diagnostics) return;
+    std::string dir = onigami::data_dir() + "/shaders";
+    mkdir(dir.c_str(), 0755);
+    int count = 0;
+    if (DIR* d = opendir(dir.c_str())) {
+        while (readdir(d)) {
+            if (++count > 300) break;
+        }
+        closedir(d);
+        if (count > 300) return;
+    }
+    auto write = [&](const char* suffix, const char* data) {
+        if (!data) return;
+        std::string p = dir + "/" + key + suffix;
+        if (FILE* f = fopen(p.c_str(), "wb")) {
+            fwrite(data, 1, strlen(data), f);
+            fclose(f);
+        }
+    };
+    write(".orig.glsl", src);
+    write(".essl.glsl", essl);
+    write(".compile.log", log);
+}
 } // namespace
 extern "C" {
 // ---- honest queries ----
 O_API const GLubyte* glGetString(GLenum name) {
     if (!has_current_context()) return nullptr;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().GetString) return nullptr;
+    // Opportunistic: SDL may drive system EGL directly, so our wrapped
+    // eglMakeCurrent (which also probes) is not guaranteed to run.
+    onigami::try_probe_renderer_version();
     if (name == GL_VERSION) {
         const char* live = (const char*)onigami::gles_procs().GetString(GL_VERSION);
         if (!live || !live[0]) return nullptr;
@@ -215,7 +258,25 @@ O_API void glCompileShader(GLuint s) {
         std::lock_guard<std::mutex> l(g_sh_m);
         g_shaders[s].compiled = (st != 0);
     }
-    onigami::diag_printf("onigami: compile shader=%u %s vault=%d", s, st ? "ok" : "backend-fail", (int)from_vault);
+    // Backend verdict: Minecraft reads it via glGetShaderInfoLog (below);
+    // ONIGAMI also records it so the device log shows the real verdict.
+    std::string info;
+    if (onigami::gles_procs().GetShaderInfoLog) {
+        GLint need = 0;
+        onigami::gles_procs().GetShaderiv(s, GL_INFO_LOG_LENGTH, &need);
+        if (need > 1) {
+            std::vector<char> buf((size_t)need);
+            GLsizei got = 0;
+            onigami::gles_procs().GetShaderInfoLog(s, need, &got, buf.data());
+            if (got > 0) info.assign(buf.data(), (size_t)got);
+        }
+    }
+    write_shader_capture(key, src.c_str(), essl.c_str(), info.empty() ? nullptr : info.c_str());
+    onigami::diag_printf("onigami: compile shader=%u type=%s %s vault=%d srcline=%s", s,
+        type == GL_VERTEX_SHADER ? "vs" : (type == GL_FRAGMENT_SHADER ? "fs" : "other"),
+        st ? "ok" : "backend-fail", (int)from_vault, first_line(src.c_str()).c_str());
+    if (!st && !info.empty())
+        onigami::diag_printf("onigami: shader=%u backend log: %s", s, info.substr(0, 1800).c_str());
 }
 O_API void glGetShaderiv(GLuint s, GLenum p, GLint* v) {
     if (!v) {
@@ -257,6 +318,23 @@ O_API void glDetachShader(GLuint p, GLuint s) {
 O_API void glLinkProgram(GLuint p) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().LinkProgram) return;
     onigami::gles_procs().LinkProgram(p);
+    if (onigami::gles_procs().GetProgramiv && onigami::gles_procs().GetProgramInfoLog) {
+        GLint st = 0;
+        onigami::gles_procs().GetProgramiv(p, GL_LINK_STATUS, &st);
+        if (!st) {
+            GLint need = 0;
+            onigami::gles_procs().GetProgramiv(p, GL_INFO_LOG_LENGTH, &need);
+            std::string info;
+            if (need > 1) {
+                std::vector<char> buf((size_t)need);
+                GLsizei got = 0;
+                onigami::gles_procs().GetProgramInfoLog(p, need, &got, buf.data());
+                if (got > 0) info.assign(buf.data(), (size_t)got);
+            }
+            onigami::diag_printf("onigami: link program=%u backend-fail log: %s", p,
+                info.substr(0, 1800).c_str());
+        }
+    }
 }
 O_API void glGetProgramiv(GLuint p, GLenum q, GLint* v) {
     if (!v) {
