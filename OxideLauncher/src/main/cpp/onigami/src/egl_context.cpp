@@ -108,11 +108,18 @@ O_API EGLBoolean eglReleaseThread(void) {
     if (!ensure_egl_loaded() || !egl_procs().ReleaseThread) return EGL_FALSE;
     return egl_procs().ReleaseThread();
 }
-// TEMPORARY compat: every name resolves to the backend entry, so unwrapped
-// calls render correctly while bypassing state tracking. The wrapped set
-// grows with profiling; the bypass is counted in diagnostics mode.
+// Dispatch rule: ONIGAMI's own wrapped entry points are answered with
+// ONIGAMI's own addresses FIRST (resolved from our own library handle); only
+// unwrapped names fall through to the backend. This is load-bearing: LWJGL on
+// EGL resolves its GL function pointers through eglGetProcAddress, so
+// answering with backend pointers here silently bypasses shader translation,
+// state tracking and version mapping for the entire game while the
+// directly-linked symbols stay correct. That bypass is exactly what delivered
+// raw desktop GLSL ("#version 150") to the Adreno GLES compiler and produced
+// "Invalid #version" on minecraft:core/gui.
 O_API __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* n) {
     if (!n || !n[0]) return nullptr;
+    if (void* own = onigami::own_proc(n)) return (__eglMustCastToProperFunctionPointerType)own;
     if (!ensure_egl_loaded() || !egl_procs().GetProcAddress) return nullptr;
     return egl_procs().GetProcAddress(n);
 }

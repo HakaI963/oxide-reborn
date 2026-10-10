@@ -14,6 +14,9 @@ std::mutex& egl_mutex();
 std::string& cached_renderer();
 std::string& cached_version();
 void try_probe_renderer_version();
+// Interposer dispatch: address of ONIGAMI's own wrapper for a GL/EGL entry
+// point name, or nullptr when ONIGAMI does not wrap that name.
+void* own_proc(const char* name);
 struct EglProcs {
   void* handle = nullptr;
   decltype(&::eglGetDisplay) GetDisplay = nullptr;

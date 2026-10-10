@@ -41,6 +41,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     src/shader_translate.cpp
     src/program_store.cpp
     src/state_cache.cpp
+    src/proc_table.cpp
 )
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include ${glslang_SOURCE_DIR} ${spirv_cross_SOURCE_DIR})
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glslang::glslang glslang-default-resource-limits spirv-cross-c)

@@ -140,6 +140,7 @@ TranslateResult translate_shader(GLenum glType, const char* src) {
     std::istringstream in(src);
     std::string line;
     while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back(); // tolerate CRLF assets
         std::string t = trim_left(line);
         // Track block comments so migration never rewrites commented code.
         std::string scan = line;
