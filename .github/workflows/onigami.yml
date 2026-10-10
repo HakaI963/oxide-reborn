@@ -163,3 +163,28 @@ jobs:
             OxideLauncher/src/main/cpp/onigami/tests/host/stub_config.cpp \
             -o /tmp/test_state_cache
           /tmp/test_state_cache
+          # Long-tail policy: asserts that every classified entry point is
+          # backed by a real ES 3.2 symbol (kForward) or an exact emulation
+          # (kEmulate), and that nothing is claimed which the backend lacks.
+          # Runs against the vendored GLES 3.2 header so a fabricated forward
+          # fails the build instead of passing CI and rendering nothing.
+          g++ -std=c++20 -Wall -Wextra -Werror \
+            -IOxideLauncher/src/main/cpp/onigami/include \
+            -IOxideLauncher/src/main/cpp/onigami/tests/host_include \
+            -IOxideLauncher/src/main/cpp/onigami/src \
+            OxideLauncher/src/main/cpp/onigami/tests/host/test_longtail.cpp \
+            OxideLauncher/src/main/cpp/onigami/src/gl_longtail.cpp \
+            OxideLauncher/src/main/cpp/onigami/tests/host/stub_backend.cpp \
+            -o /tmp/test_longtail
+          (cd OxideLauncher/src/main/cpp/onigami && /tmp/test_longtail)
+          # Multi-draw contract: the expansion semantics and that the entry
+          # points are exported rather than silently dropped.
+          g++ -std=c++20 -Wall -Wextra -Werror -rdynamic \
+            -IOxideLauncher/src/main/cpp/onigami/include \
+            -IOxideLauncher/src/main/cpp/onigami/tests/host_include \
+            -IOxideLauncher/src/main/cpp/onigami/src \
+            OxideLauncher/src/main/cpp/onigami/tests/host/test_multidraw.cpp \
+            OxideLauncher/src/main/cpp/onigami/src/gl_longtail.cpp \
+            OxideLauncher/src/main/cpp/onigami/tests/host/stub_backend.cpp \
+            -o /tmp/test_multidraw
+          /tmp/test_multidraw

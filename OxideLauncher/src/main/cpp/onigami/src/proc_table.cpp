@@ -66,6 +66,17 @@ const char* kOwnNames[] = {
     "glGenQueries", "glBeginQuery", "glEndQuery",
     "glFenceSync", "glClientWaitSync", "glDeleteSync",
     "glDrawBuffer", "glDrawBuffers", "glReadBuffer",
+    // Long-tail entry points (src/gl_longtail.cpp). These exist as exported
+    // symbols precisely because eglGetProcAddress must never hand a desktop
+    // name to the ES driver when ONIGAMI is the one that owns the semantics:
+    // multi-draw is expanded by us, and the desktop-only names are refused by
+    // us with a diagnostic rather than crash on a null driver pointer.
+    "glMultiDrawElementsBaseVertex", "glMultiDrawElementsBaseVertexEXT",
+    "glMultiDrawElementsEXT", "glMultiDrawArraysEXT",
+    "glCreateBuffers", "glCreateVertexArrays", "glCreateTextures",
+    "glCreateSamplers", "glCreateFramebuffers", "glCreateRenderbuffers",
+    "glCreateQueries", "glCreateProgramPipelines",
+    "glGetTexImage", "glPushDebugGroup", "glPopDebugGroup",
     nullptr,
 };
 std::mutex g_m;

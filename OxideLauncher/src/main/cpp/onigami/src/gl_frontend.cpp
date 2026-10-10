@@ -11,6 +11,7 @@
 #include "onigami/backend.h"
 #include "onigami/translate.h"
 #include "onigami/vault.h"
+#include "onigami_longtail.h"
 #include "state_cache.h"
 #include "onigami/config.h"
 #include <cstdio>
@@ -796,13 +797,32 @@ O_API void glDrawRangeElements(GLenum m, GLuint s, GLuint e, GLsizei c, GLenum t
 }
 O_API void glMultiDrawArrays(GLenum m, const GLint* f, const GLsizei* c, GLsizei n) {
     if (!f || !c || n <= 0) return;
-    auto fn = gsym<void (*)(GLenum, const GLint*, const GLsizei*, GLsizei)>("glMultiDrawArrays");
-    if (fn) fn(m, f, c, n);
+    onigami_longtail::multi_draw_arrays(m, f, c, n);
 }
 O_API void glMultiDrawElements(GLenum m, const GLsizei* c, GLenum t, const void* const* p, GLsizei n) {
     if (!c || !p || n <= 0) return;
-    auto fn = gsym<void (*)(GLenum, const GLsizei*, GLenum, const void* const*, GLsizei)>("glMultiDrawElements");
-    if (fn) fn(m, c, t, p, n);
+    onigami_longtail::multi_draw_elements(m, c, t, p, n);
+}
+O_API void glMultiDrawElementsBaseVertex(GLenum m, const GLsizei* c, GLenum t,
+                                         const void* const* p, GLsizei n,
+                                         const GLint* b) {
+    if (!c || !p || n <= 0) return;
+    onigami_longtail::multi_draw_elements_base_vertex(m, c, t, p, n, b);
+}
+O_API void glMultiDrawElementsEXT(GLenum m, const GLsizei* c, GLenum t,
+                                  const void* const* p, GLsizei n) {
+    if (!c || !p || n <= 0) return;
+    onigami_longtail::multi_draw_elements(m, c, t, p, n);
+}
+O_API void glMultiDrawElementsBaseVertexEXT(GLenum m, const GLsizei* c, GLenum t,
+                                            const void* const* p, GLsizei n,
+                                            const GLint* b) {
+    if (!c || !p || n <= 0) return;
+    onigami_longtail::multi_draw_elements_base_vertex(m, c, t, p, n, b);
+}
+O_API void glMultiDrawArraysEXT(GLenum m, const GLint* f, const GLsizei* c, GLsizei n) {
+    if (!f || !c || n <= 0) return;
+    onigami_longtail::multi_draw_arrays(m, f, c, n);
 }
 O_API void glBindAttribLocation(GLuint p, GLuint i, const GLchar* n) {
     if (!n) return;
@@ -860,6 +880,116 @@ O_API void glBeginQuery(GLenum t, GLuint q) {
     auto fn = gsym<void (*)(GLenum, GLuint)>("glBeginQuery");
     if (fn) fn(t, q);
 }
+// ---- ES 3.2 core entry points the frontend forwards directly ------------
+// These exist in ES 3.2 under the same name and signature (see
+// include/GLES3/gl32.h in the pinned upstream tree), so there is nothing to
+// translate: the honour is in intercepting them at all, which is what makes
+// eglGetProcAnswer return ONIGAMI's symbol instead of falling through to the
+// driver for a name this layer owns. Correctness-neutral, but they close the
+// gap that led to "silently dropped call" defects on the multi-draw family.
+
+O_API void glBindBufferBase(GLenum target, GLuint index, GLuint buffer) {
+    auto fn = gsym<void (*)(GLenum, GLuint, GLuint)>("glBindBufferBase");
+    if (fn) fn(target, index, buffer);
+}
+
+O_API void glBindBufferRange(GLenum target, GLuint index, GLuint buffer,
+                             GLintptr offset, GLsizeiptr size) {
+    auto fn = gsym<void (*)(GLenum, GLuint, GLuint, GLintptr, GLsizeiptr)>("glBindBufferRange");
+    if (fn) fn(target, index, buffer, offset, size);
+}
+
+O_API void glBlendColor(GLclampf r, GLclampf g, GLclampf b, GLclampf a) {
+    auto fn = gsym<void (*)(GLclampf, GLclampf, GLclampf, GLclampf)>("glBlendColor");
+    if (fn) fn(r, g, b, a);
+}
+
+O_API void glClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat* value) {
+    if (!value) return;
+    auto fn = gsym<void (*)(GLenum, GLint, const GLfloat*)>("glClearBufferfv");
+    if (fn) fn(buffer, drawbuffer, value);
+}
+
+O_API void glClearBufferfi(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil) {
+    auto fn = gsym<void (*)(GLenum, GLint, GLfloat, GLint)>("glClearBufferfi");
+    if (fn) fn(buffer, drawbuffer, depth, stencil);
+}
+
+O_API void glClearBufferuiv(GLenum buffer, GLint drawbuffer, const GLuint* value) {
+    if (!value) return;
+    auto fn = gsym<void (*)(GLenum, GLint, const GLuint*)>("glClearBufferuiv");
+    if (fn) fn(buffer, drawbuffer, value);
+}
+
+O_API void glGetTexLevelParameteriv(GLenum target, GLint level, GLenum pname, GLint* params) {
+    if (!params) return;
+    auto fn = gsym<void (*)(GLenum, GLint, GLenum, GLint*)>("glGetTexLevelParameteriv");
+    if (fn) fn(target, level, pname, params);
+}
+
+O_API void glGetTexLevelParameterfv(GLenum target, GLint level, GLenum pname, GLfloat* params) {
+    if (!params) return;
+    auto fn = gsym<void (*)(GLenum, GLint, GLenum, GLfloat*)>("glGetTexLevelParameterfv");
+    if (fn) fn(target, level, pname, params);
+}
+
+O_API void glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* params) {
+    if (!params) return;
+    auto fn = gsym<void (*)(GLuint, GLenum, GLuint*)>("glGetQueryObjectuiv");
+    if (fn) fn(id, pname, params);
+}
+
+O_API void glFramebufferTexture(GLenum target, GLenum attachment, GLuint texture, GLint level) {
+    auto fn = gsym<void (*)(GLenum, GLenum, GLuint, GLint)>("glFramebufferTexture");
+    if (fn) fn(target, attachment, texture, level);
+}
+
+O_API void glFramebufferTextureLayer(GLenum target, GLenum attachment,
+                                     GLuint texture, GLint level, GLint layer) {
+    auto fn = gsym<void (*)(GLenum, GLenum, GLuint, GLint, GLint)>("glFramebufferTextureLayer");
+    if (fn) fn(target, attachment, texture, level, layer);
+}
+
+O_API GLboolean glIsBuffer(GLuint buffer) {
+    auto fn = gsym<GLboolean (*)(GLuint)>("glIsBuffer");
+    return fn ? fn(buffer) : GL_FALSE;
+}
+
+O_API GLboolean glIsVertexArray(GLuint array) {
+    auto fn = gsym<GLboolean (*)(GLuint)>("glIsVertexArray");
+    return fn ? fn(array) : GL_FALSE;
+}
+
+O_API void glObjectLabel(GLuint identifier, GLuint name, GLsizei length, const GLchar* label) {
+    auto fn = gsym<void (*)(GLuint, GLuint, GLsizei, const GLchar*)>("glObjectLabel");
+    if (fn) fn(identifier, name, length, label);
+}
+
+O_API void glCopyBufferSubData(GLenum readTarget, GLenum writeTarget,
+                               GLintptr readOffset, GLintptr writeOffset,
+                               GLsizeiptr size) {
+    auto fn = gsym<void (*)(GLenum, GLenum, GLintptr, GLintptr, GLsizeiptr)>("glCopyBufferSubData");
+    if (fn) fn(readTarget, writeTarget, readOffset, writeOffset, size);
+}
+
+O_API GLuint glGetUniformBlockIndex(GLuint program, const GLchar* uniformBlockName) {
+    if (!uniformBlockName) return 0xFFFFFFFFu; // GL_INVALID_INDEX
+    auto fn = gsym<GLuint (*)(GLuint, const GLchar*)>("glGetUniformBlockIndex");
+    if (!fn) return 0xFFFFFFFFu;
+    return fn(program, uniformBlockName);
+}
+
+O_API void glUniformBlockBinding(GLuint program, GLuint uniformBlockIndex, GLuint uniformBlockBinding) {
+    auto fn = gsym<void (*)(GLuint, GLuint, GLuint)>("glUniformBlockBinding");
+    if (fn) fn(program, uniformBlockIndex, uniformBlockBinding);
+}
+
+O_API void glTexStorage2D(GLenum target, GLsizei levels, GLenum internalformat,
+                          GLsizei width, GLsizei height) {
+    auto fn = gsym<void (*)(GLenum, GLsizei, GLenum, GLsizei, GLsizei)>("glTexStorage2D");
+    if (fn) fn(target, levels, internalformat, width, height);
+}
+
 O_API void glEndQuery(GLenum t) {
     auto fn = gsym<void (*)(GLenum)>("glEndQuery");
     if (fn) fn(t);
