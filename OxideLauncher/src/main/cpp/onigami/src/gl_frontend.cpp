@@ -36,6 +36,42 @@ struct ShRec {
     bool compiled = false;
 };
 std::unordered_map<GLuint, ShRec> g_shaders;
+// Desktop-only capability enums that are unconditionally true in ES 3.x:
+// 0x884F GL_TEXTURE_CUBE_MAP_SEAMLESS (cube maps are always seamlessly
+// filtered in ES; the enable is a no-op even on desktop GL 3.2+) and 0x8642
+// GL_PROGRAM_POINT_SIZE (point size always comes from the shader in ES and
+// desktop core). Forwarding them makes the backend raise INVALID_ENUM for a
+// call that changes nothing, so they are skipped with a once-per-entry log.
+bool desktop_noop_cap(GLenum c) { return c == 0x884Fu || c == 0x8642u; }
+void log_noop_cap_once(const char* fn, GLenum c) {
+    static bool logged_seamless = false;
+    static bool logged_ppoint = false;
+    bool* flag = (c == 0x884Fu) ? &logged_seamless : &logged_ppoint;
+    if (!*flag) {
+        *flag = true;
+        onigami::diag_printf("onigami: skipped always-on cap");
+    }
+}
+bool is_proxy_target(GLenum t) { return t == 0x8063u || t == 0x8064u; }
+bool backend_has_extension(const char* ext) {
+    static std::mutex m;
+    static std::unordered_map<std::string, bool> cache;
+    std::lock_guard<std::mutex> l(m);
+    auto it = cache.find(ext);
+    if (it != cache.end()) return it->second;
+    bool found = false;
+    if (onigami::ensure_gles_loaded() && onigami::gles_procs().GetIntegerv &&
+        onigami::gles_procs().GetStringi) {
+        GLint n = 0;
+        onigami::gles_procs().GetIntegerv(GL_NUM_EXTENSIONS, &n);
+        for (GLint i = 0; i < n && i < 4096; i++) {
+            const char* e = (const char*)onigami::gles_procs().GetStringi(GL_EXTENSIONS, (GLuint)i);
+            if (e && std::strcmp(e, ext) == 0) { found = true; break; }
+        }
+    }
+    cache[ext] = found;
+    return found;
+}
 bool has_current_context() {
     if (!onigami::ensure_egl_loaded() || !onigami::egl_procs().GetCurrentContext) return false;
     return onigami::egl_procs().GetCurrentContext() != EGL_NO_CONTEXT;
@@ -170,17 +206,20 @@ O_API void glBindVertexArray(GLuint v) {
     onigami::gles_procs().BindVertexArray(v);
 }
 O_API void glEnable(GLenum c) {
+    if (desktop_noop_cap(c)) { log_noop_cap_once("glEnable", c); return; }
     if (onigami::state_cache().check_cap(c, true)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Enable) return;
     onigami::gles_procs().Enable(c);
 }
 O_API void glDisable(GLenum c) {
+    if (desktop_noop_cap(c)) { log_noop_cap_once("glDisable", c); return; }
     if (onigami::state_cache().check_cap(c, false)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Disable) return;
     onigami::gles_procs().Disable(c);
 }
 O_API GLboolean glIsEnabled(GLenum c) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().IsEnabled) return GL_FALSE;
+    if (desktop_noop_cap(c)) return GL_TRUE;
     return onigami::gles_procs().IsEnabled(c);
 }
 O_API void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
