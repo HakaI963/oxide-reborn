@@ -31,6 +31,19 @@ results are claimed here until a launch log or capture is attached.
 | Context/surface lifecycle recovery | NOT TESTED |
 | FPS / frame-time measurements | NOT TESTED |
 
+Release APK artifacts WITH THE DISPATCH FIX (run 38014563788, HEAD f2c78304):
+
+- release-apk-all (275 MB)
+- release-apk-arm64 (153 MB)
+- release-apk-arm (145 MB)
+- release-apk-x86_64 (156 MB)
+- release-apk-x86 (146 MB)
+
+Renderer gate on the fixed build (universal APK, machine-verified):
+libonigami_so_entries=4
+(lib/arm64-v8a, lib/armeabi-v7a, lib/x86, lib/x86_64), libsilica_so_entries=0.
+
+Superseded artifacts (pre-fix run 37967063785, do NOT use for device testing):
 Release APK artifacts (run 37967063785):
 
 - release-apk-all (275 MB)
