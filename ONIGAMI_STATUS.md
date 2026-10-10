@@ -43,6 +43,24 @@ Renderer gate on the fixed build (universal APK, machine-verified):
 libonigami_so_entries=4
 (lib/arm64-v8a, lib/armeabi-v7a, lib/x86, lib/x86_64), libsilica_so_entries=0.
 
+Release APK artifacts WITH ALL ROUND-2 FIXES (run 38019541175, HEAD bf8f63cb):
+
+- release-apk-all (275 MB)
+- release-apk-arm64 (153 MB) <- use this on the POCO F7
+- release-apk-arm (145 MB)
+- release-apk-x86_64 (156 MB)
+- release-apk-x86 (146 MB)
+
+Renderer gate on the fixed build (arm64 APK, machine-verified):
+libonigami_so_entries=1 (lib/arm64-v8a/libonigami.so), libsilica_so_entries=0.
+Universal APK gate from the previous run: 4 entries, 0 silica.
+
+Automated test evidence in this build:
+- Host translator suite: 37/37 assertions pass on CI (real gui shaders +
+  clouds-like buffer-sampler shader + legacy + passthrough + negatives).
+- Native 4-ABI build + symbol gate: PASS.
+- CI (unit tests, lint, debug APK, R8): PASS.
+
 Superseded artifacts (pre-fix run 37967063785, do NOT use for device testing):
 Release APK artifacts (run 37967063785):
 
