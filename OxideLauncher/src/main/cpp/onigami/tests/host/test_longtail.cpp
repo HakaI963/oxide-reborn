@@ -36,12 +36,19 @@ void check(bool cond, const char* name) {
 }
 
 const char* gl32_path() {
-    // The same header the device build compiles against, from the pinned
-    // upstream tree. Located via the include path the host build uses.
+    // The GLES 3.2 header this translation is compiled against. Rather than
+    // committing a duplicate of a third-party header, use the copy already
+    // vendored in this repository for the reference renderer. The relative
+    // paths below cover both the layout where ci runs the test
+    // (cwd = .../cpp/onigami) and a checkout where the test is run from the
+    // repository root.
     for (const char* p : {
              "tests/host_include/GLES3/gl32.h",
              "include/GLES3/gl32.h",
-             "upstream/MobileGlues-cpp/include/GLES3/gl32.h",
+             // vendored upstream Khronos header, relative to .../cpp/onigami
+             "../copperoxide/upstream/MobileGlues-cpp/include/GLES3/gl32.h",
+             // ... and from the repository root
+             "OxideLauncher/src/main/cpp/copperoxide/upstream/MobileGlues-cpp/include/GLES3/gl32.h",
              "../include/GLES3/gl32.h",
          }) {
         std::ifstream f(p);
