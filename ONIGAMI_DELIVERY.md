@@ -5,12 +5,12 @@
 | Item | Value |
 |---|---|
 | Previous HEAD of record | `255dc0c2` ("round-4 root cause (matrix upload) + diagnostics + sRGB honesty") |
-| **HEAD now** | **`2662800`** (CI-committed `libonigami.so` from source `8732d6c`) |
-| Source of the fix | commits `711472d`, `eb680f8`, `8732d6c` |
-| Native build | workflow run `38055378883` from `8732d6c` — 4 ABIs **success**, host tests **success** |
-| Release APKs | workflow run `38055863092` from `2662800` — all 5 variants **success** |
-| ARM64 APK artifact | `release-apk-arm64` → `OxideLauncher-1.14.0-arm64-v8a.apk`, 163,196,564 bytes |
-| Inside that APK | `lib/arm64-v8a/libonigami.so`, 1,060,464 bytes, exports all 7 multi-draw symbols plus the new long-tail set (verified by extracting the APK and reading its export table) |
+| **HEAD now** | **`1b7de0e`** (CI-committed `libonigami.so` from source `6178309`) |
+| Source of the fix | commits `711472d`, `eb680f8`, `8732d6c`, `6178309` |
+| Native build | workflow run `38060487568` from `6178309` — 4 ABIs **success**, host tests **success** |
+| Release APKs | workflow run `38060972896` from `1b7de0e` — all 5 variants **success** |
+| ARM64 APK artifact | `release-apk-arm64` → `OxideLauncher-1.14.0-arm64-v8a.apk`, 163,196,560 bytes |
+| Inside that APK | `lib/arm64-v8a/libonigami.so`, 1,060,464 bytes. Export table read directly from the extracted file: **49 of 49 required symbols present** (all 7 multi-draw spellings, `glCreate*`, the ES 3.2 core forwards, the honest-`kAbsent` names, the ONIGAMI identity functions). Build date baked in: `Oct 10 2026`. |
 | Renderer gate, all 5 ABIs | `libonigami_so_entries >= 1`, `libsilica_so_entries = 0` — verified from the workflow log |
 | No uncommitted changes at HEAD | yes, the tree is clean at `2662800` |
 
@@ -28,7 +28,7 @@ Expect:
 
 ```
 onigami: process_start dir=/data/.../files/onigami
-onigami: build=onigami-8732d6c built Oct 10 2026 <time> translator_schema=2
+onigami: build=onigami-6178309 built Oct 10 2026 <time> translator_schema=2
 onigami: surface <w>x<h>
 onigami: probe renderer=... version=OpenGL ES 3.2 ...
 ```
@@ -138,7 +138,7 @@ diagnostic — never silently passed to a driver that has no such symbol.
 |---|---|
 | Translator suite (37 assertions) | pass |
 | State-cache suite (30 assertions) | pass |
-| Long-tail policy suite (**41 assertions**, new) | pass — asserts every `kForward` names a symbol that exists in `GLES3/gl32.h`; a fabricated forward fails the build |
+| Long-tail policy suite (**41 assertions run, 0 skipped**, new) | pass — asserts every `kForward` names a symbol that exists in `GLES3/gl32.h`. CI previously skipped these (nonexistent search path); fixed in `6178309` and re-verified from the CI log. A deliberately misclassified entry point fails it. |
 | Multi-draw contract suite (**11 assertions**, new) | pass — expansion safety on empty/null batches, plus real export check against the actual frontend |
 | Native build, 4 ABIs | pass |
 | Native symbol gate, 4 ABIs | pass |
@@ -175,7 +175,7 @@ Iris, shaderpacks, context lifecycle, extended gameplay, FPS.
 ## 6. Device test instructions
 
 ```sh
-# download the arm64 APK from run 38055863092, then
+# download the arm64 APK from run 38060972896, then
 adb install -r OxideLauncher-1.14.0-arm64-v8a.apk
 adb logcat -c
 adb logcat -s onigami:V SDL_Hook:V OxideLauncher:V > device.log
@@ -184,7 +184,7 @@ adb logcat -s onigami:V SDL_Hook:V OxideLauncher:V > device.log
 Confirm identity first:
 
 ```
-onigami: build=onigami-8732d6c built Oct 10 2026 ... translator_schema=2
+onigami: build=onigami-6178309 built Oct 10 2026 ... translator_schema=2
 ```
 
 If the string differs, the installed APK is not this build; stop there.
