@@ -43,6 +43,20 @@ Renderer gate on the fixed build (universal APK, machine-verified):
 libonigami_so_entries=4
 (lib/arm64-v8a, lib/armeabi-v7a, lib/x86, lib/x86_64), libsilica_so_entries=0.
 
+Release APK artifacts WITH ALL ROUND-2 FIXES + NEW PINS (run 38024364412):
+
+- release-apk-all (275 MB, gate: 4 libonigami.so, 0 libsilica.so)
+- release-apk-arm64 (153 MB, gate: 1 libonigami.so, 0 libsilica.so) <- use this on the POCO F7
+- release-apk-arm (145 MB)
+- release-apk-x86_64 (156 MB)
+- release-apk-x86 (146 MB)
+
+Compiler-stack pins in this build: glslang + SPIRV-Cross vulkan-sdk-1.4.363.0
+(latest, 4-ABI build-verified). Vault schema=2 (stale pre-fix entries orphaned).
+Watch for in the device log: `onigami: build=<id> translator_schema=2`,
+`texture-buffer directive emitted; backend advertises ext: ...`,
+`compile shader=... ok`, and the absence of the old clouds failure.
+
 Release APK artifacts WITH ALL ROUND-2 FIXES (run 38019541175, HEAD bf8f63cb):
 
 - release-apk-all (275 MB)
