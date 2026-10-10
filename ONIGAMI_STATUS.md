@@ -46,6 +46,30 @@ adb install -r OxideLauncher-1.14.0-all-release.apk
 adb logcat -s onigami:V
 ```
 
+## Root cause fixed in this update (device-evidence backed)
+
+- LWJGL on EGL resolves GL entry points through `eglGetProcAddress`. ONIGAMI's
+  `eglGetProcAddress` answered every name with the backend pointer, so the
+  entire game bypassed shader translation, state tracking and version mapping
+  while directly-linked symbols stayed correct. Raw desktop GLSL
+  (`#version 150`) reached the Adreno GLES compiler and failed
+  `minecraft:core/gui` with `ERROR: Invalid #version`. Independent evidence:
+  the game log showed the RAW backend string (`OpenGL ES 3.2 V@0800.48 /
+  Adreno (TM) 825`) instead of ONIGAMI's mapped version string, proving
+  `glGetString` was also backend-resolved.
+- Fix: `src/proc_table.cpp` interposer dispatch table; `eglGetProcAddress`
+  now answers every wrapped GL/EGL entry with ONIGAMI's own address first and
+  falls through to the backend only for unwrapped names. `glGetString` also
+  probes opportunistically (SDL may drive system EGL directly).
+- Translation half proven by 28 executed host assertions against the real
+  `minecraft:core/gui` vertex/fragment shaders (Minecraft 1.21.4 client
+  assets, Mojang AB): single leading `#version 310 es`, precision contract,
+  interface preservation, legacy migration, ESSL passthrough, honest
+  failures, CRLF tolerance. Runs in the native workflow (`host-test` job).
+- Device evidence capture added: every compiled shader records original +
+  translated source + backend verdict under `$ONIGAMI_DATA_DIR/shaders/` and
+  in logcat, so the next failure arrives with its source attached.
+
 ## Known limitations (documented, not hidden)
 
 - Desktop->ES GLSL translation stage 1 is a structured source migrator
