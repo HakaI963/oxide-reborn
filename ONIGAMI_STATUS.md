@@ -117,6 +117,24 @@ adb logcat -s onigami:V
 - No FPS, frame-generation or upscaling claims are made anywhere. No measured
   performance numbers exist yet, so none are published.
 
+## Vault poisoning: why the crash log matches the pre-fix build bit-for-bit
+
+The 2026-10-10 crash log shows the clouds failure WITHOUT any translator
+fix effects (no extension directive at work). Two explanations existed:
+(a) the tested APK predates the fix, or (b) the program vault served a
+stale entry: vault keys covered source+stage only, so a new binary reused
+the old broken translation and reproduced the identical error, including
+identical transformed line numbers. Both are now closed:
+
+- Vault keys are versioned by translator schema (`schema=2` in every key);
+  any translator change automatically orphans old entries. No manual vault
+  wipe is needed on update.
+- `onigami: build=<id> translator_schema=2` is logged at process start, so
+  every future device log identifies the exact binary under test.
+- If the retest still shows the identical error WITH schema=2 in the log,
+  explanation (a) is eliminated and the fault is in the new translation
+  path itself - report the `shaders/<key>.*` capture files.
+
 ## Device round 2: 26.3 clouds failure (log dated 2026-10-10, POCO F7)
 
 Dispatch fix confirmed on-device: the game log shows ONIGAMI's mapped
