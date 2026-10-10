@@ -72,6 +72,10 @@ void StateCache::note_active_unit(GLenum unit) {
     std::lock_guard<std::mutex> l(m_);
     active_unit_ = unit - 0x84C0u;
 }
+GLuint StateCache::bound_program() {
+    std::lock_guard<std::mutex> l(m_);
+    return has_prog_ ? prog_ : 0;
+}
 GLuint StateCache::bound_vertex_array() {
     std::lock_guard<std::mutex> l(m_);
     return has_vao_ ? vao_ : 0;

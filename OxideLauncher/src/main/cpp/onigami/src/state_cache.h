@@ -22,6 +22,7 @@ class StateCache {
     void invalidate();
     GLuint bound_framebuffer();
     GLuint bound_vertex_array();
+    GLuint bound_program();
  private:
     std::mutex m_;
     unsigned long long hits_ = 0;
