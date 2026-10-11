@@ -37,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -124,7 +125,18 @@ fun RendererSettingsScreen(
                     // pops a confirm dialog. The card already saved the pick, so
                     // cancelling restores the previously stored renderer.
                     var pendingVulkanRendererId by remember { mutableStateOf<String?>(null) }
-                    var fallbackRendererId by remember { mutableStateOf(currentRendererId) }
+                    var previousRendererId by remember { mutableStateOf(currentRendererId) }
+                    // The card persists the pick itself (unit overload); observe the
+                    // stored id and pop the Vulkan confirm only for ONIGAMI.
+                    LaunchedEffect(currentRendererId) {
+                        if (currentRendererId != previousRendererId) {
+                            if (OnigamiVulkan.needsVulkanSwitch(currentRendererId, AllSettings.graphicsApi.state)) {
+                                pendingVulkanRendererId = currentRendererId
+                            } else {
+                                previousRendererId = currentRendererId
+                            }
+                        }
+                    }
 
                     ListSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -169,13 +181,6 @@ fun RendererSettingsScreen(
                                 )
                             }
                         }
-                                            onValueChange = { picked ->
-                            val id = picked.getUniqueIdentifier()
-                            if (OnigamiVulkan.needsVulkanSwitch(id, AllSettings.graphicsApi.state)) {
-                                pendingVulkanRendererId = id
-                            } else {
-                                fallbackRendererId = id
-                            }
                         }
                     )
 
@@ -188,11 +193,11 @@ fun RendererSettingsScreen(
                             confirmText = OnigamiVulkan.DIALOG_CONFIRM,
                             onConfirm = {
                                 AllSettings.graphicsApi.save(GraphicsApi.VULKAN)
-                                fallbackRendererId = pendingVulkanRendererId ?: fallbackRendererId
+                                previousRendererId = currentRendererId
                                 pendingVulkanRendererId = null
                             },
                             onDismiss = {
-                                AllSettings.renderer.save(fallbackRendererId)
+                                AllSettings.renderer.save(previousRendererId)
                                 pendingVulkanRendererId = null
                             }
                         )

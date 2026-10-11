@@ -51,7 +51,6 @@ import dev.oxide.launcher.game.renderer.copperoxide.CopperOxideCapabilities
 import dev.oxide.launcher.game.support.touch_controller.ControllerProxy
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.game.version.installed.Version
-import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.game.version.installed.VersionInfoParser
 import dev.oxide.launcher.game.versioninfo.models.GameManifest
 import dev.oxide.launcher.path.LibPath
