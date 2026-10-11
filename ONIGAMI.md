@@ -121,3 +121,48 @@ other instances are untouched.
 - Temporal upscaling needs motion vectors the engine does not expose, and
   frame generation needs synthetic-frame pacing: both stay out until the
   interfaces and latency budget are proven on-device.
+
+
+## v1.16.0: render scale, coalescing toggle, shader-path costs
+
+### Render scale + bilinear present upscale (opt-in, default off)
+
+New `onigami.json` keys `render_scale` (0.50-1.00, default 1.0) and
+`upscale_mode` (0 off, 1 bilinear). When enabled with the default
+framebuffer bound, `glViewport`/`glScissor` forward scaled rects while
+`glGetIntegerv(VIEWPORT/SCISSOR_BOX)` keeps answering virtual (game-logic)
+values; `eglSwapBuffers` stretches the drawn region to the full surface with
+`glBlitFramebuffer(LINEAR)`, saving and restoring bindings and scissor state.
+App-framebuffer rendering (shadow maps, world chains) is never resized.
+Limitations, stated plainly: GUI drawn to the default framebuffer scales too
+(no 3D/GUI split markers exist yet); benefit is workload-dependent — it saves
+fragment work only where the game shades the default framebuffer, not where
+the world is pre-composited at full resolution. Measure with the pacing log.
+
+### Shader-path cost reductions (semantics unchanged)
+
+- `StateCache` coalescing is now wired to its toggle (default off, as in
+  v1.15.0): redundant UseProgram/binds/VAO/FBO/caps/viewport calls are
+  skipped only when enabled. `ELEMENT_ARRAY_BUFFER` still always forwards
+  (VAO-scoped); textures stay per-unit; DRAW/READ FBOs stay split.
+- Hot `gsym<>` lookups (uniforms, blend, depth, stencil) are memoized: one
+  linker walk per name instead of per call.
+- `GL_EXT_sRGB` presence is cached instead of scanned per enable call.
+- `glCompileShader` fetches the info log and writes captures only on failure;
+  the one-line compile verdict stays.
+- Draw diagnostics use an integer signature hash (no per-draw snprintf/alloc)
+  with the same 3-logs-per-signature throttle.
+- Program vault keys now include backend renderer/version strings and schema 3
+  (old entries orphan, never poison); eviction sweeps at most every 16 stores.
+- `eglSwapBuffers` frame-pacing stats (v1.15.0) remain the FPS instrument.
+
+### Deliberately not shipped
+
+- Frame generation: infeasible in this layer — no retained frames, no motion
+  vectors, no depth pixels, no present ownership (SDL/host + SurfaceFlinger
+  own vsync). No toggle, no counter changes.
+- Temporal upscaling (FSR2-style): needs jittered projection, motion vectors,
+  depth and history the engine does not expose. Not shipped.
+- Universal shadow-map/quality knobs: the launcher has no uniform API into
+  Sodium/Iris/Vitrail packs (only `shaderpacks/` file management). Global
+  `options.txt` render distance etc. already exist and are untouched.
