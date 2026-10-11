@@ -284,17 +284,41 @@ void multi_draw_elements_base_vertex(GLenum mode, const GLsizei* count,
                  basevertex ? basevertex[i] : 0);
         return;
     }
-    // No base-vertex form either. Emitting the plain command keeps the
-    // geometry but drops the offset, so this is logged rather than silent:
-    // silently wrong geometry is worse than visible trouble.
+    // No base-vertex form on this backend. Preserve geometry by rebasing
+    // each sub-draw into a temporary U32 index stream (index + basevertex)
+    // and issuing it as UNSIGNED_INT. Own routine written against the
+    // reference behavior contract (widen + offset); no third-party code.
     auto plain = detail::resolve<void (*)(GLenum, GLsizei, GLenum, const void*)>(
         "glDrawElements");
-    if (plain)
-        for (GLsizei i = 0; i < drawcount; i++)
-            plain(mode, count[i], type, indices[i]);
+    if (!plain) return;
+    for (GLsizei i = 0; i < drawcount; i++) {
+        GLsizei n = count[i];
+        const void* src = indices[i];
+        if (n <= 0 || !src) continue;
+        GLint bv = basevertex ? basevertex[i] : 0;
+        if (bv == 0) {
+            plain(mode, n, type, src);
+            continue;
+        }
+        std::vector<GLuint> tmp;
+        tmp.reserve((size_t)(n > 0 ? n : 0));
+        if (type == 0x1401u) {
+            const unsigned char* s = (const unsigned char*)src;
+            for (GLsizei k = 0; k < n; k++) tmp.push_back((GLuint)s[k] + (GLuint)bv);
+        } else if (type == 0x1403u) {
+            const unsigned short* s = (const unsigned short*)src;
+            for (GLsizei k = 0; k < n; k++) tmp.push_back((GLuint)s[k] + (GLuint)bv);
+        } else if (type == 0x1405u) {
+            const GLuint* s = (const GLuint*)src;
+            for (GLsizei k = 0; k < n; k++) tmp.push_back(s[k] + (GLuint)bv);
+        } else {
+            plain(mode, n, type, src);
+            continue;
+        }
+        if (!tmp.empty()) plain(mode, n, 0x1405u, tmp.data());
+    }
     detail::note_absent("glMultiDrawElementsBaseVertex",
-                "no GL_EXT base-vertex form, offsets dropped (visible anomaly, "
-                "not a silent wrong geo)");
+                "no base-vertex form; rebased to U32 with basevertex applied");
 }
 
 }  // namespace onigami_longtail

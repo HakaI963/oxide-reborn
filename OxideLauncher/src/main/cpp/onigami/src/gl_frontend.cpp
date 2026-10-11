@@ -2,7 +2,8 @@
 // Own implementation against NDK <GLES3/gl3.h>. Policy:
 // - Queries: NULL (never "") with no current context; live backend answers
 //   otherwise; GL_VERSION carries the documented ONIGAMI-translated mapping.
-// - Hot state (UseProgram, binds, caps, viewport): redundant calls skipped.
+// - Hot state (UseProgram, binds, caps, viewport): always forwarded (simple
+//   path, no coalescing tweak).
 // - Shader/program: source is translated to ESSL (with vault reuse) before
 //   reaching the driver. Translate failure => never submitted, honest log.
 // - Long-tail entries (blend equations, stencil, multisample, mapping,
@@ -43,12 +44,10 @@ std::unordered_map<GLuint, ShRec> g_shaders;
 // GL_PROGRAM_POINT_SIZE (point size always comes from the shader in ES and
 // desktop core). Forwarding them makes the backend raise INVALID_ENUM for a
 // call that changes nothing, so they are skipped with a once-per-entry log.
-// 0x8DB9 GL_FRAMEBUFFER_SRGB: desktop automatic linear->sRGB framing. GLES
-// has no such enable (it is expressed by sRGB attachment formats instead),
-// so it cannot be honored as an enable here. Recorded + logged ONCE with the
-// backend sRGB extension status, so the log states exactly what framing the
-// app requested and whether this backend could express it - instead of
-// raising INVALID_ENUM and saying nothing.
+// 0x8DB9 GL_FRAMEBUFFER_SRGB: desktop linear->sRGB enable. When the backend
+// advertises GL_EXT_sRGB_write_control it is forwarded to the driver (own
+// check, reference behavior only); otherwise tracked locally so the app's
+// own glIsEnabled stays consistent. Logged ONCE with backend status.
 bool framebuffer_srgb_requested = false;
 bool backend_has_srgb_ext() {
     if (!onigami::gles_procs().GetIntegerv || !onigami::gles_procs().GetStringi) return false;
@@ -64,7 +63,7 @@ void log_srgb_state(const char* fn) {
     static bool logged = false;
     if (logged) return;
     logged = true;
-    onigami::diag_printf("onigami: %s(GL_FRAMEBUFFER_SRGB) -> %s; backend sRGB ext=%s; linear->sRGB encoding NOT emulated by this backend path (documented limitation)",
+    onigami::diag_printf("onigami: %s(GL_FRAMEBUFFER_SRGB) -> %s; backend sRGB ext=%s; forwarded when present, else tracked (simple path)",
         fn, framebuffer_srgb_requested ? "ENABLE" : "disable", backend_has_srgb_ext() ? "present" : "absent");
 }
 bool desktop_noop_cap(GLenum c) { return c == 0x884Fu || c == 0x8642u; }
@@ -218,17 +217,14 @@ O_API void glGetBooleanv(GLenum p, GLboolean* v) {
 }
 // ---- coalesced state ----
 O_API void glUseProgram(GLuint p) {
-    if (onigami::state_cache().check_use_program(p)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().UseProgram) return;
     onigami::gles_procs().UseProgram(p);
 }
 O_API void glBindBuffer(GLenum t, GLuint b) {
-    if (onigami::state_cache().check_bind_buffer(t, b)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindBuffer) return;
     onigami::gles_procs().BindBuffer(t, b);
 }
 O_API void glBindTexture(GLenum t, GLuint x) {
-    if (onigami::state_cache().check_bind_texture(t, x)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindTexture) return;
     onigami::gles_procs().BindTexture(t, x);
 }
@@ -238,7 +234,6 @@ O_API void glActiveTexture(GLenum t) {
     onigami::gles_procs().ActiveTexture(t);
 }
 O_API void glBindFramebuffer(GLenum t, GLuint f) {
-    if (onigami::state_cache().check_bind_framebuffer(t, f)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindFramebuffer) return;
     onigami::gles_procs().BindFramebuffer(t, f);
     if (onigami::current_config().diagnostics)
@@ -249,32 +244,44 @@ O_API void glBindRenderbuffer(GLenum t, GLuint r) {
     onigami::gles_procs().BindRenderbuffer(t, r);
 }
 O_API void glBindVertexArray(GLuint v) {
-    if (onigami::state_cache().check_bind_vertex_array(v)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindVertexArray) return;
     onigami::gles_procs().BindVertexArray(v);
 }
 O_API void glEnable(GLenum c) {
-    if (c == 0x8DB9u) { framebuffer_srgb_requested = true; log_srgb_state("glEnable"); return; }
+    if (c == 0x8DB9u) {
+        framebuffer_srgb_requested = true;
+        if (backend_has_srgb_ext() && onigami::ensure_gles_loaded() && onigami::gles_procs().Enable)
+            onigami::gles_procs().Enable(c);
+        log_srgb_state("glEnable");
+        return;
+    }
     if (desktop_noop_cap(c)) { log_noop_cap_once("glEnable", c); return; }
-    if (onigami::state_cache().check_cap(c, true)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Enable) return;
     onigami::gles_procs().Enable(c);
 }
 O_API void glDisable(GLenum c) {
-    if (c == 0x8DB9u) { framebuffer_srgb_requested = false; log_srgb_state("glDisable"); return; }
+    if (c == 0x8DB9u) {
+        framebuffer_srgb_requested = false;
+        if (backend_has_srgb_ext() && onigami::ensure_gles_loaded() && onigami::gles_procs().Disable)
+            onigami::gles_procs().Disable(c);
+        log_srgb_state("glDisable");
+        return;
+    }
     if (desktop_noop_cap(c)) { log_noop_cap_once("glDisable", c); return; }
-    if (onigami::state_cache().check_cap(c, false)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Disable) return;
     onigami::gles_procs().Disable(c);
 }
 O_API GLboolean glIsEnabled(GLenum c) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().IsEnabled) return GL_FALSE;
-    if (c == 0x8DB9u) return framebuffer_srgb_requested ? GL_TRUE : GL_FALSE;
+    if (c == 0x8DB9u) {
+        if (backend_has_srgb_ext() && onigami::ensure_gles_loaded() && onigami::gles_procs().IsEnabled)
+            return onigami::gles_procs().IsEnabled(c);
+        return framebuffer_srgb_requested ? GL_TRUE : GL_FALSE;
+    }
     if (desktop_noop_cap(c)) return GL_TRUE;
     return onigami::gles_procs().IsEnabled(c);
 }
 O_API void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
-    if (onigami::state_cache().check_viewport(x, y, w, h)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Viewport) return;
     onigami::gles_procs().Viewport(x, y, w, h);
     if (onigami::current_config().diagnostics)
