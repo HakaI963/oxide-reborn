@@ -81,9 +81,10 @@ class OnigamiEnvTest {
     }
 
     @Test
-    fun qualityFloorKeepsVaultOn() {
-        val r = OnigamiTuning.resolve(OnigamiPerformanceMode.QUALITY, 0, true, false)
-        assertEquals(64, r.vaultMb)
+    fun qualityKeepsVaultOffSimplePath() {
+        // Simple renderer: no forced cache; QUALITY keeps caller value (0 stays 0).
+        val r = OnigamiTuning.resolve(OnigamiPerformanceMode.QUALITY, 0, false, true)
+        assertEquals(0, r.vaultMb)
     }
 
     @Test
