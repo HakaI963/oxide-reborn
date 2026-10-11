@@ -14,6 +14,15 @@ int parse_int_after(const std::string& j, const char* key, int dflt) {
     if (c == std::string::npos) return dflt;
     return atoi(j.c_str() + c + 1);
 }
+float parse_float_after(const std::string& j, const char* key, float dflt) {
+    size_t p = j.find(key);
+    if (p == std::string::npos) return dflt;
+    size_t c = j.find(':', p);
+    if (c == std::string::npos) return dflt;
+    float v = (float)atof(j.c_str() + c + 1);
+    if (v != v) return dflt;
+    return v;
+}
 bool parse_bool_after(const std::string& j, const char* key, bool dflt) {
     size_t p = j.find(key);
     if (p == std::string::npos) return dflt;
@@ -45,8 +54,14 @@ Config load_config() {
     c.state_coalescing = parse_bool_after(j, "state_coalescing", false);
     c.diagnostics = parse_bool_after(j, "diagnostics", true);
     c.swap_interval = parse_int_after(j, "swap_interval", 1);
+    c.render_scale = parse_float_after(j, "render_scale", 1.0f);
+    c.upscale_mode = parse_int_after(j, "upscale_mode", 0);
     if (c.swap_interval < 0) c.swap_interval = 0;
     if (c.swap_interval > 1) c.swap_interval = 1;
+    if (c.render_scale < 0.5f) c.render_scale = 0.5f;
+    if (c.render_scale > 1.0f) c.render_scale = 1.0f;
+    if (c.upscale_mode < 0) c.upscale_mode = 0;
+    if (c.upscale_mode > 1) c.upscale_mode = 1;
     if (c.program_vault_mb < 0) c.program_vault_mb = 0;
     if (c.program_vault_mb > 1024) c.program_vault_mb = 1024;
     return c;

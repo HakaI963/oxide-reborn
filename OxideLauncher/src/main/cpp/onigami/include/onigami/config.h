@@ -9,6 +9,8 @@ struct Config {
   bool state_coalescing = false;
   bool diagnostics = true;
   int swap_interval = 1;
+  float render_scale = 1.0f;
+  int upscale_mode = 0;
 };
 Config load_config();
 const Config& current_config();
