@@ -181,7 +181,6 @@ fun RendererSettingsScreen(
                                 )
                             }
                         }
-                        }
                     )
 
                     // ONIGAMI (Vulkan) requires Vulkan: confirm switches the
