@@ -19,13 +19,17 @@ namespace {
 std::string vault_dir() { return data_dir() + "/program_vault"; }
 std::string vault_path(const std::string& key_hex) { return vault_dir() + "/" + key_hex + ".essl"; }
 } // namespace
-int translator_schema_version() { return 2; }
+int translator_schema_version() { return 3; }
 std::string vault_key_hex(const char* a, const char* b) {
     std::string cat;
     if (a) cat += a;
     cat += "\x1f";
     cat += "schema=" + std::to_string(translator_schema_version()) + "\x1f";
     if (b) cat += b;
+    const std::string& br = cached_renderer();
+    const std::string& bv = cached_version();
+    if (!br.empty()) { cat += "|renderer="; cat += br; }
+    if (!bv.empty()) { cat += "|version="; cat += bv; }
     unsigned long long h = fnv1a64(cat.data(), cat.size());
     char buf[17];
     snprintf(buf, sizeof(buf), "%016llx", h);
@@ -64,6 +68,9 @@ void vault_store(const std::string& key_hex, const void* data, size_t len) {
         return;
     }
     rename(tmp.c_str(), vault_path(key_hex).c_str());
+    // Sweep oldest-first at most once per 16 stores; per-store scans stall compiles.
+    static int stores_since_sweep = 0;
+    if ((++stores_since_sweep % 16) != 0) return;
     // Enforce budget: oldest mtime first.
     long budget = budget_mb * 1024L * 1024L;
     DIR* d = opendir(dir.c_str());

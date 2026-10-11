@@ -10,6 +10,7 @@
 #include "onigami/backend.h"
 #include "onigami/config.h"
 #include <EGL/egl.h>
+#include <GLES3/gl3.h>
 #include <cstring>
 #include <ctime>
 #include <mutex>
@@ -38,6 +39,47 @@ long long monotonic_ns() {
     return (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec;
 }
 }  // namespace
+// Render-scale present (own bilinear reconstruct): when enabled, the game drew
+// the default framebuffer at render_scale; stretch it to the full surface here.
+// No-op unless upscale_mode==1, scale<1, and DRAW is still the default FBO.
+// All driver state touched below is saved and restored around the blit.
+void upscale_present(EGLDisplay d, EGLSurface s) {
+    const onigami::Config& cfg = onigami::current_config();
+    if (cfg.upscale_mode != 1 || cfg.render_scale >= 1.0f || cfg.render_scale < 0.5f) return;
+    if (!onigami::ensure_gles_loaded()) return;
+    auto& g = onigami::gles_procs();
+    if (!g.BlitFramebuffer || !g.BindFramebuffer || !g.GetIntegerv || !g.Enable || !g.Disable || !g.IsEnabled) return;
+    if (!onigami::ensure_egl_loaded() || !egl_procs().QuerySurface) return;
+    GLint draw_fbo = 0;
+    g.GetIntegerv(0x8CA9 /* GL_DRAW_FRAMEBUFFER_BINDING */, &draw_fbo);
+    if (draw_fbo != 0) return;
+    EGLint surf_w = 0, surf_h = 0;
+    egl_procs().QuerySurface(d, s, 0x3057 /* EGL_WIDTH */, &surf_w);
+    egl_procs().QuerySurface(d, s, 0x3058 /* EGL_HEIGHT */, &surf_h);
+    if (surf_w <= 0 || surf_h <= 0) return;
+    GLint vp[4] = {0, 0, 0, 0};
+    g.GetIntegerv(0x0BA2 /* GL_VIEWPORT */, vp);
+    if (vp[2] <= 0 || vp[3] <= 0) return;
+    GLint read_fbo = 0;
+    g.GetIntegerv(0x8CA6 /* GL_READ_FRAMEBUFFER_BINDING */, &read_fbo);
+    GLboolean scissor_was_on = g.IsEnabled(0x0C11 /* GL_SCISSOR_TEST */);
+    if (scissor_was_on) g.Disable(0x0C11);
+    g.BindFramebuffer(0x8CA8 /* GL_READ_FRAMEBUFFER */, 0);
+    g.BindFramebuffer(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, 0);
+    g.BlitFramebuffer(vp[0], vp[1], vp[0] + vp[2], vp[1] + vp[3],
+                      0, 0, surf_w, surf_h,
+                      0x1800 /* GL_COLOR_BUFFER_BIT */, 0x2601 /* GL_LINEAR */);
+    g.BindFramebuffer(0x8CA8 /* GL_READ_FRAMEBUFFER */, (GLuint)read_fbo);
+    g.BindFramebuffer(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, (GLuint)draw_fbo);
+    if (scissor_was_on) g.Enable(0x0C11);
+    if (onigami::current_config().diagnostics) {
+        static bool logged_once = false;
+        if (!logged_once) {
+            logged_once = true;
+            onigami::diag_printf("onigami: upscale blit %dx%d -> %dx%d (bilinear)", (int)vp[2], (int)vp[3], (int)surf_w, (int)surf_h);
+        }
+    }
+}
 extern "C" {
 O_API EGLDisplay eglGetDisplay(EGLNativeDisplayType id) {
     if (!ensure_egl_loaded() || !egl_procs().GetDisplay) {
@@ -107,6 +149,7 @@ O_API EGLSurface eglGetCurrentSurface(EGLint r) {
 }
 O_API EGLBoolean eglSwapBuffers(EGLDisplay d, EGLSurface s) {
     if (!ensure_egl_loaded() || !egl_procs().SwapBuffers) return EGL_FALSE;
+    upscale_present(d, s);
     EGLBoolean ok = egl_procs().SwapBuffers(d, s);
     if (onigami::current_config().diagnostics) {
         long long now = monotonic_ns();
