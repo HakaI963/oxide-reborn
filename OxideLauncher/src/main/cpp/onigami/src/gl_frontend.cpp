@@ -50,13 +50,16 @@ std::unordered_map<GLuint, ShRec> g_shaders;
 // own glIsEnabled stays consistent. Logged ONCE with backend status.
 bool framebuffer_srgb_requested = false;
 bool backend_has_srgb_ext() {
+    static int cached = -1;
+    if (cached >= 0) return cached != 0;
     if (!onigami::gles_procs().GetIntegerv || !onigami::gles_procs().GetStringi) return false;
     GLint n = 0;
     onigami::gles_procs().GetIntegerv(GL_NUM_EXTENSIONS, &n);
     for (GLint i = 0; i < n && i < 512; i++) {
         const char* e = (const char*)onigami::gles_procs().GetStringi(GL_EXTENSIONS, (GLuint)i);
-        if (e && (std::strcmp(e, "GL_EXT_sRGB") == 0 || std::strcmp(e, "GL_EXT_sRGB_write_control") == 0)) return true;
+        if (e && (std::strcmp(e, "GL_EXT_sRGB") == 0 || std::strcmp(e, "GL_EXT_sRGB_write_control") == 0)) { cached = 1; return true; }
     }
+    cached = 0;
     return false;
 }
 void log_srgb_state(const char* fn) {
@@ -96,17 +99,57 @@ bool backend_has_extension(const char* ext) {
     cache[ext] = found;
     return found;
 }
+// Render-scale (v1.16.0): when enabled, the game renders the default
+// framebuffer smaller and eglSwapBuffers reconstructs it (bilinear).
+// The driver sees scaled viewports/scissors; Get* answers stay virtual.
+bool upscale_active() {
+    const onigami::Config& cfg = onigami::current_config();
+    return cfg.upscale_mode == 1 && cfg.render_scale < 1.0f && cfg.render_scale >= 0.5f;
+}
+GLint g_virt_vp_x = 0, g_virt_vp_y = 0;
+GLsizei g_virt_vp_w = 0, g_virt_vp_h = 0;
+bool g_vp_seen = false;
+GLint g_virt_sc_x = 0, g_virt_sc_y = 0;
+GLsizei g_virt_sc_w = 0, g_virt_sc_h = 0;
+bool g_sc_seen = false;
+GLuint g_draw_fbo = 0;
+void note_virtual_viewport(GLint x, GLint y, GLsizei w, GLsizei h) {
+    g_virt_vp_x = x;
+    g_virt_vp_y = y;
+    g_virt_vp_w = w;
+    g_virt_vp_h = h;
+    g_vp_seen = true;
+}
+void note_virtual_scissor(GLint x, GLint y, GLsizei w, GLsizei h) {
+    g_virt_sc_x = x;
+    g_virt_sc_y = y;
+    g_virt_sc_w = w;
+    g_virt_sc_h = h;
+    g_sc_seen = true;
+}
+bool scaled_default_target() {
+    return upscale_active() && g_draw_fbo == 0;
+}
 // Bounded per-signature draw diagnostics: proves whether geometry reaches the
 // backend and in what binding context, without per-frame readbacks or floods.
 void diag_draw(const char* api, GLenum mode, GLsizei count, GLenum type, bool indexed) {
     if (!onigami::current_config().diagnostics) return;
-    static std::unordered_map<std::string, int> seen;
+    static std::unordered_map<unsigned long long, int> seen;
     static int total = 0;
     if (++total > 400000) return;
-    char key[160];
-    snprintf(key, sizeof(key), "%s|%u|%d|%u|%u|%u", api, (unsigned)mode, (int)count, (unsigned)type,
-             (unsigned)onigami::state_cache().bound_vertex_array(), (unsigned)onigami::state_cache().bound_program());
-    if (++seen[key] > 3) return;
+    // Integer signature hash: same throttle as before without per-draw snprintf
+    // and string allocation on this hot path.
+    unsigned long long h = 1469598103934665603ULL;
+    auto mix = [&](unsigned long long v) {
+        h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    };
+    for (const char* p = api; *p; p++) mix((unsigned long long)(unsigned char)*p);
+    mix((unsigned long long)(unsigned)mode);
+    mix((unsigned long long)(int)count);
+    mix((unsigned long long)(unsigned)type);
+    mix((unsigned long long)onigami::state_cache().bound_vertex_array());
+    mix((unsigned long long)onigami::state_cache().bound_program());
+    if (++seen[h] > 3) return;
     GLint vp[4] = {0, 0, 0, 0};
     if (onigami::gles_procs().GetIntegerv) onigami::gles_procs().GetIntegerv(0x0BA2 /* GL_VIEWPORT */, vp);
     onigami::diag_printf(
@@ -123,7 +166,16 @@ bool has_current_context() {
 template <typename F>
 F gsym(const char* n) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().handle) return nullptr;
-    return (F)dlsym(onigami::gles_procs().handle, n);
+    // Hot uniform/state wrappers resolve through here per call; memoize so the
+    // linker is walked once per name instead of once per uniform update.
+    static std::mutex m;
+    static std::unordered_map<std::string, F> cache;
+    std::lock_guard<std::mutex> lock(m);
+    auto it = cache.find(n);
+    if (it != cache.end()) return it->second;
+    F fn = (F)dlsym(onigami::gles_procs().handle, n);
+    cache.emplace(n, fn);
+    return fn;
 }
 std::string first_line(const char* s) {
     if (!s) return "(null)";
@@ -196,6 +248,20 @@ O_API void glGetIntegerv(GLenum p, GLint* v) {
         onigami::state_cache().note_skip();
         return;
     }
+    if (upscale_active() && g_vp_seen && p == 0x0BA2 /* GL_VIEWPORT */) {
+        v[0] = g_virt_vp_x;
+        v[1] = g_virt_vp_y;
+        v[2] = g_virt_vp_w;
+        v[3] = g_virt_vp_h;
+        return;
+    }
+    if (upscale_active() && g_sc_seen && p == 0x0C10 /* GL_SCISSOR_BOX */) {
+        v[0] = g_virt_sc_x;
+        v[1] = g_virt_sc_y;
+        v[2] = g_virt_sc_w;
+        v[3] = g_virt_sc_h;
+        return;
+    }
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().GetIntegerv) return;
     onigami::gles_procs().GetIntegerv(p, v);
 }
@@ -217,14 +283,17 @@ O_API void glGetBooleanv(GLenum p, GLboolean* v) {
 }
 // ---- coalesced state ----
 O_API void glUseProgram(GLuint p) {
+    if (onigami::state_cache().check_use_program(p)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().UseProgram) return;
     onigami::gles_procs().UseProgram(p);
 }
 O_API void glBindBuffer(GLenum t, GLuint b) {
+    if (onigami::state_cache().check_bind_buffer(t, b)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindBuffer) return;
     onigami::gles_procs().BindBuffer(t, b);
 }
 O_API void glBindTexture(GLenum t, GLuint x) {
+    if (onigami::state_cache().check_bind_texture(t, x)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindTexture) return;
     onigami::gles_procs().BindTexture(t, x);
 }
@@ -234,16 +303,26 @@ O_API void glActiveTexture(GLenum t) {
     onigami::gles_procs().ActiveTexture(t);
 }
 O_API void glBindFramebuffer(GLenum t, GLuint f) {
+    if (t == 0x8CA9u || t == 0x8D40u) g_draw_fbo = f;
+    if (onigami::state_cache().check_bind_framebuffer(t, f)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindFramebuffer) return;
     onigami::gles_procs().BindFramebuffer(t, f);
-    if (onigami::current_config().diagnostics)
-        onigami::diag_printf("onigami: bind FBO target=0x%x id=%u", t, f);
+    if (onigami::current_config().diagnostics) {
+        static GLuint logged_fbo = 0xFFFFFFFFu;
+        static GLenum logged_tgt = 0;
+        if (f != logged_fbo || t != logged_tgt) {
+            logged_fbo = f;
+            logged_tgt = t;
+            onigami::diag_printf("onigami: bind FBO target=0x%x id=%u", t, f);
+        }
+    }
 }
 O_API void glBindRenderbuffer(GLenum t, GLuint r) {
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindRenderbuffer) return;
     onigami::gles_procs().BindRenderbuffer(t, r);
 }
 O_API void glBindVertexArray(GLuint v) {
+    if (onigami::state_cache().check_bind_vertex_array(v)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().BindVertexArray) return;
     onigami::gles_procs().BindVertexArray(v);
 }
@@ -256,6 +335,7 @@ O_API void glEnable(GLenum c) {
         return;
     }
     if (desktop_noop_cap(c)) { log_noop_cap_once("glEnable", c); return; }
+    if (onigami::state_cache().check_cap(c, true)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Enable) return;
     onigami::gles_procs().Enable(c);
 }
@@ -268,6 +348,7 @@ O_API void glDisable(GLenum c) {
         return;
     }
     if (desktop_noop_cap(c)) { log_noop_cap_once("glDisable", c); return; }
+    if (onigami::state_cache().check_cap(c, false)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Disable) return;
     onigami::gles_procs().Disable(c);
 }
@@ -282,14 +363,39 @@ O_API GLboolean glIsEnabled(GLenum c) {
     return onigami::gles_procs().IsEnabled(c);
 }
 O_API void glViewport(GLint x, GLint y, GLsizei w, GLsizei h) {
+    note_virtual_viewport(x, y, w, h);
+    GLint fx = x, fy = y;
+    GLsizei fw = w, fh = h;
+    if (w > 0 && h > 0 && scaled_default_target()) {
+        float s = onigami::current_config().render_scale;
+        fx = (GLint)(x * s);
+        fy = (GLint)(y * s);
+        fw = (GLsizei)(w * s);
+        fh = (GLsizei)(h * s);
+        if (fw < 1) fw = 1;
+        if (fh < 1) fh = 1;
+    }
+    if (onigami::state_cache().check_viewport(fx, fy, fw, fh)) return;
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Viewport) return;
-    onigami::gles_procs().Viewport(x, y, w, h);
+    onigami::gles_procs().Viewport(fx, fy, fw, fh);
     if (onigami::current_config().diagnostics)
-        onigami::diag_printf("onigami: viewport %d %d %dx%d", (int)x, (int)y, (int)w, (int)h);
+        onigami::diag_printf("onigami: viewport %d %d %dx%d", (int)fx, (int)fy, (int)fw, (int)fh);
 }
 O_API void glScissor(GLint x, GLint y, GLsizei w, GLsizei h) {
+    note_virtual_scissor(x, y, w, h);
+    GLint fx = x, fy = y;
+    GLsizei fw = w, fh = h;
+    if (w > 0 && h > 0 && scaled_default_target()) {
+        float s = onigami::current_config().render_scale;
+        fx = (GLint)(x * s);
+        fy = (GLint)(y * s);
+        fw = (GLsizei)(w * s);
+        fh = (GLsizei)(h * s);
+        if (fw < 1) fw = 1;
+        if (fh < 1) fh = 1;
+    }
     if (!onigami::ensure_gles_loaded() || !onigami::gles_procs().Scissor) return;
-    onigami::gles_procs().Scissor(x, y, w, h);
+    onigami::gles_procs().Scissor(fx, fy, fw, fh);
 }
 // ---- shader/program with translation + vault ----
 O_API GLuint glCreateShader(GLenum t) {
@@ -364,7 +470,7 @@ O_API void glCompileShader(GLuint s) {
     // Backend verdict: Minecraft reads it via glGetShaderInfoLog (below);
     // ONIGAMI also records it so the device log shows the real verdict.
     std::string info;
-    if (onigami::gles_procs().GetShaderInfoLog) {
+    if (!st && onigami::gles_procs().GetShaderInfoLog) {
         GLint need = 0;
         onigami::gles_procs().GetShaderiv(s, GL_INFO_LOG_LENGTH, &need);
         if (need > 1) {
@@ -374,7 +480,7 @@ O_API void glCompileShader(GLuint s) {
             if (got > 0) info.assign(buf.data(), (size_t)got);
         }
     }
-    write_shader_capture(key, src.c_str(), essl.c_str(), info.empty() ? nullptr : info.c_str());
+    if (!st) write_shader_capture(key, src.c_str(), essl.c_str(), info.empty() ? nullptr : info.c_str());
     onigami::diag_printf("onigami: compile shader=%u type=%s %s vault=%d srcline=%s", s,
         type == GL_VERTEX_SHADER ? "vs" : (type == GL_FRAGMENT_SHADER ? "fs" : "other"),
         st ? "ok" : "backend-fail", (int)from_vault, first_line(src.c_str()).c_str());
