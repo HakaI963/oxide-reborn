@@ -33,6 +33,7 @@ EGLDisplay eglGetCurrentDisplay(void);
 EGLContext eglGetCurrentContext(void);
 EGLSurface eglGetCurrentSurface(EGLint readdraw);
 EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface);
+EGLBoolean eglSwapInterval(EGLDisplay dpy, EGLint interval);
 const char* eglQueryString(EGLDisplay dpy, EGLint name);
 EGLint eglGetError(void);
 EGLBoolean eglBindAPI(EGLenum api);
