@@ -72,7 +72,7 @@ class OnigamiEnvTest {
         val r = OnigamiTuning.resolve(64, true, false)
         val json = OnigamiTuning.toConfigJson(OnigamiPerformanceMode.OPTIMIZED, r)
         assertTrue(json.contains("\"onigami_version\":1"))
-        assertTrue(json.contains("\"profile\":\"PERFORMANCE\""))
+        assertTrue(json.contains("\"profile\":\"OPTIMIZED\"))
         assertTrue(json.contains("\"program_vault_mb\":64"))
         assertTrue(json.contains("\"state_coalescing\":1"))
         assertTrue(json.contains("\"diagnostics\":0"))

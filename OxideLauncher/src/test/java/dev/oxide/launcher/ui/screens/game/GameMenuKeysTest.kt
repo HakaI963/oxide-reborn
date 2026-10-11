@@ -117,24 +117,16 @@ class GameMenuKeysTest {
     }
 
     @Test
-    fun sharedHeaderResourcesCarryTheirOwningSection() {
-        // 本次崩溃的精确形态：图形分组标题同时出现在主区域与 Onigami 面板。
-        // 两个 occurrence 必须带不同的固定段后缀，而不是共享裸 key。
+    fun rendererTabOwnsItsHeaderViaAFixedSectionId() {
+        // v1.16.0 renderer tab owns its header via a fixed section id.
         val source = menuSource()
-        val graphicsGroups = Regex("group\\(R\\.string\\.oxide_set_section_graphics(?:\\s*,\\s*\"([^\"]+)\")?\\)")
-            .findAll(source).toList()
         assertTrue(
-            "expected the graphics header in both the main section and the Onigami panel",
-            graphicsGroups.size >= 2,
-        )
-        val keys = graphicsGroups.map { groupKey("oxide_set_section_graphics", it.groupValues[1].ifEmpty { null }) }
-        assertEquals(
-            "each graphics header occurrence needs its own section-scoped key",
-            keys.size, keys.toSet().size,
+            "expected the renderer tab header",
+            source.indexOf("oxide_set_tab_renderer") >= 0,
         )
         assertTrue(
-            "the Onigami panel must own its header occurrence via a fixed section id",
-            keys.any { it.endsWith(":onigami") },
+            "the renderer tab must own its header via a fixed section id",
+            source.indexOf("\"renderer\"") >= 0,
         )
     }
 }

@@ -57,11 +57,12 @@ class GameMenuLogicTest {
         assertEquals(GameMenuSection.Gamepad, GameMenuSection.fromIndex(3))
         assertEquals(GameMenuSection.Gestures, GameMenuSection.fromIndex(4))
         assertEquals(GameMenuSection.Gyroscope, GameMenuSection.fromIndex(5))
+        assertEquals(GameMenuSection.Renderer, GameMenuSection.fromIndex(6))
 
         // 越界退回游戏本体，而不是崩在一块没被组合过的分区上
         assertEquals(GameMenuSection.Game, GameMenuSection.fromIndex(-1))
         assertEquals(GameMenuSection.Game, GameMenuSection.fromIndex(99))
-        assertEquals(6, GameMenuSection.count)
+        assertEquals(7, GameMenuSection.count)
     }
 
     // ---- 可见性 -------------------------------------------------------------
