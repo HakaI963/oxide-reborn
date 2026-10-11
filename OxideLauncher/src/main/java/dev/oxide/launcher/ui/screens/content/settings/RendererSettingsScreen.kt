@@ -55,6 +55,7 @@ import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.RendererInterface
 import dev.oxide.launcher.game.renderer.Renderers
+import dev.oxide.launcher.game.renderer.onigami.OnigamiVulkan
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.URL_CLOUD_DRIVE_DRIVER_PLUGINS
 import dev.oxide.launcher.path.URL_CLOUD_RENDERER_PLUGINS
@@ -119,6 +120,11 @@ fun RendererSettingsScreen(
                             ?.env?.getConfigurableUnits()?.takeIf { it.isNotEmpty() }
                     }
                     var showV2ConfigDialog by remember { mutableStateOf(false) }
+                    // ONIGAMI (Vulkan) needs Vulkan: picking it with another API stored
+                    // pops a confirm dialog. The card already saved the pick, so
+                    // cancelling restores the previously stored renderer.
+                    var pendingVulkanRendererId by remember { mutableStateOf<String?>(null) }
+                    var fallbackRendererId by remember { mutableStateOf(currentRendererId) }
 
                     ListSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -163,7 +169,34 @@ fun RendererSettingsScreen(
                                 )
                             }
                         }
+                                            onValueChange = { picked ->
+                            val id = picked.getUniqueIdentifier()
+                            if (OnigamiVulkan.needsVulkanSwitch(id, AllSettings.graphicsApi.state)) {
+                                pendingVulkanRendererId = id
+                            } else {
+                                fallbackRendererId = id
+                            }
+                        }
                     )
+
+                    // ONIGAMI (Vulkan) requires Vulkan: confirm switches the
+                    // graphics API too, cancel restores the previous renderer.
+                    if (pendingVulkanRendererId != null) {
+                        SimpleAlertDialog(
+                            title = OnigamiVulkan.DIALOG_TITLE,
+                            text = OnigamiVulkan.DIALOG_MESSAGE,
+                            confirmText = OnigamiVulkan.DIALOG_CONFIRM,
+                            onConfirm = {
+                                AllSettings.graphicsApi.save(GraphicsApi.VULKAN)
+                                fallbackRendererId = pendingVulkanRendererId ?: fallbackRendererId
+                                pendingVulkanRendererId = null
+                            },
+                            onDismiss = {
+                                AllSettings.renderer.save(fallbackRendererId)
+                                pendingVulkanRendererId = null
+                            }
+                        )
+                    }
 
                     //新一代渲染器插件的环境变量配置对话框
                     if (showV2ConfigDialog && v2PluginEnvUnits != null) {

@@ -76,6 +76,7 @@ import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
 import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
+import dev.oxide.launcher.game.renderer.onigami.OnigamiVulkan
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.path.URL_GITHUB_DRIVER_PLUGINS
@@ -954,6 +955,7 @@ fun OxideRendererDrawer(
                         ?.env?.getConfigurableUnits()?.takeIf { it.isNotEmpty() }
                 }
                 var showV2ConfigDialog by remember { mutableStateOf(false) }
+                var pendingVulkanRenderer by remember { mutableStateOf<String?>(null) }
 
                 OxideSettingsGroup(
                     title = stringResource(R.string.oxide_set_section_renderer),
@@ -985,8 +987,33 @@ fun OxideRendererDrawer(
                             },
                             placeholder = storedRenderer,
                             nameOf = { it.getRendererName() },
-                            onSelect = { AllSettings.renderer.save(it.getUniqueIdentifier()) },
+                            onSelect = { picked ->
+                                val id = picked.getUniqueIdentifier()
+                                if (OnigamiVulkan.needsVulkanSwitch(id, AllSettings.graphicsApi.state)) {
+                                    pendingVulkanRenderer = id
+                                } else {
+                                    AllSettings.renderer.save(id)
+                                }
+                            },
                         )
+
+                        // ONIGAMI (Vulkan) requires the Vulkan graphics API: confirm
+                        // before switching both settings at once. Dismissing keeps
+                        // the previously stored renderer untouched.
+                        pendingVulkanRenderer?.let { pending ->
+                            OxideSecConfirmBar(
+                                metrics = metrics,
+                                text = OnigamiVulkan.DIALOG_MESSAGE,
+                                confirmText = OnigamiVulkan.DIALOG_CONFIRM,
+                                dismissText = OnigamiVulkan.DIALOG_DISMISS,
+                                onConfirm = {
+                                    AllSettings.renderer.save(pending)
+                                    AllSettings.graphicsApi.save(GraphicsApi.VULKAN)
+                                    pendingVulkanRenderer = null
+                                },
+                                onDismiss = { pendingVulkanRenderer = null },
+                            )
+                        }
                     }
 
                     // 挂在所选渲染器名下：点的就是当前这一档插件自己的环境变量，
@@ -1133,7 +1160,7 @@ fun OxideRendererDrawer(
                 // explained in the in-game panel, not here.
                 if (oxideOnigamiConfigVisible(storedRendererId)) {
                     OxideSettingsGroup(
-                        title = "Onigami",
+                        title = "ONIGAMI (Vulkan)",
                         metrics = metrics,
                     ) {
                         OxideEnumRow(

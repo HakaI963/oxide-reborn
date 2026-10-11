@@ -9,6 +9,7 @@
  */
 package dev.oxide.launcher.game.renderer.onigami
 
+import dev.oxide.launcher.game.version.installed.GraphicsApi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -54,7 +55,7 @@ class OnigamiEnvTest {
     fun identityPointsAtOwnLibraryOnly() {
         assertEquals("opengles3_oxide_onigami", OnigamiIdentity.RENDERER_ID)
         assertEquals("8d2f6b1a-4c7e-4a90-9e5f-onigami000001", OnigamiIdentity.UNIQUE_ID)
-        assertEquals("Onigami", OnigamiIdentity.NAME)
+        assertEquals("ONIGAMI (Vulkan)", OnigamiIdentity.NAME)
         assertEquals("onigami", OnigamiIdentity.FLAVOR)
         assertEquals("libonigami.so", OnigamiIdentity.NATIVE_LIBRARY)
         assertEquals("1.17", OnigamiIdentity.MIN_MC)
@@ -95,6 +96,22 @@ class OnigamiEnvTest {
         assertNull(OnigamiProbe.rendererOrProbe(null))
         assertEquals("<unknown>", OnigamiProbe.rendererForUi(null))
         assertEquals("<unknown>", OnigamiProbe.versionForUi(null))
+    }
+
+    @Test
+    fun vulkanSwitchOfferedOnlyForOnigamiWithoutVulkan() {
+        assertTrue(OnigamiVulkan.requiresVulkan(OnigamiIdentity.UNIQUE_ID))
+        assertTrue(OnigamiVulkan.needsVulkanSwitch(OnigamiIdentity.UNIQUE_ID, GraphicsApi.DEFAULT_OPENGL))
+        assertTrue(OnigamiVulkan.needsVulkanSwitch(OnigamiIdentity.UNIQUE_ID, GraphicsApi.DEFAULT))
+        assertTrue(!OnigamiVulkan.needsVulkanSwitch(OnigamiIdentity.UNIQUE_ID, GraphicsApi.VULKAN))
+        assertTrue(!OnigamiVulkan.needsVulkanSwitch("other-renderer-id", GraphicsApi.DEFAULT_OPENGL))
+    }
+
+    @Test
+    fun vulkanDialogStringsMatchSpec() {
+        assertEquals("ONIGAMI requires Vulkan. Switch the Graphics API to Vulkan?", OnigamiVulkan.DIALOG_MESSAGE)
+        assertEquals("Cancel", OnigamiVulkan.DIALOG_DISMISS)
+        assertEquals("Switch to Vulkan", OnigamiVulkan.DIALOG_CONFIRM)
     }
 
     @Test

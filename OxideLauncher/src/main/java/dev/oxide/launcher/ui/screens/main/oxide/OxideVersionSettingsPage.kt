@@ -68,6 +68,7 @@ import dev.oxide.launcher.game.control.ControlManager
 import dev.oxide.launcher.game.multirt.RuntimesManager
 import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.renderer.Renderers
+import dev.oxide.launcher.game.renderer.onigami.OnigamiVulkan
 import dev.oxide.launcher.game.support.touch_controller.VibrationHandler
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.game.version.installed.SettingState
@@ -890,7 +891,13 @@ private fun OxideVersionConfigTab(
                         .let { index -> if (index >= 0) index else 0 },
                     placeholder = followGlobal,
                     onSelect = { index ->
-                        state.renderer = rendererIds.getOrElse(index) { "" }
+                        val picked = rendererIds.getOrElse(index) { "" }
+                        state.renderer = picked
+                        // ONIGAMI (Vulkan) requires Vulkan: pin this instance to
+                        // Vulkan without touching the global settings.
+                        if (OnigamiVulkan.requiresVulkan(picked)) {
+                            state.graphicsApi = GraphicsApi.VULKAN
+                        }
                         save()
                     },
                 )

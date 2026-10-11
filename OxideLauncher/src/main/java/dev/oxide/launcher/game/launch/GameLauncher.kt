@@ -49,7 +49,9 @@ import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
 import dev.oxide.launcher.game.renderer.copperoxide.CopperOxideCapabilities
 import dev.oxide.launcher.game.support.touch_controller.ControllerProxy
+import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.game.version.installed.Version
+import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.game.version.installed.VersionInfoParser
 import dev.oxide.launcher.game.versioninfo.models.GameManifest
 import dev.oxide.launcher.path.LibPath
@@ -315,6 +317,11 @@ class GameLauncher(
         appendInfo("Renderer: ${renderer.getRendererName()}")
         renderer.getRendererSummary()?.let { summary ->
             appendInfo("Renderer Summary: $summary")
+        }
+        val graphicsApi = version.getGraphicsApi()
+        appendInfo("Graphics API: ${graphicsApi.name}")
+        if (renderer === OnigamiRenderer && graphicsApi != GraphicsApi.VULKAN) {
+            Logger.warning(TAG, "ONIGAMI (Vulkan) selected without the Vulkan graphics API; rendering may fall back or fail. Pick Vulkan in the renderer or instance settings.")
         }
         appendInfo("Selected Minecraft version: ${version.getVersionName()}")
         appendInfo("Minecraft Info: $mcInfo")

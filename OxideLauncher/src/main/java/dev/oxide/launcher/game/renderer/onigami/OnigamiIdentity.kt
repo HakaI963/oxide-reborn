@@ -10,11 +10,11 @@
 package dev.oxide.launcher.game.renderer.onigami
 
 /**
- * Onigami product identity.
+ * ONIGAMI (Vulkan) product identity.
  *
- * Onigami is an Oxide-owned OpenGL-ES translation renderer with its own native
- * backend (libonigami.so); it does not load, wrap, or fall back to any other
- * renderer's native library.
+ * Oxide's first-party renderer with its own native backend (libonigami.so);
+ * it does not load, wrap, or fall back to any other renderer's native library.
+ * It requires the Vulkan graphics API (see [OnigamiVulkan]).
  *
  * Strings shown inside Minecraft (vendor/renderer/version) always come from
  * the driver. This module never rewrites them, and it makes no frame-rate
@@ -23,7 +23,7 @@ package dev.oxide.launcher.game.renderer.onigami
 object OnigamiIdentity {
     const val RENDERER_ID: String = "opengles3_oxide_onigami"
     const val UNIQUE_ID: String = "8d2f6b1a-4c7e-4a90-9e5f-onigami000001"
-    const val NAME: String = "Onigami"
+    const val NAME: String = "ONIGAMI (Vulkan)"
     const val FLAVOR: String = "onigami"
 
     /** Sole native backend. No fallback to any other library, ever. */
@@ -38,8 +38,8 @@ object OnigamiIdentity {
     fun isOnigamiId(rendererId: String): Boolean = rendererId == RENDERER_ID
 
     fun summary(): String =
-        "Onigami: Oxide-integrated OpenGL renderer (own native backend, under construction). " +
-            "Capabilities detected, never spoofed."
+        "ONIGAMI (Vulkan): Oxide first-party renderer (own native backend libonigami.so). " +
+            "Requires the Vulkan graphics API. Capabilities detected, never spoofed."
 
     fun logLine(): String = NAME + " (" + FLAVOR + " / " + RENDERER_ID + ")"
 }
