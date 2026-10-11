@@ -5,8 +5,8 @@ namespace onigami {
 struct Config {
   int onigami_version = 1;
   std::string profile = "compat";
-  int program_vault_mb = 64;
-  bool state_coalescing = true;
+  int program_vault_mb = 0;
+  bool state_coalescing = false;
   bool diagnostics = true;
 };
 Config load_config();

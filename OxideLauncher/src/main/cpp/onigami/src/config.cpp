@@ -41,8 +41,8 @@ Config load_config() {
         size_t q2 = (q1 == std::string::npos) ? std::string::npos : j.find('"', q1 + 1);
         if (q1 != std::string::npos && q2 != std::string::npos) c.profile = j.substr(q1 + 1, q2 - q1 - 1);
     }
-    c.program_vault_mb = parse_int_after(j, "program_vault_mb", 64);
-    c.state_coalescing = parse_bool_after(j, "state_coalescing", true);
+    c.program_vault_mb = parse_int_after(j, "program_vault_mb", 0);
+    c.state_coalescing = parse_bool_after(j, "state_coalescing", false);
     c.diagnostics = parse_bool_after(j, "diagnostics", true);
     if (c.program_vault_mb < 0) c.program_vault_mb = 0;
     if (c.program_vault_mb > 1024) c.program_vault_mb = 1024;

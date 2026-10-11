@@ -22,7 +22,7 @@ package dev.oxide.launcher.game.renderer.onigami
  * - BALANCED: caller-supplied vault budget, coalescing and diagnostics as set.
  * - PERFORMANCE: same knobs; the profile name lets the backend prefer
  *   submission-trimming paths once they land (no effect invented today).
- * - QUALITY: vault floor of 64 MB so program reuse stays switched on.
+ * - QUALITY: no forced cache; simple path keeps reuse off unless explicitly set.
  *
  * Resolution scaling and frame generation are deliberately NOT options here:
  * no measured backend exists yet, and a checkbox without one would be fake.
@@ -45,7 +45,7 @@ object OnigamiTuning {
         val v = vaultMb.coerceIn(0, 512)
         return when (mode) {
             OnigamiPerformanceMode.PERFORMANCE -> Resolved(v, coalescing, diagnostics)
-            OnigamiPerformanceMode.QUALITY -> Resolved(v.coerceAtLeast(64), coalescing, diagnostics)
+            OnigamiPerformanceMode.QUALITY -> Resolved(v, coalescing, diagnostics)
             else -> Resolved(v, coalescing, diagnostics)
         }
     }
