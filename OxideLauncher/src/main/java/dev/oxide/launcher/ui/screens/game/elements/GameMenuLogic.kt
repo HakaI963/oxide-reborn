@@ -50,7 +50,7 @@ import kotlin.math.roundToInt
  * 菜单的分区
  *
  * 顺序就是分区栏从左到右的顺序，索引也是 `GameScreen` 里那个 `mutableIntStateOf`
- * 存的值：0 号是游戏本体（动作、悬浮窗与分辨率），其余五块是控制。
+ * 存的值：0 号是游戏本体（动作、悬浮窗与分辨率），其余是控制与渲染器（渲染器只在 ONIGAMI 时出现）。
  */
 enum class GameMenuSection {
     Game,
@@ -59,6 +59,7 @@ enum class GameMenuSection {
     Gamepad,
     Gestures,
     Gyroscope,
+    Renderer,
     ;
 
     companion object {

@@ -220,6 +220,11 @@ fun GameMenuSubscreen(
                             onEditLayout = onEditLayout,
                         )
 
+                        GameMenuSection.Renderer -> rendererSection(
+                            windowWidth = window.width,
+                            windowHeight = window.height,
+                        )
+
                         GameMenuSection.Mouse -> mouseSection()
 
                         GameMenuSection.Gamepad -> gamepadSection(
@@ -286,7 +291,8 @@ private fun GameMenuSectionRail(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GameMenuSection.entries.forEach { section ->
+        val onigamiTabVisible = Renderers.isCurrentRendererValid() && Renderers.getCurrentRenderer() === OnigamiRenderer
+        GameMenuSection.entries.filter { it != GameMenuSection.Renderer || onigamiTabVisible }.forEach { section ->
             GameMenuSectionChip(
                 label = stringResource(section.labelRes),
                 selected = section == selected,
@@ -305,6 +311,7 @@ private val GameMenuSection.labelRes: Int
         GameMenuSection.Gamepad -> R.string.oxide_set_section_gamepad
         GameMenuSection.Gestures -> R.string.oxide_set_section_gestures
         GameMenuSection.Gyroscope -> R.string.oxide_set_section_gyroscope
+        GameMenuSection.Renderer -> R.string.oxide_set_tab_renderer
     }
 
 // ---------------------------------------------------------------------------
@@ -398,33 +405,9 @@ private fun LazyListScope.gameSection(
             onCommit = onRefreshWindowSize,
         )
     }
-    onigamiGameSection()
 }
 
-/**
- * In-game Onigami panel: ONLY when Onigami is the active renderer.
- *
- * Phase 1 honesty: Onigami config (mode/cache/upscale) is read at context init,
- * so every Onigami-specific row here is restart-required and shown read-only with
- * an explicit restart note. Live-applied rows are limited to what is proven
- * safe mid-game (global resolution scale above, via onRefreshWindowSize).
- * Frame generation and frame pacing are NOT offered as toggles: no measured
- * backend exists in phase 1, and a toggle without a backend would be fake.
- */
-private fun LazyListScope.onigamiGameSection() {
-    if (!Renderers.isCurrentRendererValid()) return
-    if (Renderers.getCurrentRenderer() !== OnigamiRenderer) return
-    group(R.string.oxide_set_section_graphics, "onigami")
-    item(key = "onigamiActive") {
-        GameMenuNoteRow("Onigami active: profile=" + AllSettings.onigamiPerformanceMode.state +
-            ", vault=" + AllSettings.onigamiShaderCacheMb.state + "MB" +
-            ", coalescing=" + (if (AllSettings.onigamiCoalescing.state) "on" else "off") +
-            ". Onigami changes need a restart (read at context start).")
-    }
-    item(key = "onigamiLimits") {
-        GameMenuNoteRow("Restart needed for: profile, vault, coalescing, diagnostics. Frame generation and upscaling are not offered until measured-positive backends exist.")
-    }
-}
+
 
 /** 分辨率规则：换规则时刷新游戏窗口，切到自定义时先把宽高填成真实窗口 */
 private fun LazyListScope.resolutionRuleRow(
@@ -448,6 +431,86 @@ private fun LazyListScope.resolutionRuleRow(
                 onRefreshWindowSize()
             },
         )
+    }
+}
+
+/**
+ * In-game ONIGAMI (Vulkan) renderer tab: only when ONIGAMI is active.
+ *
+ * Every row persists the shared launcher model immediately and takes effect
+ * on the next launch (native reads onigami.json at context start), so all of
+ * them are restart-required. Live rows stay on the Game tab (resolution scale
+ * via onRefreshWindowSize). No frame-generation control: no measured backend.
+ */
+private fun LazyListScope.rendererSection(
+    windowWidth: Int,
+    windowHeight: Int,
+) {
+    if (!Renderers.isCurrentRendererValid()) return
+    if (Renderers.getCurrentRenderer() !== OnigamiRenderer) return
+    group(R.string.oxide_set_tab_renderer, "renderer")
+    item(key = "onigamiRestart") {
+        GameMenuNoteRow("ONIGAMI (Vulkan) settings apply on next launch. Restart required.")
+    }
+    val scale = AllSettings.onigamiRenderScale.state
+    val upscaleOn = AllSettings.onigamiUpscaleMode.state == 1
+    item(key = "onigamiVault") {
+        GameMenuSliderRow(
+            label = "Program vault (MB)",
+            value = AllSettings.onigamiShaderCacheMb.state.toFloat(),
+            valueRange = 0f..512f,
+            suffix = " MB",
+            onValueChange = { AllSettings.onigamiShaderCacheMb.updateState(it.roundToInt()) },
+            onValueChangeFinished = { AllSettings.onigamiShaderCacheMb.save(it.roundToInt()) },
+        )
+    }
+    item(key = "onigamiUpscaler") {
+        GameMenuChoiceRow(
+            label = "Upscaler",
+            options = listOf(0, 1),
+            selected = AllSettings.onigamiUpscaleMode.state,
+            optionText = { if (it == 1) "Bilinear" else "Off" },
+            onSelect = { AllSettings.onigamiUpscaleMode.save(it) },
+        )
+    }
+    item(key = "onigamiRenderScale") {
+        GameMenuSliderRow(
+            label = "Render scale (%)",
+            value = scale.toFloat(),
+            valueRange = 50f..100f,
+            suffix = " %",
+            enabled = upscaleOn,
+            onValueChange = { AllSettings.onigamiRenderScale.updateState(it.roundToInt()) },
+            onValueChangeFinished = { AllSettings.onigamiRenderScale.save(it.roundToInt()) },
+        )
+    }
+    item(key = "onigamiCoalescing") {
+        GameMenuSwitchRow(
+            label = "State coalescing",
+            checked = AllSettings.onigamiCoalescing.state,
+            hint = "Restart required.",
+            onCheckedChange = { AllSettings.onigamiCoalescing.save(it) },
+        )
+    }
+    item(key = "onigamiDiagnostics") {
+        GameMenuSwitchRow(
+            label = "Diagnostic logs",
+            checked = AllSettings.onigamiDiagnostics.state,
+            hint = "Restart required.",
+            onCheckedChange = { AllSettings.onigamiDiagnostics.save(it) },
+        )
+    }
+    val internalW = windowWidth * scale / 100
+    val internalH = windowHeight * scale / 100
+    item(key = "onigamiRes") {
+        GameMenuNoteRow(
+            "Output " + windowWidth + "x" + windowHeight + ", internal " +
+                internalW + "x" + internalH + ", upscaler " +
+                (if (upscaleOn && scale < 100) "Bilinear" else "Off") + ".",
+        )
+    }
+    item(key = "onigamiFps") {
+        GameMenuNoteRow("Live FPS stays in the top-center pill; there is no generated frame count (no frame generation).")
     }
 }
 

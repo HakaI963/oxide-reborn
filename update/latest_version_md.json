@@ -1,43 +1,43 @@
 {
-  "code": 101500,
-  "version": "1.15.0",
+  "code": 101600,
+  "version": "1.16.0",
   "created_at": "2026-10-11",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.15.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.15.0/OxideLauncher-1.15.0.apk",
+      "file_name": "OxideLauncher-1.16.0.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.16.0/OxideLauncher-1.16.0.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.15.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.15.0/OxideLauncher-1.15.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.16.0-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.16.0/OxideLauncher-1.16.0-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.15.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.15.0/OxideLauncher-1.15.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.16.0-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.16.0/OxideLauncher-1.16.0-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.15.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.15.0/OxideLauncher-1.15.0-x86.apk",
+      "file_name": "OxideLauncher-1.16.0-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.16.0/OxideLauncher-1.16.0-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.15.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.15.0/OxideLauncher-1.15.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.16.0-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.16.0/OxideLauncher-1.16.0-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Launcher 1.15.0\n\n## ONIGAMI (Vulkan)\n\nRenderer display name is now ONIGAMI (Vulkan) and it requires the Vulkan graphics API. Global pick asks (Cancel / Switch to Vulkan) and switches both settings together; instance pick auto-pins that instance to Vulkan without touching globals. Launch log records renderer + graphics API.\n\n## Frame pacing\n\nNew VSync pacing toggle (swap-interval floor, default on) plus frame-pacing diagnostics every 600 swaps to investigate low frame rates.\n\n## Rendering\n\nSimple-path renderer (no vault/coalescing by default), always-forward state, sRGB write-control forwarding, honest basevertex rebase for multi-draw terrain. Upscaling and frame generation investigated and intentionally not shipped (no measured backend)."
+    "markdown": "# Oxide Launcher 1.16.0\n\n## ONIGAMI settings rework\n\nObsolete VSync and profile controls removed; the writer pins optimized defaults. Direct controls with real backends: program vault (now 64MB default), bilinear upscaler with render scale (50-100%), state coalescing, diagnostics.\n\n## In-game Renderer tab\n\nNew Renderer tab appears only when ONIGAMI (Vulkan) is the active renderer, with the same controls plus live internal/output resolution facts. Everything is restart-required.\n\n## Rendering\n\nDraw-call coalescing wired to its toggle, uniform/sRGB resolve caching, diagnostics de-synced from hot paths, vault keys hardened. Frame generation and temporal upscaling intentionally not shipped (missing interfaces documented)."
   },
   "bodies": []
 }

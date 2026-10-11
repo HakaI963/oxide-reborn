@@ -175,16 +175,9 @@ object AllSettings : SettingsRegistry() {
     val copperOxideExtDsa = boolSetting("copperOxideExtDsa", true)
 
     /**
-     * Onigami performance mode: AUTO (default), BALANCED, PERFORMANCE, QUALITY.
-     * Every mode maps to real backend config keys only. Restart required
-     * (config is read at context init).
-     */
-    val onigamiPerformanceMode = stringSetting("onigamiPerformanceMode", "AUTO")
-
-    /**
      * Onigami shader cache size, MB, 0 disables. Restart required.
      */
-    val onigamiShaderCacheMb = intSetting("onigamiShaderCacheMb", 0, 0..512)
+    val onigamiShaderCacheMb = intSetting("onigamiShaderCacheMb", 64, 0..512)
 
     /**
      * Onigami state coalescing: redundant binds/mode sets never reach the driver.
@@ -199,11 +192,17 @@ object AllSettings : SettingsRegistry() {
     val onigamiDiagnostics = boolSetting("onigamiDiagnostics", true)
 
     /**
-     * Onigami frame pacing: minimum swap interval. 1 keeps vsync pacing even
-     * when the game asks for uncapped; 0 honors the game request.
-     * Real toggle, read by libonigami.so at context init (restart required).
+     * Onigami render scale, percent of the output surface. 100 renders at full
+     * resolution; lower values render the default framebuffer smaller and
+     * reconstruct at present time. Restart required.
      */
-    val onigamiSwapInterval = intSetting("onigamiSwapInterval", 1, 0..1)
+    val onigamiRenderScale = intSetting("onigamiRenderScale", 100, 50..100)
+
+    /**
+     * Onigami upscaler: 0 off, 1 bilinear reconstruct. Only meaningful below
+     * 100% render scale. Restart required.
+     */
+    val onigamiUpscaleMode = intSetting("onigamiUpscaleMode", 0, 0..1)
 
     //Game
     /**

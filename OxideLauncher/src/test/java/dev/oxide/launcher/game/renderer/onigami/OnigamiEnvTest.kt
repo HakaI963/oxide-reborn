@@ -69,8 +69,8 @@ class OnigamiEnvTest {
 
     @Test
     fun tuningWritesOwnSchema() {
-        val r = OnigamiTuning.resolve(OnigamiPerformanceMode.PERFORMANCE, 64, true, false)
-        val json = OnigamiTuning.toConfigJson(OnigamiPerformanceMode.PERFORMANCE, r)
+        val r = OnigamiTuning.resolve(64, true, false)
+        val json = OnigamiTuning.toConfigJson(OnigamiPerformanceMode.OPTIMIZED, r)
         assertTrue(json.contains("\"onigami_version\":1"))
         assertTrue(json.contains("\"profile\":\"PERFORMANCE\""))
         assertTrue(json.contains("\"program_vault_mb\":64"))
@@ -79,12 +79,15 @@ class OnigamiEnvTest {
         assertTrue(!json.contains("maxGlslCacheSize"))
         assertTrue(!json.contains("fsr1Setting"))
         assertTrue(!json.contains("silica_version"))
+        assertTrue(json.contains("\"swap_interval\":1"))
+        assertTrue(json.contains("\"render_scale\":1.0"))
+        assertTrue(json.contains("\"upscale_mode\":0"))
     }
 
     @Test
     fun qualityKeepsVaultOffSimplePath() {
         // Simple renderer: no forced cache; QUALITY keeps caller value (0 stays 0).
-        val r = OnigamiTuning.resolve(OnigamiPerformanceMode.QUALITY, 0, false, true)
+        val r = OnigamiTuning.resolve(0, false, true)
         assertEquals(0, r.vaultMb)
     }
 
@@ -99,11 +102,13 @@ class OnigamiEnvTest {
     }
 
     @Test
-    fun swapIntervalDefaultsToVsyncPacing() {
-        val r = OnigamiTuning.resolve(OnigamiPerformanceMode.AUTO, 0, false, true)
-        assertEquals(1, r.swapInterval)
-        val json = OnigamiTuning.toConfigJson(OnigamiPerformanceMode.AUTO, r)
-        assertTrue(json.contains("\"swap_interval\":1"))
+    fun renderScaleDefaultsToFullWithBilinearOff() {
+        val r = OnigamiTuning.resolve(64, false, true)
+        assertEquals(100, r.renderScale)
+        assertEquals(0, r.upscaleMode)
+        val json = OnigamiTuning.toConfigJson(OnigamiPerformanceMode.OPTIMIZED, r)
+        assertTrue(json.contains("\"render_scale\":1.0"))
+        assertTrue(json.contains("\"upscale_mode\":0"))
     }
 
     @Test

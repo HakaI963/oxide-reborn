@@ -1158,23 +1158,18 @@ fun OxideRendererDrawer(
 
                 // Onigami settings: only when Onigami is selected. Restart behavior is
                 // explained in the in-game panel, not here.
+                // ONIGAMI (Vulkan) first-party controls. Groups mirror the backend:
+                // PERFORMANCE (cache, render scale, upscaler), RENDERING
+                // (state coalescing), DIAGNOSTICS (logging). Everything here is
+                // restart-required: native reads onigami.json at context start.
                 if (oxideOnigamiConfigVisible(storedRendererId)) {
                     OxideSettingsGroup(
-                        title = "ONIGAMI (Vulkan)",
+                        title = "ONIGAMI (Vulkan) \u00b7 Performance",
                         metrics = metrics,
                     ) {
-                        OxideEnumRow(
-                            label = "Onigami profile",
-                            hint = "Auto starts balanced. Performance trims submission overhead; Quality keeps full fidelity.",
-                            metrics = metrics,
-                            entries = listOf("AUTO", "BALANCED", "PERFORMANCE", "QUALITY"),
-                            selected = AllSettings.onigamiPerformanceMode.state,
-                            nameOf = { it },
-                            onSelect = { AllSettings.onigamiPerformanceMode.save(it) },
-                        )
                         OxideIntRow(
                             label = "Program vault",
-                            hint = "On-disk budget for compiled programs in MB. 0 disables reuse.",
+                            hint = "On-disk budget for compiled programs in MB. 0 disables reuse. Restart required.",
                             metrics = metrics,
                             value = AllSettings.onigamiShaderCacheMb.state,
                             range = 0..512,
@@ -1182,23 +1177,47 @@ fun OxideRendererDrawer(
                             suffix = " MB",
                             onValueChange = { AllSettings.onigamiShaderCacheMb.save(it) },
                         )
+                        OxideEnumRow(
+                            label = "Upscaler",
+                            hint = "Bilinear reconstruct of a smaller internal frame. Off renders full resolution. Restart required.",
+                            metrics = metrics,
+                            entries = listOf(0, 1),
+                            selected = AllSettings.onigamiUpscaleMode.state,
+                            nameOf = { if (it == 1) "Bilinear" else "Off" },
+                            onSelect = { AllSettings.onigamiUpscaleMode.save(it) },
+                        )
+                        OxideIntRow(
+                            label = "Render scale",
+                            hint = "Internal frame size as percent of output. Only below 100 with Bilinear on. Restart required.",
+                            metrics = metrics,
+                            value = AllSettings.onigamiRenderScale.state,
+                            range = 50..100,
+                            step = 5,
+                            suffix = " %",
+                            enabled = AllSettings.onigamiUpscaleMode.state == 1,
+                            onValueChange = { AllSettings.onigamiRenderScale.save(it) },
+                        )
+                    }
+                    OxideSettingsGroup(
+                        title = "ONIGAMI (Vulkan) \u00b7 Rendering",
+                        metrics = metrics,
+                    ) {
                         OxideToggleRow(
                             label = "State coalescing",
-                            hint = "Drops redundant binds and mode sets before they reach the driver.",
+                            hint = "Drops redundant binds and mode sets before they reach the driver. Restart required.",
                             checked = AllSettings.onigamiCoalescing.state,
                             onCheckedChange = { AllSettings.onigamiCoalescing.save(it) },
                         )
+                    }
+                    OxideSettingsGroup(
+                        title = "ONIGAMI (Vulkan) \u00b7 Diagnostics",
+                        metrics = metrics,
+                    ) {
                         OxideToggleRow(
                             label = "Diagnostic logs",
-                            hint = "Verbose Onigami lines in logcat for context, query and loader events.",
+                            hint = "Verbose Onigami lines in logcat, incl. frame-pacing stats. Restart required.",
                             checked = AllSettings.onigamiDiagnostics.state,
                             onCheckedChange = { AllSettings.onigamiDiagnostics.save(it) },
-                        )
-                        OxideToggleRow(
-                            label = "VSync pacing",
-                            hint = "Floor on the swap interval: on keeps vsync pacing even when the game asks for uncapped, off honors the game request.",
-                            checked = AllSettings.onigamiSwapInterval.state == 1,
-                            onCheckedChange = { AllSettings.onigamiSwapInterval.save(if (it) 1 else 0) },
                         )
                     }
                 }

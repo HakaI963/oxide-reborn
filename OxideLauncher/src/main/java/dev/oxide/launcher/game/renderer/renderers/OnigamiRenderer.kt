@@ -46,29 +46,23 @@ object OnigamiRenderer : RendererInterface {
         val dir = onigamiDataDir()
         dir.mkdirs()
         authorOnigamiConfig(dir)
-        val mode = runCatching {
-            OnigamiPerformanceMode.valueOf(AllSettings.onigamiPerformanceMode.getValue())
-        }.getOrDefault(OnigamiPerformanceMode.AUTO).name
-        OnigamiEnv.merged(mode, dir.absolutePath)
+        OnigamiEnv.merged(OnigamiPerformanceMode.OPTIMIZED.name, dir.absolutePath)
     }
 
     private fun onigamiDataDir(): File = File(PathManager.DIR_FILES_PRIVATE, OnigamiIdentity.DATA_DIR)
 
     private fun authorOnigamiConfig(dir: File) {
         runCatching {
-            val mode = runCatching {
-                OnigamiPerformanceMode.valueOf(AllSettings.onigamiPerformanceMode.getValue())
-            }.getOrDefault(OnigamiPerformanceMode.AUTO)
             val resolved = OnigamiTuning.resolve(
-                mode,
                 AllSettings.onigamiShaderCacheMb.getValue(),
                 AllSettings.onigamiCoalescing.getValue(),
                 AllSettings.onigamiDiagnostics.getValue(),
-                AllSettings.onigamiSwapInterval.getValue(),
+                AllSettings.onigamiRenderScale.getValue(),
+                AllSettings.onigamiUpscaleMode.getValue(),
             )
             val tmp = File(dir, "onigami.json.tmp")
             val dst = File(dir, "onigami.json")
-            tmp.writeText(OnigamiTuning.toConfigJson(mode, resolved))
+            tmp.writeText(OnigamiTuning.toConfigJson(OnigamiPerformanceMode.OPTIMIZED, resolved))
             if (dst.exists()) dst.delete()
             tmp.renameTo(dst)
         }

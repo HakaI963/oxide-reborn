@@ -22,35 +22,40 @@ package dev.oxide.launcher.game.renderer.onigami
  * - BALANCED: caller-supplied vault budget, coalescing and diagnostics as set.
  * - PERFORMANCE: same knobs; the profile name lets the backend prefer
  *   submission-trimming paths once they land (no effect invented today).
- * - QUALITY: no forced cache; simple path keeps reuse off unless explicitly set.
+ * - QUALITY: retained for stored selections; no longer differentiates.
+ * - OPTIMIZED: the only profile the writer emits since v1.16.0.
  *
  * Resolution scaling and frame generation are deliberately NOT options here:
  * no measured backend exists yet, and a checkbox without one would be fake.
  */
-enum class OnigamiPerformanceMode { AUTO, BALANCED, PERFORMANCE, QUALITY }
+enum class OnigamiPerformanceMode { AUTO, BALANCED, PERFORMANCE, QUALITY, OPTIMIZED }
 
 object OnigamiTuning {
     data class Resolved(
         val vaultMb: Int,
         val coalescing: Boolean,
         val diagnostics: Boolean,
-        val swapInterval: Int,
+        val renderScale: Int,
+        val upscaleMode: Int,
     )
 
     fun resolve(
-        mode: OnigamiPerformanceMode,
         vaultMb: Int,
         coalescing: Boolean,
         diagnostics: Boolean,
-        swapInterval: Int = 1,
+        renderScale: Int = 100,
+        upscaleMode: Int = 0,
     ): Resolved {
+        // v1.16.0: profiles no longer differentiate (writer pins OPTIMIZED).
+        // Render scale and upscaler are direct controls with real backends.
         val v = vaultMb.coerceIn(0, 512)
-        val s = swapInterval.coerceIn(0, 1)
-        return when (mode) {
-            OnigamiPerformanceMode.PERFORMANCE -> Resolved(v, coalescing, diagnostics, s)
-            OnigamiPerformanceMode.QUALITY -> Resolved(v, coalescing, diagnostics, s)
-            else -> Resolved(v, coalescing, diagnostics, s)
-        }
+        return Resolved(
+            v,
+            coalescing,
+            diagnostics,
+            renderScale.coerceIn(50, 100),
+            upscaleMode.coerceIn(0, 1),
+        )
     }
 
     /**
@@ -64,5 +69,7 @@ object OnigamiTuning {
             ",\"program_vault_mb\":" + r.vaultMb +
             ",\"state_coalescing\":" + (if (r.coalescing) 1 else 0) +
             ",\"diagnostics\":" + (if (r.diagnostics) 1 else 0) +
-            ",\"swap_interval\":" + r.swapInterval + "}"
+            ",\"swap_interval\":" + 1 +
+            ",\"render_scale\":" + (r.renderScale / 100f) +
+            ",\"upscale_mode\":" + r.upscaleMode + "}"
 }
