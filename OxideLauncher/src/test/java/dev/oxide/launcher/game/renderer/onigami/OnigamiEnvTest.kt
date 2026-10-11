@@ -99,6 +99,14 @@ class OnigamiEnvTest {
     }
 
     @Test
+    fun swapIntervalDefaultsToVsyncPacing() {
+        val r = OnigamiTuning.resolve(OnigamiPerformanceMode.AUTO, 0, false, true)
+        assertEquals(1, r.swapInterval)
+        val json = OnigamiTuning.toConfigJson(OnigamiPerformanceMode.AUTO, r)
+        assertTrue(json.contains("\"swap_interval\":1"))
+    }
+
+    @Test
     fun vulkanSwitchOfferedOnlyForOnigamiWithoutVulkan() {
         assertTrue(OnigamiVulkan.requiresVulkan(OnigamiIdentity.UNIQUE_ID))
         assertTrue(OnigamiVulkan.needsVulkanSwitch(OnigamiIdentity.UNIQUE_ID, GraphicsApi.DEFAULT_OPENGL))

@@ -64,6 +64,7 @@ object OnigamiRenderer : RendererInterface {
                 AllSettings.onigamiShaderCacheMb.getValue(),
                 AllSettings.onigamiCoalescing.getValue(),
                 AllSettings.onigamiDiagnostics.getValue(),
+                AllSettings.onigamiSwapInterval.getValue(),
             )
             val tmp = File(dir, "onigami.json.tmp")
             val dst = File(dir, "onigami.json")

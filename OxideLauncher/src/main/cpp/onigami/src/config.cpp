@@ -44,6 +44,9 @@ Config load_config() {
     c.program_vault_mb = parse_int_after(j, "program_vault_mb", 0);
     c.state_coalescing = parse_bool_after(j, "state_coalescing", false);
     c.diagnostics = parse_bool_after(j, "diagnostics", true);
+    c.swap_interval = parse_int_after(j, "swap_interval", 1);
+    if (c.swap_interval < 0) c.swap_interval = 0;
+    if (c.swap_interval > 1) c.swap_interval = 1;
     if (c.program_vault_mb < 0) c.program_vault_mb = 0;
     if (c.program_vault_mb > 1024) c.program_vault_mb = 1024;
     return c;

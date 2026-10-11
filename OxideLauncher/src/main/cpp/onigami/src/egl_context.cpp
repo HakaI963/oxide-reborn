@@ -8,8 +8,11 @@
 // always observes the real code. Missing backend => EGL_FALSE / EGL_NO_* /
 // EGL_NOT_INITIALIZED with a diag line. Nothing is invented.
 #include "onigami/backend.h"
+#include "onigami/config.h"
 #include <EGL/egl.h>
 #include <cstring>
+#include <ctime>
+#include <mutex>
 #if defined(__GNUC__) || defined(__clang__)
 #define O_API __attribute__((visibility("default")))
 #else
@@ -17,6 +20,24 @@
 #endif
 using onigami::egl_procs;
 using onigami::ensure_egl_loaded;
+// Frame-pacing diagnostics (own instrumentation for the ~20fps investigation):
+// per-swap delta via CLOCK_MONOTONIC, counted while diagnostics are on.
+// No pacing decisions here; eglSwapInterval below owns the interval policy.
+namespace {
+struct SwapStats {
+    long long swaps = 0;
+    long long slow_swaps = 0;
+    long long total_ns = 0;
+    long long last_ns = 0;
+};
+SwapStats g_swap_stats;
+std::mutex g_swap_mutex;
+long long monotonic_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec;
+}
+}  // namespace
 extern "C" {
 O_API EGLDisplay eglGetDisplay(EGLNativeDisplayType id) {
     if (!ensure_egl_loaded() || !egl_procs().GetDisplay) {
@@ -86,7 +107,35 @@ O_API EGLSurface eglGetCurrentSurface(EGLint r) {
 }
 O_API EGLBoolean eglSwapBuffers(EGLDisplay d, EGLSurface s) {
     if (!ensure_egl_loaded() || !egl_procs().SwapBuffers) return EGL_FALSE;
-    return egl_procs().SwapBuffers(d, s);
+    EGLBoolean ok = egl_procs().SwapBuffers(d, s);
+    if (onigami::current_config().diagnostics) {
+        long long now = monotonic_ns();
+        std::lock_guard<std::mutex> lock(g_swap_mutex);
+        if (g_swap_stats.last_ns != 0) {
+            long long dt = now - g_swap_stats.last_ns;
+            g_swap_stats.total_ns += dt;
+            if (dt > 50LL * 1000000LL) g_swap_stats.slow_swaps++;
+        }
+        g_swap_stats.last_ns = now;
+        if (++g_swap_stats.swaps % 600 == 0) {
+            double avg_ms = g_swap_stats.swaps
+                ? (double)g_swap_stats.total_ns / (double)g_swap_stats.swaps / 1000000.0
+                : 0.0;
+            onigami::diag_printf(
+                "onigami: frame pacing swaps=%lld avg_ms=%.2f slow_frames(>50ms)=%lld",
+                g_swap_stats.swaps, avg_ms, g_swap_stats.slow_swaps);
+        }
+    }
+    return ok;
+}
+O_API EGLBoolean eglSwapInterval(EGLDisplay d, EGLint interval) {
+    if (!ensure_egl_loaded() || !egl_procs().SwapInterval) return EGL_FALSE;
+    // Simple-path frame pacing: the configured value is a floor, so the
+    // default 1 keeps vsync pacing even when the game asks for uncapped;
+    // 0 honors whatever the game requested. Own policy, reference-inspired.
+    EGLint floor = (EGLint)onigami::current_config().swap_interval;
+    EGLint effective = interval < floor ? floor : interval;
+    return egl_procs().SwapInterval(d, effective);
 }
 O_API const char* eglQueryString(EGLDisplay d, EGLint n) {
     if (!ensure_egl_loaded() || !egl_procs().QueryString) return nullptr;

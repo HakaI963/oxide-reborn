@@ -1194,6 +1194,12 @@ fun OxideRendererDrawer(
                             checked = AllSettings.onigamiDiagnostics.state,
                             onCheckedChange = { AllSettings.onigamiDiagnostics.save(it) },
                         )
+                        OxideToggleRow(
+                            label = "VSync pacing",
+                            hint = "Floor on the swap interval: on keeps vsync pacing even when the game asks for uncapped, off honors the game request.",
+                            checked = AllSettings.onigamiSwapInterval.state == 1,
+                            onCheckedChange = { AllSettings.onigamiSwapInterval.save(if (it) 1 else 0) },
+                        )
                     }
                 }
 

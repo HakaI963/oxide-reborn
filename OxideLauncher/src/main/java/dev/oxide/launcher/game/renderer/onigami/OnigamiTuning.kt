@@ -34,6 +34,7 @@ object OnigamiTuning {
         val vaultMb: Int,
         val coalescing: Boolean,
         val diagnostics: Boolean,
+        val swapInterval: Int,
     )
 
     fun resolve(
@@ -41,12 +42,14 @@ object OnigamiTuning {
         vaultMb: Int,
         coalescing: Boolean,
         diagnostics: Boolean,
+        swapInterval: Int = 1,
     ): Resolved {
         val v = vaultMb.coerceIn(0, 512)
+        val s = swapInterval.coerceIn(0, 1)
         return when (mode) {
-            OnigamiPerformanceMode.PERFORMANCE -> Resolved(v, coalescing, diagnostics)
-            OnigamiPerformanceMode.QUALITY -> Resolved(v, coalescing, diagnostics)
-            else -> Resolved(v, coalescing, diagnostics)
+            OnigamiPerformanceMode.PERFORMANCE -> Resolved(v, coalescing, diagnostics, s)
+            OnigamiPerformanceMode.QUALITY -> Resolved(v, coalescing, diagnostics, s)
+            else -> Resolved(v, coalescing, diagnostics, s)
         }
     }
 
@@ -60,5 +63,6 @@ object OnigamiTuning {
             ",\"profile\":\"" + profile.name + "\"" +
             ",\"program_vault_mb\":" + r.vaultMb +
             ",\"state_coalescing\":" + (if (r.coalescing) 1 else 0) +
-            ",\"diagnostics\":" + (if (r.diagnostics) 1 else 0) + "}"
+            ",\"diagnostics\":" + (if (r.diagnostics) 1 else 0) +
+            ",\"swap_interval\":" + r.swapInterval + "}"
 }

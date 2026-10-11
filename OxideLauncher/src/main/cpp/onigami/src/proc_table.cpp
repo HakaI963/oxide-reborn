@@ -22,7 +22,7 @@ const char* kOwnNames[] = {
     "eglMakeCurrent", "eglGetCurrentDisplay", "eglGetCurrentContext",
     "eglGetCurrentSurface", "eglSwapBuffers", "eglQueryString",
     "eglGetError", "eglBindAPI", "eglQueryAPI", "eglReleaseThread",
-    "eglGetProcAddress",
+    "eglGetProcAddress", "eglSwapInterval",
     "glGetString", "glGetStringi", "glGetError", "glGetIntegerv",
     "glGetFloatv", "glGetBooleanv",
     "glUseProgram", "glBindBuffer", "glBindTexture", "glActiveTexture",

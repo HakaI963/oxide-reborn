@@ -87,6 +87,7 @@ bool ensure_egl_loaded() {
     ONIGAMI_LOAD(h, p, GetCurrentContext, eglGetCurrentContext);
     ONIGAMI_LOAD(h, p, GetCurrentSurface, eglGetCurrentSurface);
     ONIGAMI_LOAD(h, p, SwapBuffers, eglSwapBuffers);
+    ONIGAMI_LOAD(h, p, SwapInterval, eglSwapInterval);
     ONIGAMI_LOAD(h, p, QueryString, eglQueryString);
     ONIGAMI_LOAD(h, p, GetError, eglGetError);
     ONIGAMI_LOAD(h, p, BindAPI, eglBindAPI);

@@ -75,3 +75,49 @@ before linking and store fresh binaries after, under a budget with eviction.
 - Upscaling / frame synthesis: researched, gated, no toggles until a measured
   backend exists.
 - No performance numbers are claimed anywhere in code, docs, or UI.
+
+
+## ONIGAMI (Vulkan) positioning (v1.15.0)
+
+Display name is ONIGAMI (Vulkan) everywhere in the launcher; ids, flavor,
+native library and data dir are unchanged so existing selections keep working.
+ONIGAMI requires the Vulkan graphics API:
+
+- Global pick (Settings renderer drawer or legacy renderer settings): a
+  confirm dialog (Cancel / Switch to Vulkan) switches the renderer and the
+  global graphics API together. Cancelling keeps the previous renderer.
+- Instance pick (new or legacy instance settings): the instance renderer is
+  selected and that instance's graphics API is pinned to Vulkan. Globals and
+other instances are untouched.
+- Launch log records the renderer and the effective graphics API, and warns
+  when ONIGAMI runs without Vulkan.
+
+## Frame pacing and the ~20fps investigation
+
+- `swap_interval` (onigami.json, 0..1, default 1, setting
+  `onigamiSwapInterval`): floor applied in `eglSwapInterval`, so the default
+  keeps vsync pacing even when the game asks for uncapped; 0 honors the game
+  request. Restart required.
+- With diagnostics on, `eglSwapBuffers` logs `frame pacing swaps=.. avg_ms=..
+  slow_frames(>50ms)=..` every 600 swaps. Capture `adb logcat -s onigami:V`
+  with render distance/resolution notes to root-cause low frame rates; no
+  bottleneck is claimed without that data.
+
+## Shader pipeline and Vitrail
+
+- The stage-1 translator is unchanged by this release: desktop GLSL migrates
+  to ESSL 310, ESSL sources pass through, failures stay loud, nothing is
+  blocked. No Onigami change filters mod shaders, so Vitrail (Vulkan shader
+  support, Iris-like) compatibility is preserved by design; on-device
+  verification with a Vitrail pack is still required (see test plan).
+
+## Upscaling and frame generation (investigated, not implemented)
+
+- No upscaling or frame-generation controls ship: no measured backend exists,
+  and a control without one would be fake.
+- AMD FSR-style spatial upscaling is the feasible direction (the same pattern
+  already ships in Copper Oxide / MobileGlues, LGPL-2.1); porting it needs a
+  native resolve + blit stage with device measurements first.
+- Temporal upscaling needs motion vectors the engine does not expose, and
+  frame generation needs synthetic-frame pacing: both stay out until the
+  interfaces and latency budget are proven on-device.

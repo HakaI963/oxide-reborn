@@ -8,6 +8,7 @@ struct Config {
   int program_vault_mb = 0;
   bool state_coalescing = false;
   bool diagnostics = true;
+  int swap_interval = 1;
 };
 Config load_config();
 const Config& current_config();

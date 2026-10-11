@@ -198,6 +198,13 @@ object AllSettings : SettingsRegistry() {
      */
     val onigamiDiagnostics = boolSetting("onigamiDiagnostics", true)
 
+    /**
+     * Onigami frame pacing: minimum swap interval. 1 keeps vsync pacing even
+     * when the game asks for uncapped; 0 honors the game request.
+     * Real toggle, read by libonigami.so at context init (restart required).
+     */
+    val onigamiSwapInterval = intSetting("onigamiSwapInterval", 1, 0..1)
+
     //Game
     /**
      * 版本隔离

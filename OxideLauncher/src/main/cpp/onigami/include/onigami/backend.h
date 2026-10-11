@@ -31,6 +31,7 @@ struct EglProcs {
   decltype(&::eglGetCurrentContext) GetCurrentContext = nullptr;
   decltype(&::eglGetCurrentSurface) GetCurrentSurface = nullptr;
   decltype(&::eglSwapBuffers) SwapBuffers = nullptr;
+  decltype(&::eglSwapInterval) SwapInterval = nullptr;
   decltype(&::eglQueryString) QueryString = nullptr;
   decltype(&::eglGetError) GetError = nullptr;
   decltype(&::eglBindAPI) BindAPI = nullptr;
