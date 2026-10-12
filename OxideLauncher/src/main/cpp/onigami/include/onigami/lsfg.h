@@ -1,17 +1,18 @@
 #pragma once
 // ONIGAMI frame generation backend (v1.17.0).
 //
-// Provenance: interpolation math (pyramid downscale, Lucas-Kanade motion,
-// bidirectional warp, UI-aware blend) is derived from LSFG-VK
-// (https://github.com/Snap888/lsfg-vk, MIT, Copyright (c) 2024 LSFG-VK
-// Contributors). The Vulkan implicit-layer plumbing of LSFG-VK
-// (vkCreateSwapchainKHR / vkQueuePresentKHR interception) is NOT reused:
-// ONIGAMI owns EGL/GLES contexts and no VkInstance/VkDevice/VkSwapchain,
-// and upstream's synth present path is itself an unfinished TODO. This
-// backend therefore implements EGL-level history + pacing + a real GPU-side
-// interpolated present (blend of retained frames, never a duplicate).
-// Only 2x is enabled in v1.17.0; 3x/4x await on-device validation
-// (Adreno 825 cost unknown).
+// Provenance: interpolation design (2-frame history, EMA pacing,
+// bidirectional warp/blend, t=(synth+1)/multiplier timing) is derived from
+// LSFG-VK (https://github.com/Snap888/lsfg-vk, MIT, Copyright (c) 2024
+// LSFG-VK Contributors). The Vulkan implicit-layer plumbing
+// (VK_LAYER_LSFG_frame_generation, vkCreateSwapchainKHR/vkQueuePresentKHR
+// interception) is NOT reused: ONIGAMI owns EGL/GLES contexts and no Vulkan
+// swapchain, and upstream's own synth present is an unfinished TODO. This
+// backend implements the EGL analogue: GPU-side frame retention (blit, no
+// CPU readback) plus a real interpolated present (blend of the two retained
+// frames at t=0.5, never a duplicate). Only 2x is enabled in v1.17.0.
+#include <EGL/egl.h>
+
 #include <string>
 
 namespace onigami {
@@ -32,17 +33,23 @@ void on_surface_changed(int w, int h);
 void on_surface_lost();
 void on_process_end();
 
-// Present hook: call after each eglSwapBuffers. swap_ok must be the REAL
-// backend return. Returns true if a generated frame was also presented.
-// Only successful presents are counted; failures increment dropped.
+// Present hook: call after each eglSwapBuffers with the REAL backend result.
+// Counts only successful presents; failures increment dropped.
 bool on_swap_buffers(bool swap_ok, int w, int h);
+
+// Full 2x path (v1.17.0). GPU-side only, success-only accounting.
+// precapture() runs BEFORE the native backend swap and retains the outgoing
+// frame; postgenerate() runs AFTER a successful native swap, renders the
+// blend-interpolated frame and issues a second backend swap directly.
+// postgenerate() returns true iff a generated frame reached the display.
+void precapture(EGLDisplay d, int w, int h);
+bool postgenerate(EGLDisplay d, EGLSurface s, int w, int h);
 
 bool supported();
 bool enabled();
 int multiplier();
 std::string status_text();
 Counters counters();
-const char* last_reason();
 
 }  // namespace lsfg
 }  // namespace onigami
