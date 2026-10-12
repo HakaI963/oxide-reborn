@@ -1,20 +1,22 @@
-// ONIGAMI frame generation backend: full 2x interpolated-present path (v1.17.0).
+// ONIGAMI frame generation backend: full Nx interpolated-present path (v1.17.0).
 //
 // LSFG-VK provenance (MIT, Copyright (c) 2024 LSFG-VK Contributors):
-// history depth, EMA pacing (4ms..200ms clamp), t=(synthIdx+1)/multiplier
-// timing and warp/blend interpolation concepts are adapted from
-// layer/optical_flow.*, layer/present_scheduler.* and
-// shaders/{pyramid,motion_vectors,warp,blend,ui_mask}.comp. The Vulkan
-// swapchain interception is intentionally not carried over (see
-// docs/ONIGAMI_LSFG_V1_17_0.md for the exact technical reason).
+// history depth, EMA pacing (4ms..200ms clamp), t=k/N timing and warp/blend
+// interpolation concepts are adapted from layer/optical_flow.*,
+// layer/present_scheduler.* and shaders/{pyramid,motion_vectors,warp,blend,
+// ui_mask}.comp. The Vulkan swapchain interception is intentionally not
+// carried over (see docs/ONIGAMI_LSFG_V1_17_0.md). The EGL analogue lives
+// here: GPU-side frame retention (blit, no CPU readback) + real interpolated
+// presents, reached via the JNI bridge hook (onigami_hook_swap_buffers),
+// because the bridge resolves system EGL directly and libonigami's own
+// eglSwapBuffers wrapper never fires on the real present path.
 //
-// Quality staging (honest): v1.17.0 dispatches the BLEND stage (t=0.5 mix of
-// the two retained frames - a real intermediate frame, never a duplicate).
-// The 4-level hierarchical Lucas-Kanade motion stage (LSFG terms:
-// PYRAMID_LEVELS=4, BLOCK_SIZE=8, MAX_ITERATIONS=5) is NOT dispatched on
-// mobile GPUs pending Adreno 825 profiling; the shader already takes uT and
-// is structured so a motion-vector texture plugs into a warp without
-// changing the present path. Only 2x is exposed.
+// Quality staging (honest): v1.17.0 dispatches BLEND + a per-pixel
+// scene-change guard (artifact clamp). The 4-level hierarchical Lucas-Kanade
+// motion stage (LSFG terms: PYRAMID_LEVELS=4, BLOCK_SIZE=8, MAX_ITERATIONS=5)
+// is NOT dispatched on mobile GPUs pending Adreno 825 profiling; the shader
+// already takes uT/uGuard and is structured so a motion-vector texture plugs
+// into a warp without changing the present path. Exposed: 2x/3x/4x.
 #include "onigami/lsfg.h"
 
 #include "onigami/backend.h"
@@ -28,6 +30,7 @@
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <sys/stat.h>
 
 namespace onigami {
 namespace lsfg {
@@ -143,7 +146,9 @@ struct Gl {
 
 // Blend-interpolation shaders (ESSL 300 es), derived from LSFG-VK's
 // warp/blend stages reduced to the dispatched subset: bidirectional sample
-// of the retained pair at t (uT=0.5 for 2x). Kept as literals so no new
+// of the retained pair at uT, plus a scene-change artifact guard that snaps
+// to the current frame where the pair disagrees strongly (cuts, particles,
+// fast HUD motion) instead of smearing a ghost. Kept as literals so no new
 // build-time shader step is needed; the driver compiles them once per
 // context via the raw backend procs (never through ONIGAMI translation).
 const char kBlendVert[] =
@@ -157,11 +162,15 @@ const char kBlendFrag[] =
     "uniform sampler2D uPrev;\n"
     "uniform sampler2D uCurr;\n"
     "uniform float uT;\n"
+    "uniform float uGuard;\n"
     "in vec2 vUV;\n"
     "out vec4 oC;\n"
+    "float luma(vec4 c){return dot(c.rgb,vec3(0.299,0.587,0.114));}\n"
     "void main(){vec4 a=texture(uPrev,vUV);\n"
     "vec4 b=texture(uCurr,vUV);\n"
-    "oC=mix(a,b,uT);}\n";
+    "float dl=abs(luma(b)-luma(a));\n"
+    "float m=mix(uT,1.0,smoothstep(0.10,0.35,dl)*uGuard);\n"
+    "oC=mix(a,b,m);}\n";
 
 // LSFG motion-stage constants, documented for the staged LK dispatch.
 // NOT yet used for dispatch (see file header): kept so the upgrade path is
@@ -169,12 +178,12 @@ const char kBlendFrag[] =
 const int kPyramidLevels = 4;
 const int kBlockSize = 8;
 const int kMaxIterations = 5;
-const float kGenT = 0.5f;  // t=(synthIdx+1)/multiplier = (0+1)/2
 const int kMaxConsecFails = 3;
 
 std::mutex g_mu;
 bool g_enabled = false;
 int g_mult = 2;
+bool g_guard = true;
 std::string g_reason = "disabled by configuration";
 Counters g_c;
 long long g_prev_ns = 0;
@@ -183,13 +192,17 @@ int g_w = 0, g_h = 0;
 double g_interval_ema_us = 16667.0;
 long long g_last_swap_ns = 0;
 long long g_last_publish_ns = 0;
+long long g_last_reload_ns = 0;
+long long g_cfg_mtime = 0;
+bool g_logged_ready = false;
+bool g_logged_gen = false;
 // GL present state (valid only for g_ctx; dropped on context/size change).
 Gl g_gl;
 bool g_gl_resolved = false;
 EGLContext g_ctx = EGL_NO_CONTEXT;
 GLuint g_tex[2] = {0, 0};
 GLuint g_fbo = 0, g_prog = 0, g_vbo = 0, g_vao = 0;
-GLint g_uPrev = -1, g_uCurr = -1, g_uT = -1;
+GLint g_uPrev = -1, g_uCurr = -1, g_uT = -1, g_uGuard = -1;
 int g_turn = 0;    // slot that receives the next captured frame
 int g_have = 0;    // valid retained frames (0..2)
 int g_confails = 0;
@@ -208,23 +221,79 @@ void publish_locked() {
   if (path == "/framegen_stats.json") return;
   std::ofstream f(path + ".tmp", std::ios::trunc);
   if (!f) return;
+  int gen_ms_x100 = (int)(g_c.gen_ms_ema * 100.0);
   f << "{\"enabled\":" << (g_enabled ? 1 : 0)
     << ",\"multiplier\":" << g_mult
     << ",\"native_frames\":" << g_c.native_frames
     << ",\"displayed_frames\":" << g_c.displayed_frames
     << ",\"generated_frames\":" << g_c.generated_frames
-    << ",\"dropped\":" << g_c.dropped << "}";
+    << ",\"dropped\":" << g_c.dropped
+    << ",\"gen_ms_x100\":" << gen_ms_x100
+    << ",\"reason\":\"" << g_reason << "\"}";
   f.close();
   rename((path + ".tmp").c_str(), path.c_str());
 }
 
+// Only REAL errors (GL failures, failed backend swaps) count toward the
+// fail streak. Setup skips (no context/size/procs yet, warmup) never do:
+// "not ready" must not disable a healthy backend.
 void note_fail_locked(const char* what) {
   if (++g_confails >= kMaxConsecFails && g_enabled) {
     g_enabled = false;
     g_reason = std::string("backend error (") + what +
                "); disabled, native path intact";
-    onigami::diag_write(g_reason.c_str());
+    onigami::diag_write(("onigami-fg: DISABLED: " + g_reason).c_str());
   }
+}
+
+void apply_config_locked(const Config& c, const char* why) {
+  bool want = c.frame_generation && c.frame_gen_multiplier >= 2 &&
+              c.frame_gen_multiplier <= 4;
+  int mult = c.frame_gen_multiplier < 2   ? 2
+             : c.frame_gen_multiplier > 4 ? 4
+                                          : c.frame_gen_multiplier;
+  bool guard = c.frame_gen_guard;
+  bool changed = (want != g_enabled) || (want && mult != g_mult) ||
+                 (want && guard != g_guard);
+  if (!changed && g_enabled) return;  // steady state: keep history, no log
+  teardown_gl_locked();
+  g_confails = 0;
+  g_logged_ready = false;
+  g_logged_gen = false;
+  g_mult = mult;
+  g_guard = guard;
+  if (!c.frame_generation) {
+    g_enabled = false;
+    g_reason = "disabled by configuration";
+  } else if (c.frame_gen_multiplier < 2 || c.frame_gen_multiplier > 4) {
+    g_enabled = false;
+    g_reason = "multiplier outside 2x..4x";
+  } else {
+    g_enabled = true;
+    g_reason = "active";
+  }
+  char b[256];
+  snprintf(b, sizeof(b),
+           "onigami-fg: config %s dir=%s enabled=%d mult=%dx guard=%d",
+           why, data_dir().c_str(), g_enabled ? 1 : 0, g_mult,
+           g_guard ? 1 : 0);
+  onigami::diag_write(b);
+}
+
+// Live reload: the launcher rewrites onigami.json on every FG settings
+// change (no restart). Re-apply at ~1Hz when the file actually changed.
+void maybe_reload_locked() {
+  long long now = mono_ns();
+  if (now - g_last_reload_ns < 1000000000LL) return;
+  g_last_reload_ns = now;
+  struct stat st;
+  std::string cfg = config_path();
+  if (stat(cfg.c_str(), &st) != 0) return;
+  if ((long long)st.st_mtime == g_cfg_mtime) return;
+  g_cfg_mtime = (long long)st.st_mtime;
+  Config c = load_config();
+  apply_config_locked(c, "reloaded live");
+  publish_locked();
 }
 
 void drain_errors() {
@@ -236,15 +305,14 @@ void drain_errors() {
 bool resolve_gl_locked() {
   if (g_gl_resolved) return true;
   if (!ensure_egl_loaded() || !egl_procs().GetProcAddress) {
-    g_reason = "backend EGL procs unavailable";
-    return false;
+    return false;  // backend not up yet: skip, do not count as failure
   }
   auto get = [](const char* n) {
     return reinterpret_cast<void*>(
         egl_procs().GetProcAddress(n));  // raw backend proc, never a wrapper
   };
 #define O_LSFG_NEED(fn, str)                                \
-  g_gl.fn = reinterpret_cast<P_gl##fn>(get(str));             \
+  g_gl.fn = reinterpret_cast<P_gl##fn>(get(str));           \
   if (!g_gl.fn) {                                           \
     g_reason = std::string("GLES3 proc missing: ") + str +  \
                " (ES3 context required)";                  \
@@ -311,7 +379,7 @@ void teardown_gl_locked() {
   }
   g_tex[0] = g_tex[1] = 0;
   g_fbo = g_prog = g_vbo = g_vao = 0;
-  g_uPrev = g_uCurr = g_uT = -1;
+  g_uPrev = g_uCurr = g_uT = g_uGuard = -1;
   g_ctx = EGL_NO_CONTEXT;
   g_turn = 0;
   g_have = 0;
@@ -339,14 +407,8 @@ bool ensure_gl_locked(EGLDisplay d, int w, int h) {
   EGLContext cur = egl_procs().GetCurrentContext
                        ? egl_procs().GetCurrentContext()
                        : EGL_NO_CONTEXT;
-  if (cur == EGL_NO_CONTEXT) {
-    g_reason = "no current GL context at present";
-    return false;
-  }
-  if (w <= 0 || h <= 0) {
-    g_reason = "unknown surface size at present";
-    return false;
-  }
+  if (cur == EGL_NO_CONTEXT) return false;  // not ready: skip silently
+  if (w <= 0 || h <= 0) return false;       // size unknown: skip silently
   if (g_ctx == cur && g_w == w && g_h == h && g_prog != 0 && g_fbo != 0) {
     return true;  // hot path: everything retained and reusable
   }
@@ -414,6 +476,7 @@ bool ensure_gl_locked(EGLDisplay d, int w, int h) {
   g_uPrev = g_gl.GetUniformLocation(g_prog, "uPrev");
   g_uCurr = g_gl.GetUniformLocation(g_prog, "uCurr");
   g_uT = g_gl.GetUniformLocation(g_prog, "uT");
+  g_uGuard = g_gl.GetUniformLocation(g_prog, "uGuard");
   static const GLfloat tri[6] = {-1.f, -1.f, 3.f, -1.f, -1.f, 3.f};
   g_gl.GenBuffers(1, &g_vbo);
   g_gl.GenVertexArrays(1, &g_vao);
@@ -429,6 +492,13 @@ bool ensure_gl_locked(EGLDisplay d, int w, int h) {
     teardown_gl_locked();
     return false;
   }
+  if (!g_logged_ready) {
+    g_logged_ready = true;
+    char b[192];
+    snprintf(b, sizeof(b), "onigami-fg: GL backend ready (%dx%d, guard=%d)",
+             w, h, g_guard ? 1 : 0);
+    onigami::diag_write(b);
+  }
   return true;
 }
 
@@ -436,22 +506,10 @@ bool ensure_gl_locked(EGLDisplay d, int w, int h) {
 
 void on_config_applied() {
   std::lock_guard<std::mutex> l(g_mu);
-  teardown_gl_locked();
-  g_confails = 0;
-  const Config& c = current_config();
-  if (!c.frame_generation) {
-    g_enabled = false;
-    g_reason = "disabled by configuration";
-    return;
-  }
-  if (c.frame_gen_multiplier != 2) {
-    g_enabled = false;
-    g_reason = "only 2x is implemented in v1.17.0";
-    return;
-  }
-  g_enabled = true;
-  g_mult = 2;
-  g_reason = "active: 2x EGL blend-interpolation (LSFG-VK derived)";
+  struct stat st;
+  std::string cfg = config_path();
+  if (stat(cfg.c_str(), &st) == 0) g_cfg_mtime = (long long)st.st_mtime;
+  apply_config_locked(load_config(), "init");
 }
 
 void on_surface_changed(int w, int h) {
@@ -481,6 +539,7 @@ void on_process_end() {
 
 bool on_swap_buffers(bool swap_ok, int w, int h) {
   std::lock_guard<std::mutex> l(g_mu);
+  maybe_reload_locked();
   long long now = mono_ns();
   if (!swap_ok) {
     g_c.dropped++;
@@ -505,12 +564,9 @@ bool on_swap_buffers(bool swap_ok, int w, int h) {
 
 void precapture(EGLDisplay d, int w, int h) {
   std::lock_guard<std::mutex> l(g_mu);
+  maybe_reload_locked();
   if (!g_enabled) return;
-  if (!ensure_gl_locked(d, w, h)) {
-    note_fail_locked("retain");
-    publish_locked();
-    return;
-  }
+  if (!ensure_gl_locked(d, w, h)) return;  // not ready: silent skip
   drain_errors();
   GLint save_read = 0, save_draw = 0;
   g_gl.GetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &save_read);
@@ -536,11 +592,7 @@ void precapture(EGLDisplay d, int w, int h) {
 bool postgenerate(EGLDisplay d, EGLSurface s, int w, int h) {
   std::lock_guard<std::mutex> l(g_mu);
   if (!g_enabled || g_have < 2) return false;  // warmup: nothing invented
-  if (!ensure_gl_locked(d, w, h)) {
-    note_fail_locked("present-setup");
-    publish_locked();
-    return false;
-  }
+  if (!ensure_gl_locked(d, w, h)) return false;
   long long t0 = mono_ns();
   drain_errors();
   // Save every game state we touch; the game must never observe us.
@@ -569,6 +621,9 @@ bool postgenerate(EGLDisplay d, EGLSurface s, int w, int h) {
 
   GLuint older = g_tex[g_turn];      // frame N-1
   GLuint newer = g_tex[g_turn ^ 1];  // frame N
+  const int n = g_mult;
+  bool any_fail = false;
+  int presented = 0;
   g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
   g_gl.Viewport(0, 0, g_w, g_h);
   g_gl.Disable(GL_BLEND);
@@ -583,16 +638,23 @@ bool postgenerate(EGLDisplay d, EGLSurface s, int w, int h) {
   g_gl.BindTexture(GL_TEXTURE_2D, newer);
   if (g_uPrev >= 0) g_gl.Uniform1i(g_uPrev, 0);
   if (g_uCurr >= 0) g_gl.Uniform1i(g_uCurr, 1);
-  if (g_uT >= 0) g_gl.Uniform1f(g_uT, kGenT);
+  if (g_uGuard >= 0) g_gl.Uniform1f(g_uGuard, g_guard ? 1.0f : 0.0f);
   g_gl.BindVertexArray(g_vao);
-  g_gl.DrawArrays(GL_TRIANGLES, 0, 3);
-  // Direct backend swap: bypasses our own wrapper (no recursion, and the
-  // wrapper pacing log intentionally keeps counting native swaps only).
-  EGLBoolean ok2 = egl_procs().SwapBuffers
-                       ? egl_procs().SwapBuffers(d, s)
-                       : EGL_FALSE;
-  bool presented = (ok2 == EGL_TRUE) &&
-                   (g_gl.GetError() == GL_NO_ERROR);
+  for (int k = 1; k < n; ++k) {
+    if (g_uT >= 0) g_gl.Uniform1f(g_uT, (float)k / (float)n);
+    g_gl.DrawArrays(GL_TRIANGLES, 0, 3);
+    // Direct backend swap: bypasses our own wrapper (no recursion, and the
+    // wrapper pacing log intentionally keeps counting native swaps only).
+    EGLBoolean ok2 = egl_procs().SwapBuffers
+                         ? egl_procs().SwapBuffers(d, s)
+                         : EGL_FALSE;
+    if (ok2 == EGL_TRUE && g_gl.GetError() == GL_NO_ERROR) {
+      presented++;
+    } else {
+      any_fail = true;
+      break;  // stop the chain: never present past a failure
+    }
+  }
 
   // Restore game state before counting anything.
   g_gl.ActiveTexture(GL_TEXTURE0);
@@ -615,11 +677,20 @@ bool postgenerate(EGLDisplay d, EGLSurface s, int w, int h) {
   long long t1 = mono_ns();
   double ms = (double)(t1 - t0) / 1000000.0;
   g_c.gen_ms_ema = g_c.gen_ms_ema == 0.0 ? ms : g_c.gen_ms_ema * 0.9 + ms * 0.1;
-  if (presented) {
-    g_c.generated_frames++;
-    g_c.displayed_frames++;
+  if (presented > 0) {
+    g_c.generated_frames += (unsigned long long)presented;
+    g_c.displayed_frames += (unsigned long long)presented;
     g_confails = 0;
-  } else {
+    if (!g_logged_gen) {
+      g_logged_gen = true;
+      char b[192];
+      snprintf(b, sizeof(b),
+               "onigami-fg: generated frames live (%dx, +%d/frame)",
+               n, n - 1);
+      onigami::diag_write(b);
+    }
+  }
+  if (any_fail) {
     g_c.dropped++;
     note_fail_locked("present");
   }
@@ -627,7 +698,7 @@ bool postgenerate(EGLDisplay d, EGLSurface s, int w, int h) {
   (void)kPyramidLevels;
   (void)kBlockSize;
   (void)kMaxIterations;
-  return presented;
+  return presented > 0;
 }
 
 bool supported() { return true; }
@@ -643,14 +714,17 @@ std::string status_text() {
   std::lock_guard<std::mutex> l(g_mu);
   if (!g_enabled) return std::string("Frame Generation: OFF (") + g_reason + ")";
   char b[192];
-  snprintf(b, sizeof(b),
-           "Frame Generation: ON (2x, gen %.2fms, displayed %llu/%llu)",
-           g_c.gen_ms_ema, g_c.displayed_frames, g_c.native_frames);
+  snprintf(b, sizeof(b), "Frame Generation: ON (%dx, gen %.2fms)", g_mult,
+           g_c.gen_ms_ema);
   return std::string(b);
 }
 Counters counters() {
   std::lock_guard<std::mutex> l(g_mu);
   return g_c;
+}
+std::string last_reason() {
+  std::lock_guard<std::mutex> l(g_mu);
+  return g_reason;
 }
 
 }  // namespace lsfg
@@ -683,5 +757,24 @@ ONIGAMI_API unsigned long long onigami_generated_frames(void) {
 }
 ONIGAMI_API unsigned long long onigami_dropped_frames(void) {
   return onigami::lsfg::counters().dropped;
+}
+// Bridge present hook (see lsfg.h): the JNI bridge calls this around its
+// backend swap so frame generation rides the REAL present path, which
+// resolves system EGL directly and never passes libonigami's own wrapper.
+ONIGAMI_API EGLBoolean onigami_hook_swap_buffers(
+    EGLDisplay d, EGLSurface s,
+    EGLBoolean (*real_swap)(EGLDisplay, EGLSurface)) {
+  int w = 0, h = 0;
+  if (onigami::ensure_egl_loaded() && onigami::egl_procs().QuerySurface) {
+    EGLint ew = 0, eh = 0;
+    if (onigami::egl_procs().QuerySurface(d, s, EGL_WIDTH, &ew)) w = (int)ew;
+    if (onigami::egl_procs().QuerySurface(d, s, EGL_HEIGHT, &eh)) h = (int)eh;
+  }
+  onigami::lsfg::precapture(d, w, h);
+  if (!real_swap) return EGL_FALSE;
+  EGLBoolean ok = real_swap(d, s);
+  onigami::lsfg::on_swap_buffers(ok == EGL_TRUE, w, h);
+  if (ok == EGL_TRUE) onigami::lsfg::postgenerate(d, s, w, h);
+  return ok;
 }
 }  // extern "C"
