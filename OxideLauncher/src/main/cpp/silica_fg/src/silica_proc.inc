@@ -102,7 +102,7 @@ bool resolve_gl_locked() {
     return p;
   };
 #define SFG_NEED(fn, str)                             \
-  g_gl.fn = reinterpret_cast<P_##fn>(get(str));       \
+  g_gl.fn = reinterpret_cast<P_gl##fn>(get(str));       \
   if (!g_gl.fn) {                                     \
     g_reason = std::string("GLES proc missing: ") + str; \
     return false;                                     \
