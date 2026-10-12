@@ -442,7 +442,7 @@ fun RendererSettingsScreen(
                                     "Restart required."
                             )
                         }
-                    )
+                    }
                 }
             }
         }
