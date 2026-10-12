@@ -37,6 +37,8 @@ object OnigamiTuning {
         val diagnostics: Boolean,
         val renderScale: Int,
         val upscaleMode: Int,
+        val frameGen: Boolean = false,
+        val frameGenMultiplier: Int = 2,
     )
 
     fun resolve(
@@ -45,6 +47,8 @@ object OnigamiTuning {
         diagnostics: Boolean,
         renderScale: Int = 100,
         upscaleMode: Int = 0,
+        frameGen: Boolean = false,
+        frameGenMultiplier: Int = 2,
     ): Resolved {
         // v1.16.0: profiles no longer differentiate (writer pins OPTIMIZED).
         // Render scale and upscaler are direct controls with real backends.
@@ -55,6 +59,9 @@ object OnigamiTuning {
             diagnostics,
             renderScale.coerceIn(50, 100),
             upscaleMode.coerceIn(0, 1),
+            frameGen,
+            // v1.17.0: only 2x is implemented and validated; clamp anything else.
+            if (frameGenMultiplier == 2) 2 else 2,
         )
     }
 
