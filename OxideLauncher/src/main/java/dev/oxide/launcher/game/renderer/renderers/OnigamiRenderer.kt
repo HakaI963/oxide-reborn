@@ -46,7 +46,12 @@ object OnigamiRenderer : RendererInterface {
         val dir = onigamiDataDir()
         dir.mkdirs()
         authorOnigamiConfig(dir)
-        OnigamiEnv.merged(OnigamiPerformanceMode.OPTIMIZED.name, dir.absolutePath)
+        OnigamiEnv.merged(
+            OnigamiPerformanceMode.OPTIMIZED.name,
+            dir.absolutePath,
+            AllSettings.onigamiFrameGen.getValue(),
+            AllSettings.onigamiFrameGenMultiplier.getValue(),
+        )
     }
 
     private fun onigamiDataDir(): File = File(PathManager.DIR_FILES_PRIVATE, OnigamiIdentity.DATA_DIR)
@@ -59,6 +64,8 @@ object OnigamiRenderer : RendererInterface {
                 AllSettings.onigamiDiagnostics.getValue(),
                 AllSettings.onigamiRenderScale.getValue(),
                 AllSettings.onigamiUpscaleMode.getValue(),
+                AllSettings.onigamiFrameGen.getValue(),
+                AllSettings.onigamiFrameGenMultiplier.getValue(),
             )
             val tmp = File(dir, "onigami.json.tmp")
             val dst = File(dir, "onigami.json")

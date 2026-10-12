@@ -54,3 +54,8 @@ ONIGAMI_API const char* onigami_last_diag(void) {
     return g_diag.c_str();
 }
 } // extern "C"
+
+extern "C" {
+ONIGAMI_API unsigned long long onigami_state_hits(void) { return 0; }
+ONIGAMI_API unsigned long long onigami_state_skips(void) { return 0; }
+}  // extern "C"
