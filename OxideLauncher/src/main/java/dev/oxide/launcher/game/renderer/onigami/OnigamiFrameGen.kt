@@ -108,7 +108,7 @@ object OnigamiFrameGen {
      */
     /** Probe state, evaluated once per process (game process answers for itself). */
     private val soProbe: Boolean by lazy {
-        runCatching { System.loadLibrary(OnigamiIdentity.NATIVE_LIBRARY.removeSuffix(".so")); true }.getOrDefault(false)
+        runCatching { System.loadLibrary(OnigamiIdentity.NATIVE_LIBRARY.removePrefix("lib").removeSuffix(".so")); true }.getOrDefault(false)
     }
 
     fun diagnosticsText(nowMs: Long = System.currentTimeMillis()): String {
