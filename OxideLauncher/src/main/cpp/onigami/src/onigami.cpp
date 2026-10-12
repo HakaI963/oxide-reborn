@@ -55,3 +55,12 @@ ONIGAMI_API const char* onigami_last_diag(void) {
     return g_diag.c_str();
 }
 } // extern "C"
+
+extern "C" {
+ONIGAMI_API unsigned long long onigami_state_hits(void) {
+    return onigami::state_cache().hits();
+}
+ONIGAMI_API unsigned long long onigami_state_skips(void) {
+    return onigami::state_cache().skips();
+}
+}  // extern "C"
