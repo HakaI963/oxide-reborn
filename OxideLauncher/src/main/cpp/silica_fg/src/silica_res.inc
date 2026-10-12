@@ -43,35 +43,54 @@ bool compile_stage(GLuint sh, const char* src, const char* tag) {
   return false;
 }
 
-GLuint link_pair(const char* vsrc, const char* fsrc, const char* tag,
-                 GLenum stage2, const char* src2) {
+static bool link_check(GLuint prog, const char* tag) {
+  GLint st = 0;
+  g_gl.GetProgramiv(prog, GL_LINK_STATUS, &st);
+  if (st) return true;
+  char log[256] = {0};
+  GLsizei n = 0;
+  g_gl.GetProgramInfoLog(prog, (GLsizei)sizeof(log) - 1, &n, log);
+  log[sizeof(log) - 1] = 0;
+  char b[300];
+  snprintf(b, sizeof(b), "program link (%s): %.200s", tag, log);
+  g_reason = b;
+  return false;
+}
+
+GLuint link_compute(const char* src, const char* tag) {
+  GLuint sh = g_gl.CreateShader(GL_COMPUTE_SHADER);
+  if (!compile_stage(sh, src, tag)) {
+    g_gl.DeleteShader(sh);
+    return 0;
+  }
+  GLuint prog = g_gl.CreateProgram();
+  g_gl.AttachShader(prog, sh);
+  g_gl.LinkProgram(prog);
+  g_gl.DeleteShader(sh);
+  if (!link_check(prog, tag)) {
+    g_gl.DeleteProgram(prog);
+    return 0;
+  }
+  return prog;
+}
+
+GLuint link_raster(const char* vsrc, const char* fsrc, const char* tag) {
   GLuint vs = g_gl.CreateShader(GL_VERTEX_SHADER);
-  GLuint fs = (stage2 == GL_COMPUTE_SHADER) ? g_gl.CreateShader(GL_COMPUTE_SHADER)
-                                            : g_gl.CreateShader(GL_FRAGMENT_SHADER);
-  bool ok = compile_stage(vs, vsrc, tag) && compile_stage(fs, src2, tag);
+  GLuint fs = g_gl.CreateShader(GL_FRAGMENT_SHADER);
+  bool ok = compile_stage(vs, vsrc, tag) && compile_stage(fs, fsrc, tag);
   GLuint prog = 0;
   if (ok) {
     prog = g_gl.CreateProgram();
     g_gl.AttachShader(prog, vs);
     g_gl.AttachShader(prog, fs);
     g_gl.LinkProgram(prog);
-    GLint st = 0;
-    g_gl.GetProgramiv(prog, GL_LINK_STATUS, &st);
-    if (!st) {
-      char log[256] = {0};
-      GLsizei n = 0;
-      g_gl.GetProgramInfoLog(prog, (GLsizei)sizeof(log) - 1, &n, log);
-      log[sizeof(log) - 1] = 0;
-      char b[300];
-      snprintf(b, sizeof(b), "program link (%s): %.200s", tag, log);
-      g_reason = b;
+    if (!link_check(prog, tag)) {
       g_gl.DeleteProgram(prog);
       prog = 0;
     }
   }
   g_gl.DeleteShader(vs);
   g_gl.DeleteShader(fs);
-  (void)fsrc;
   return prog;
 }
 
@@ -145,10 +164,10 @@ bool ensure_gl_locked(EGLContext cur, int w, int h) {
     teardown_gl_locked();
     return false;
   }
-  g_pBox = link_pair(nullptr, nullptr, "box", GL_COMPUTE_SHADER, kBox);
-  g_pFlow = link_pair(nullptr, nullptr, "flow", GL_COMPUTE_SHADER, kFlow);
-  g_pMed = link_pair(nullptr, nullptr, "med", GL_COMPUTE_SHADER, kMedian);
-  g_pWarp = link_pair(kWarpVert, nullptr, "warp", GL_FRAGMENT_SHADER, kWarpFrag);
+  g_pBox = link_compute(kBox, "box");
+  g_pFlow = link_compute(kFlow, "flow");
+  g_pMed = link_compute(kMedian, "med");
+  g_pWarp = link_raster(kWarpVert, kWarpFrag, "warp");
   if (!g_pBox || !g_pFlow || !g_pMed || !g_pWarp) {
     teardown_gl_locked();
     return false;
