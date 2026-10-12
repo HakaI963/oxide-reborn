@@ -13,6 +13,7 @@ struct Config {
   int upscale_mode = 0;
   bool frame_generation = false;
   int frame_gen_multiplier = 2;
+  bool frame_gen_guard = true;
 };
 Config load_config();
 const Config& current_config();

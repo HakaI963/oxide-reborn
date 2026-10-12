@@ -30,6 +30,11 @@ ONIGAMI_API unsigned long long onigami_native_frames(void);
 ONIGAMI_API unsigned long long onigami_displayed_frames(void);
 ONIGAMI_API unsigned long long onigami_generated_frames(void);
 ONIGAMI_API unsigned long long onigami_dropped_frames(void);
+// Bridge present hook: the JNI bridge (system EGL path) calls this around
+// its backend swap. Returns the native swap result; generated presents are
+// issued inside and counted only on success.
+ONIGAMI_API int onigami_hook_swap_buffers(void* display, void* surface,
+    int (*real_swap)(void*, void*));
 // Latest refusal in plain text. Valid until the next call on this thread.
 ONIGAMI_API const char* onigami_last_diag(void);
 #ifdef __cplusplus
