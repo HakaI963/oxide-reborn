@@ -10,6 +10,13 @@ static bool pass_box(GLuint srcTex, GLuint dstTex);
 static bool pass_flow();
 static bool pass_median();
 
+static bool run_flow_locked() {
+  if (!pass_flow()) return false;
+  if (!pass_median()) return false;
+  unbind_images();
+  return true;
+}
+
 bool postgenerate_locked(EGLDisplay d, EGLSurface s, int w, int h,
                          EGLBoolean (*real_swap)(EGLDisplay, EGLSurface)) {
   if (!g_enabled || g_have < 2) return false;  // warmup: nothing invented
@@ -129,7 +136,6 @@ void configure_locked(const char* dataDir, bool enabled, int mult, bool guard) {
   publish_locked();
 }
 
-}  // namespace
 
 // --- exported hook + JNI (C linkage) ---
 extern "C" {
@@ -148,7 +154,7 @@ __attribute__((visibility("default"))) EGLBoolean silica_fg_present_hook(
   }
   {
     std::lock_guard<std::mutex> l(g_mu);
-    precapture_locked(w, h);
+    precapture_locked(d, w, h);
   }
   if (!real_swap) return EGL_FALSE;
   EGLBoolean ok = real_swap(d, s);
@@ -197,4 +203,5 @@ Java_dev_oxide_launcher_bridge_SilicaFgBridge_nativeReloadTranslation(
 }
 
 }  // extern "C"
+}  // anonymous namespace
 }  // namespace silica_fg
