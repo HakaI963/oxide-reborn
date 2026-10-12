@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.R
 import dev.oxide.launcher.game.renderer.Renderers
+import dev.oxide.launcher.game.renderer.onigami.OnigamiFrameGen
 import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
 import dev.oxide.launcher.game.sdl.SdlBridge
 import dev.oxide.launcher.setting.AllSettings
