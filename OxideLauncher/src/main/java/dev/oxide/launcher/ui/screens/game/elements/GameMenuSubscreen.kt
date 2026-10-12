@@ -532,7 +532,7 @@ private fun LazyListScope.rendererSection(
 private fun LazyListScope.silicaSection() {
     if (!Renderers.isCurrentRendererValid()) return
     if (Renderers.getCurrentRenderer() !== SilicaRenderer) return
-    group(R.string.oxide_set_tab_renderer, "renderer")
+    group(R.string.oxide_set_tab_renderer, "renderer_silica")
     item(key = "silicaVulkan") {
         GameMenuNoteRow("Silica FG needs Minecraft 26.2+ rendering Vulkan; otherwise pure translation.")
     }
