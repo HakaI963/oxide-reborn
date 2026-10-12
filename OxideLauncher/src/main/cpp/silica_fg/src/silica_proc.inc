@@ -1,8 +1,5 @@
 // Own-engine logic: state, init, compute passes, present, stats, JNI.
-#include "silica_core.inc"
 
-namespace silica_fg {
-namespace {
 
 std::mutex g_mu;
 bool g_configured = false;
