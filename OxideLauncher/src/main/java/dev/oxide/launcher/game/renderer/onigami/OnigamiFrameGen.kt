@@ -9,7 +9,7 @@
  */
 package dev.oxide.launcher.game.renderer.onigami
 
-import dev.oxide.launcher.game.renderer.onigami.OnigamiPipeline.OnigamiFrameGeneration
+import dev.oxide.launcher.game.renderer.onigami.OnigamiFrameGeneration
 import dev.oxide.launcher.path.PathManager
 import dev.oxide.launcher.setting.AllSettings
 import java.io.File
@@ -87,7 +87,7 @@ object OnigamiFrameGen {
         }.getOrNull()
     }
 
-    fun asPipeline(): OnigamiPipeline.OnigamiFrameGeneration = object : OnigamiPipeline.OnigamiFrameGeneration {
+    fun asPipeline(): OnigamiFrameGeneration = object : OnigamiFrameGeneration {
         override fun supported(): Boolean = true
         override fun reason(): String = "2x EGL interpolation (LSFG-VK derived); 3x/4x unvalidated"
         override fun enabled(): Boolean = isEnabled()

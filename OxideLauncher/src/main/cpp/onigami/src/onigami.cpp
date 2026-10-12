@@ -1,6 +1,7 @@
 // ONIGAMI entry: version + retryable-probe strings + counters. Own code.
 #include "onigami/onigami.h"
 #include "onigami/backend.h"
+#include "state_cache.h"
 #include <mutex>
 #include <string>
 namespace {
@@ -54,8 +55,3 @@ ONIGAMI_API const char* onigami_last_diag(void) {
     return g_diag.c_str();
 }
 } // extern "C"
-
-extern "C" {
-ONIGAMI_API unsigned long long onigami_state_hits(void) { return 0; }
-ONIGAMI_API unsigned long long onigami_state_skips(void) { return 0; }
-}  // extern "C"
