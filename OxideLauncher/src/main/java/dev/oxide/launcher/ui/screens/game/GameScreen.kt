@@ -173,7 +173,7 @@ private class GameViewModel(
     var fgReason by mutableStateOf("")
         private set
     private var prevFgStats: FrameGenStats? = null
-    private var gameEnvEnsured = false
+    private var gameEnvEnsuredFor: String? = null
     private var prevFgTms: Long = 0L
     /** 帧率历史记录（最多保留最近15个时间节点） */
     var fpsHistory by mutableStateOf<List<Int>>(emptyList())
@@ -284,8 +284,13 @@ private class GameViewModel(
      * translation config (heals the never-called native lifecycle).
      */
     private fun ensureGameEnvOnce() {
-        if (gameEnvEnsured) return
-        gameEnvEnsured = true
+        val rid = if (Renderers.isCurrentRendererValid()) {
+            Renderers.getCurrentRenderer().getRendererId()
+        } else {
+            ""
+        }
+        if (gameEnvEnsuredFor == rid) return
+        gameEnvEnsuredFor = rid
         if (!Renderers.isCurrentRendererValid() ||
             Renderers.getCurrentRenderer() !== SilicaRenderer
         ) return
