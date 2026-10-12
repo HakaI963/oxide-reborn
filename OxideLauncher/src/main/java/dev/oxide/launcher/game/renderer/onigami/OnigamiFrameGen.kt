@@ -106,18 +106,31 @@ object OnigamiFrameGen {
      * Config state + native counters + backend reason. Pure overload below
      * is unit-tested; this wrapper only reads live sources.
      */
+    /** Probe state, evaluated once per process (game process answers for itself). */
+    private val soProbe: Boolean by lazy {
+        runCatching { System.loadLibrary(OnigamiIdentity.NATIVE_LIBRARY.removeSuffix(".so")); true }.getOrDefault(false)
+    }
+
     fun diagnosticsText(nowMs: Long = System.currentTimeMillis()): String {
         val cfg = "cfg=" + (if (isEnabled()) "ON(" + selectedMultiplier() + "x)" else "OFF") +
             ",guard=" + (if (AllSettings.onigamiFrameGenGuard.getValue()) "on" else "off")
-        return diagnosticsText(cfg, readStats(nowMs))
+        // These three run in the game process itself: env visible here is the
+        // game env, the .so probe loads the game linker namespace, and the
+        // config path is the shared app files dir. No logcat needed.
+        val envOk = System.getenv(OnigamiEnv.KEY_HOOK) != null
+        val cfgOk = runCatching { File(dataDir(), "onigami.json").exists() }.getOrDefault(false)
+        return diagnosticsText(cfg, readStats(nowMs), envOk, soProbe, cfgOk)
     }
 
     /** Pure diagnostics formatting. No estimates: absent stats say so. */
-    fun diagnosticsText(cfg: String, stats: FrameGenStats?): String {
+    fun diagnosticsText(cfg: String, stats: FrameGenStats?, envOk: Boolean, soOk: Boolean, cfgOk: Boolean): String {
+        val proc = "hookEnv=" + (if (envOk) "ok" else "ABSENT") +
+            ",so=" + (if (soOk) "ok" else "MISSING") +
+            ",json=" + (if (cfgOk) "ok" else "absent")
         if (stats == null) {
-            return cfg + " | native=no stats file yet (hook idle or game not swapping)"
+            return cfg + " | " + proc + " | native=no stats file yet (hook idle or game not swapping)"
         }
-        return cfg + " | native=" + stats.nativeFrames +
+        return cfg + " | " + proc + " | native=" + stats.nativeFrames +
             " displayed=" + stats.displayedFrames +
             " gen=" + stats.generatedFrames +
             " drop=" + stats.dropped +
