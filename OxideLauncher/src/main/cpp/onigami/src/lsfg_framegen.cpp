@@ -244,7 +244,7 @@ bool resolve_gl_locked() {
         egl_procs().GetProcAddress(n));  // raw backend proc, never a wrapper
   };
 #define O_LSFG_NEED(fn, str)                                \
-  g_gl.fn = reinterpret_cast<P_##fn>(get(str));             \
+  g_gl.fn = reinterpret_cast<P_gl##fn>(get(str));             \
   if (!g_gl.fn) {                                           \
     g_reason = std::string("GLES3 proc missing: ") + str +  \
                " (ES3 context required)";                  \
