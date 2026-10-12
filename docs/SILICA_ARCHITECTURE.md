@@ -67,3 +67,14 @@ placed where each piece actually runs. This note records the full diagnosis
   `framegen init ok`, `2x insert live`.
 - Advanced FPS meter: Native (CallbackBridge) vs Displayed (layer counts,
   never native x multiplier).
+
+## Own GLES engine (v1.19.0+): placement proof
+
+win-fg serves only real Vulkan swapchains. The GLES game path needed its
+own engine, placed at the only interception point that provably runs every
+displayed frame: the JNI bridge swap. Engine: libsilica_fg.so, clean-room
+GLES 3.1 compute (quarter luma, block-match flow, median, warp-blend),
+self-gated (default off), full state save/restore, JNI-explicit config,
+game-process env export, translation reload. Meter: engine stats first,
+win-fg fallback, else mirror/measuring. Verify: logcat silica-fg tag +
+Renderer-tab diagnostics (counters + source).

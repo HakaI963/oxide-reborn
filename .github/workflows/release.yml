@@ -221,7 +221,12 @@ jobs:
             echo libwin_fg_x86_64_entries=$WINFG64
             test "$WINFG64" -ge 1 || { echo '::error::libwin_fg.so is missing from the x86_64 APK'; exit 1; }
           fi
-          printf '%s\n' "$LIST" | grep libonigami | sort
+          for ABIDIR in $(printf '%s\n' "${LIST}" | grep -oE '^lib/[^/]+' | sort -u); do
+            SFG=$(printf '%s\n' "${LIST}" | grep -c "^${ABIDIR}/libsilica_fg.so" || true)
+            echo "silica_fg ${ABIDIR}: ${SFG}"
+            test "${SFG}" -ge 1 || { echo "::error::libsilica_fg.so is missing from ${ABIDIR} in the release APK"; exit 1; }
+          done
+          printf '%s\n' "${LIST}" | grep -E 'libonigami|libwin_fg|libsilica_fg' | sort
           echo renderer gate passed for ${{ matrix.arch }}
       - name: Upload release APK (${{ matrix.arch }})
         uses: actions/upload-artifact@v7
