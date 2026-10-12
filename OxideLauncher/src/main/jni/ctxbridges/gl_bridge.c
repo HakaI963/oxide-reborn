@@ -19,7 +19,6 @@
 
 static const char* g_LogTag = "GLBridge";
 static __thread gl_render_window_t* currentBundle;
-static int onigami_hook_log_once = 0;
 static EGLDisplay g_EglDisplay;
 
 bool gl_init() {
@@ -234,36 +233,8 @@ void gl_swap_buffers() {
         currentBundle->state = STATE_RENDERER_ALIVE;
     }
 
-    /* ONIGAMI present hook, late resolve: dlsym_EGL() tries at init, but env/
-     * library ordering must never silently disable frame counting. Retry here
-     * until resolved; afterwards this is a single null check per swap. */
-    if (!onigami_swap_hook_p) {
-        const char* hook_env = getenv("ONIGAMI_PRESENT_HOOK");
-        if (hook_env && hook_env[0]) {
-            void* oh = dlopen("libonigami.so", RTLD_LAZY | RTLD_LOCAL);
-            if (oh) {
-                onigami_swap_hook_p = dlsym(oh, "onigami_hook_swap_buffers");
-            }
-            if (onigami_swap_hook_p) {
-                __android_log_print(ANDROID_LOG_INFO, g_LogTag,
-                                    "ONIGAMI present hook active");
-            } else if (!onigami_hook_log_once) {
-                onigami_hook_log_once = 1;
-                __android_log_print(ANDROID_LOG_ERROR, g_LogTag,
-                                    "ONIGAMI present hook missing (lib=%p sym=%p): %s",
-                                    oh, (void*)onigami_swap_hook_p,
-                                    oh ? "dlsym failed" : dlerror());
-            }
-        }
-    }
-    if (currentBundle->surface != NULL) {
-        EGLBoolean swap_ok;
-        if (onigami_swap_hook_p)
-            swap_ok = onigami_swap_hook_p(g_EglDisplay, currentBundle->surface,
-                                          eglSwapBuffers_p);
-        else
-            swap_ok = eglSwapBuffers_p(g_EglDisplay, currentBundle->surface);
-        if (!swap_ok && eglGetError_p() == EGL_BAD_SURFACE)
+    if (currentBundle->surface != NULL)
+        if (!eglSwapBuffers_p(g_EglDisplay, currentBundle->surface) && eglGetError_p() == EGL_BAD_SURFACE)
         {
             eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
             currentBundle->newNativeSurface = NULL;
@@ -275,7 +246,6 @@ void gl_swap_buffers() {
             }
             __android_log_print(ANDROID_LOG_INFO, g_LogTag, "The window has died, awaiting window change");
         }
-    }
 
 }
 

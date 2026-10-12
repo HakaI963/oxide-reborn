@@ -74,7 +74,7 @@ jobs:
           SYM="symbols-${{ matrix.abi }}.txt"
           "$NM" -D --defined-only "$SO" > "$SYM"
           echo "nm exit: $?"
-          for sym in onigami_version onigami_build_id onigami_last_diag eglGetDisplay eglInitialize eglChooseConfig eglCreateContext eglMakeCurrent eglSwapBuffers eglGetProcAddress eglGetError glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus onigami_hook_swap_buffers onigami_framegen_status onigami_framegen_enabled onigami_native_frames onigami_displayed_frames onigami_generated_frames onigami_dropped_frames; do
+          for sym in onigami_version onigami_build_id onigami_last_diag eglGetDisplay eglInitialize eglChooseConfig eglCreateContext eglMakeCurrent eglSwapBuffers eglGetProcAddress eglGetError glGetString glUseProgram glBindTexture glDrawElements glTexImage2D glCheckFramebufferStatus; do
             if grep -q " $sym" "$SYM"; then
               echo "OK: exports $sym"
             else

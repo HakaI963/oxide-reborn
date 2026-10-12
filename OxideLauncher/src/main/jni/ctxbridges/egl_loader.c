@@ -22,8 +22,6 @@ EGLBoolean (*eglBindAPI_p) (EGLenum api);
 EGLSurface (*eglCreatePbufferSurface_p) (EGLDisplay dpy, EGLConfig config, const EGLint *attrib_list);
 EGLSurface (*eglCreateWindowSurface_p) (EGLDisplay dpy, EGLConfig config, NativeWindowType window, const EGLint *attrib_list);
 EGLBoolean (*eglSwapBuffers_p) (EGLDisplay dpy, EGLSurface draw);
-EGLBoolean (*onigami_swap_hook_p) (EGLDisplay dpy, EGLSurface draw,
-    onigami_real_swap_fn real_swap) = NULL;
 EGLint (*eglGetError_p) (void);
 EGLContext (*eglCreateContext_p) (EGLDisplay dpy, EGLConfig config, EGLContext share_list, const EGLint *attrib_list);
 EGLBoolean (*eglSwapInterval_p) (EGLDisplay dpy, EGLint interval);
@@ -65,16 +63,6 @@ void dlsym_EGL() {
     eglInitialize_p = GLGetProcAddress(dl_handle, "eglInitialize");
     eglMakeCurrent_p = GLGetProcAddress(dl_handle, "eglMakeCurrent");
     eglSwapBuffers_p = GLGetProcAddress(dl_handle, "eglSwapBuffers");
-    onigami_swap_hook_p = NULL;
-    {
-        const char* hook_env = getenv("ONIGAMI_PRESENT_HOOK");
-        if (hook_env && hook_env[0]) {
-            void* oh = dlopen("libonigami.so", RTLD_LAZY | RTLD_LOCAL);
-            if (oh) {
-                onigami_swap_hook_p = dlsym(oh, "onigami_hook_swap_buffers");
-            }
-        }
-    }
     eglReleaseThread_p = GLGetProcAddress(dl_handle, "eglReleaseThread");
     eglSwapInterval_p = GLGetProcAddress(dl_handle, "eglSwapInterval");
     eglTerminate_p = GLGetProcAddress(dl_handle, "eglTerminate");
