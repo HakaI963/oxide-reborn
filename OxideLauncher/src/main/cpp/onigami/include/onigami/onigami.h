@@ -1,5 +1,6 @@
 #pragma once
-// ONIGAMI public C API. Own contract; nothing from any other renderer.
+// ONIGAMI public C API.
+#include <EGL/egl.h> Own contract; nothing from any other renderer.
 #include <stddef.h>
 #if defined(__GNUC__) || defined(__clang__)
 #define ONIGAMI_API __attribute__((visibility("default")))
@@ -33,8 +34,9 @@ ONIGAMI_API unsigned long long onigami_dropped_frames(void);
 // Bridge present hook: the JNI bridge (system EGL path) calls this around
 // its backend swap. Returns the native swap result; generated presents are
 // issued inside and counted only on success.
-ONIGAMI_API int onigami_hook_swap_buffers(void* display, void* surface,
-    int (*real_swap)(void*, void*));
+ONIGAMI_API EGLBoolean onigami_hook_swap_buffers(
+    EGLDisplay display, EGLSurface surface,
+    EGLBoolean (*real_swap)(EGLDisplay, EGLSurface));
 // Latest refusal in plain text. Valid until the next call on this thread.
 ONIGAMI_API const char* onigami_last_diag(void);
 #ifdef __cplusplus

@@ -233,8 +233,14 @@ void gl_swap_buffers() {
         currentBundle->state = STATE_RENDERER_ALIVE;
     }
 
-    if (currentBundle->surface != NULL)
-        if (!eglSwapBuffers_p(g_EglDisplay, currentBundle->surface) && eglGetError_p() == EGL_BAD_SURFACE)
+    if (currentBundle->surface != NULL) {
+        EGLBoolean swap_ok;
+        if (onigami_swap_hook_p)
+            swap_ok = onigami_swap_hook_p(g_EglDisplay, currentBundle->surface,
+                                          eglSwapBuffers_p);
+        else
+            swap_ok = eglSwapBuffers_p(g_EglDisplay, currentBundle->surface);
+        if (!swap_ok && eglGetError_p() == EGL_BAD_SURFACE)
         {
             eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
             currentBundle->newNativeSurface = NULL;
@@ -246,6 +252,7 @@ void gl_swap_buffers() {
             }
             __android_log_print(ANDROID_LOG_INFO, g_LogTag, "The window has died, awaiting window change");
         }
+    }
 
 }
 

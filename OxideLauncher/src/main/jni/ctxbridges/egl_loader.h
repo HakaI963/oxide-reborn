@@ -19,6 +19,10 @@ extern EGLBoolean (*eglBindAPI_p) (EGLenum api);
 extern EGLSurface (*eglCreatePbufferSurface_p) (EGLDisplay dpy, EGLConfig config, const EGLint *attrib_list);
 extern EGLSurface (*eglCreateWindowSurface_p) (EGLDisplay dpy, EGLConfig config, NativeWindowType window, const EGLint *attrib_list);
 extern EGLBoolean (*eglSwapBuffers_p) (EGLDisplay dpy, EGLSurface draw);
+/* ONIGAMI present hook (v1.17.0). */
+typedef EGLBoolean (*onigami_real_swap_fn)(EGLDisplay dpy, EGLSurface draw);
+extern EGLBoolean (*onigami_swap_hook_p)(EGLDisplay dpy, EGLSurface draw,
+    onigami_real_swap_fn real_swap);
 extern EGLint (*eglGetError_p) (void);
 extern EGLContext (*eglCreateContext_p) (EGLDisplay dpy, EGLConfig config, EGLContext share_list, const EGLint *attrib_list);
 extern EGLBoolean (*eglSwapInterval_p) (EGLDisplay dpy, EGLint interval);
