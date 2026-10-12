@@ -6,6 +6,10 @@
 //   on_swap: count native/displayed.
 //   postgenerate: ensure targets+programs, flow+median, warp x(mult-1) with
 //     backend swaps, count generated only on success.
+static bool pass_box(GLuint srcTex, GLuint dstTex);
+static bool pass_flow();
+static bool pass_median();
+
 static void unbind_images() {
   for (GLuint u = 0; u < 8; ++u)
     g_gl.BindImageTexture(u, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
@@ -155,7 +159,6 @@ bool postgenerate_locked(EGLDisplay d, EGLSurface s, int w, int h,
   }
   restore_state(saved);
   unbind_images();
-  g_gl.ActiveTexture(GL_TEXTURE0);
   long long t1 = mono_ns();
   double ms = (double)(t1 - t0) / 1000000.0;
   g_genMs = g_genMs == 0.0 ? ms : g_genMs * 0.9 + ms * 0.1;
