@@ -56,7 +56,7 @@ import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.RendererInterface
 import dev.oxide.launcher.game.renderer.Renderers
-import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
 import dev.oxide.launcher.game.renderer.onigami.OnigamiVulkan
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.URL_CLOUD_DRIVE_DRIVER_PLUGINS
@@ -416,38 +416,68 @@ fun RendererSettingsScreen(
                         .fillMaxWidth()
                         .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
                 ) {
-                    // ONIGAMI frame generation (v1.17.0, LSFG-VK derived).
-                    // Restart required: native reads onigami.json at context init.
+                    // Silica frame generation (win-fg Vulkan layer). conf.toml
+                    // hot-reload: everything here applies live, no restart.
                     SwitchSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
                         position = CardPosition.Top,
-                        unit = AllSettings.onigamiFrameGen,
-                        title = "ONIGAMI frame generation",
-                        summary = "Off by default. Real interpolated presents between game frames (LSFG-VK derived). Applies live, no restart.",
-                        onCheckedChange = { OnigamiRenderer.refreshNativeConfig() }
+                        unit = AllSettings.silicaFgEnabled,
+                        title = "Silica frame generation",
+                        summary = "Off by default. Optical-flow interpolated frames on the game's Vulkan swapchain (Minecraft 26.2+). Applies live.",
+                        onCheckedChange = { SilicaRenderer.refreshFgConfig() }
                     )
                     ListSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
                         position = CardPosition.Middle,
                         items = listOf(2, 3, 4),
-                        currentId = AllSettings.onigamiFrameGenMultiplier.state.toString(),
+                        currentId = AllSettings.silicaFgMult.state.toString(),
                         defaultId = "2",
-                        title = "Frame generation multiplier",
+                        title = "FG multiplier",
                         summary = "Applies live; higher costs more GPU per frame.",
                         getItemText = { "${it}x" },
                         getItemId = { it.toString() },
                         onValueChange = {
-                            AllSettings.onigamiFrameGenMultiplier.save(it)
-                            OnigamiRenderer.refreshNativeConfig()
+                            AllSettings.silicaFgMult.save(it)
+                            SilicaRenderer.refreshFgConfig()
+                        }
+                    )
+                    ListSettingsCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        position = CardPosition.Middle,
+                        items = listOf(3, 4),
+                        currentId = AllSettings.silicaFgModel.state.toString(),
+                        defaultId = "4",
+                        title = "Flow model",
+                        summary = "Optical flow is cheaper; bidirectional is sharper. Applies live (rebuilds flow).",
+                        getItemText = { if (it == 4) "Bidirectional" else "Optical flow" },
+                        getItemId = { it.toString() },
+                        onValueChange = {
+                            AllSettings.silicaFgModel.save(it)
+                            SilicaRenderer.refreshFgConfig()
+                        }
+                    )
+                    ListSettingsCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        position = CardPosition.Middle,
+                        items = listOf(0, 1, 2),
+                        currentId = AllSettings.silicaFgPerf.state.toString(),
+                        defaultId = "1",
+                        title = "Quality preset",
+                        summary = "Finer search costs more GPU. Applies live (rebuilds pyramid).",
+                        getItemText = { if (it == 0) "Quality" else if (it == 1) "Balanced" else "Performance" },
+                        getItemId = { it.toString() },
+                        onValueChange = {
+                            AllSettings.silicaFgPerf.save(it)
+                            SilicaRenderer.refreshFgConfig()
                         }
                     )
                     SwitchSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
                         position = CardPosition.Bottom,
-                        unit = AllSettings.onigamiFrameGenGuard,
-                        title = "Artifact guard",
-                        summary = "Snaps scene cuts and fast motion to the current frame. Applies live.",
-                        onCheckedChange = { OnigamiRenderer.refreshNativeConfig() }
+                        unit = AllSettings.silicaFgPacing,
+                        title = "Even pacing",
+                        summary = "Place generated frames near the temporal midpoint. Applies live.",
+                        onCheckedChange = { SilicaRenderer.refreshFgConfig() }
                     )
                 }
             }
