@@ -221,13 +221,14 @@ jobs:
             echo libwin_fg_x86_64_entries=$WINFG64
             test "$WINFG64" -ge 1 || { echo '::error::libwin_fg.so is missing from the x86_64 APK'; exit 1; }
           fi
-          for ABIDIR in $(printf '%s\n' "${LIST}" | grep -oE '^lib/[^/]+' | sort -u); do
-            SFG=$(printf '%s\n' "${LIST}" | grep -c "^${ABIDIR}/libsilica_fg.so" || true)
-            echo "silica_fg ${ABIDIR}: ${SFG}"
-            test "${SFG}" -ge 1 || { echo "::error::libsilica_fg.so is missing from ${ABIDIR} in the release APK"; exit 1; }
+          for PJLIB in $(printf '%s\n' "${LIST}" | grep -E '^lib/[^/]+/libpojavexec.so' || true); do
+            unzip -p "${APK}" "${PJLIB}" > /tmp/pjgate.so
+            NM_BIN="$(command -v llvm-nm || command -v nm)"
+            PJFG=$("${NM_BIN}" -D --defined-only /tmp/pjgate.so 2>/dev/null | grep -c silica_fg_build_id || true)
+            echo "silica engine in ${PJLIB}: ${PJFG}"
+            test "${PJFG}" -ge 1 || { echo "::error::silica FG engine missing from ${PJLIB}"; exit 1; }
           done
-          printf '%s\n' "${LIST}" | grep -E 'libonigami|libwin_fg|libsilica_fg' | sort
-          echo renderer gate passed for ${{ matrix.arch }}
+          printf '%s\n' "${LIST}" | grep -E 'libonigami|libwin_fg|libpojavexec' | sort          echo renderer gate passed for ${{ matrix.arch }}
       - name: Upload release APK (${{ matrix.arch }})
         uses: actions/upload-artifact@v7
         with:
