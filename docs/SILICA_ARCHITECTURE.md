@@ -123,3 +123,5 @@ converges through files in the shared UID dir instead:
   (`yielding (gpu-bound)`); the meter keeps measuring.
 - 3 consecutive real errors disable with a logged reason; setup skips never
   count. Teardown frees everything on disable.
+
+Test build: CI debug APK after libsilica_fg commit.
