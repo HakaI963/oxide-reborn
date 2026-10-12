@@ -25,5 +25,6 @@ import dev.oxide.launcher.R
  */
 enum class FpsDisplayMode(val nameRes: Int) {
     NUMBER(R.string.game_menu_option_fps_display_mode_number),
-    CHART(R.string.game_menu_option_fps_display_mode_chart)
+    CHART(R.string.game_menu_option_fps_display_mode_chart),
+    ADVANCED(R.string.game_menu_option_fps_display_mode_advanced)
 }

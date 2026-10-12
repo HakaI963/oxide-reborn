@@ -9,6 +9,7 @@
 // EGL_NOT_INITIALIZED with a diag line. Nothing is invented.
 #include "onigami/backend.h"
 #include "onigami/config.h"
+#include "onigami/lsfg.h"
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <cstring>
@@ -150,6 +151,15 @@ O_API EGLSurface eglGetCurrentSurface(EGLint r) {
 O_API EGLBoolean eglSwapBuffers(EGLDisplay d, EGLSurface s) {
     if (!ensure_egl_loaded() || !egl_procs().SwapBuffers) return EGL_FALSE;
     upscale_present(d, s);
+    int fg_w = 0, fg_h = 0;
+    if (egl_procs().QuerySurface) {
+        EGLint ew = 0, eh = 0;
+        if (egl_procs().QuerySurface(d, s, EGL_WIDTH, &ew)) fg_w = (int)ew;
+        if (egl_procs().QuerySurface(d, s, EGL_HEIGHT, &eh)) fg_h = (int)eh;
+    }
+    // Full-FG retain (v1.17.0): GPU-side copy of the outgoing frame for the
+    // interpolated present. Best effort; failures degrade to counting-only.
+    onigami::lsfg::precapture(d, fg_w, fg_h);
     EGLBoolean ok = egl_procs().SwapBuffers(d, s);
     if (onigami::current_config().diagnostics) {
         long long now = monotonic_ns();
@@ -169,6 +179,12 @@ O_API EGLBoolean eglSwapBuffers(EGLDisplay d, EGLSurface s) {
                 g_swap_stats.swaps, avg_ms, g_swap_stats.slow_swaps);
         }
     }
+    // Frame-generation accounting + interpolated present (v1.17.0): counts
+    // ONLY real backend results; the generated present issues a second
+    // backend swap with blend-interpolated content and counts it only on
+    // success. Nothing estimated, never a duplicate.
+    onigami::lsfg::on_swap_buffers(ok == EGL_TRUE, fg_w, fg_h);
+    if (ok == EGL_TRUE) onigami::lsfg::postgenerate(d, s, fg_w, fg_h);
     return ok;
 }
 O_API EGLBoolean eglSwapInterval(EGLDisplay d, EGLint interval) {

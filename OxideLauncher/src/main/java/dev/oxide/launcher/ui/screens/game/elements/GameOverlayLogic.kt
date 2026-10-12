@@ -501,3 +501,57 @@ fun multiplayerLogToggle(
     isRefresh = showingLog,
     enabled = !collectingLog,
 )
+ // ---------------------------------------------------------------------------
+ // FPS Advanced mode (v1.17.0)
+ //
+ // Native = game-rendered frames (CallbackBridge). Displayed = confirmed
+ // presents incl. generated frames (native stats file). Displayed is NEVER
+ // native x multiplier: it must come from a measured counter. When no
+ // measurement exists the caller passes displayedMeasured=false and the UI
+ // renders "measuring", not a number.
+ // ---------------------------------------------------------------------------
+
+ /** Advanced FPS readout values (pure, testable). */
+ @Immutable
+ data class FpsAdvancedReadout(
+     val nativeText: String,
+     val displayedText: String,
+     val frameGenText: String,
+     val displayedIsEstimate: Boolean,
+ )
+
+ /**
+  * Build the Advanced readout. Pure function, directly unit-tested.
+  *
+  * @param nativeFps game-rendered FPS, null when hidden.
+  * @param displayedFps confirmed presented FPS, meaningful only when
+  *   [displayedMeasured] is true.
+  * @param displayedMeasured false -> "measuring", never a fabricated number.
+  * @param fgEnabled actual frame-generation state.
+  * @param fgMultiplier selected multiplier, shown only when active.
+  */
+ fun fpsAdvancedReadout(
+     nativeFps: Int?,
+     displayedFps: Int?,
+     displayedMeasured: Boolean,
+     fgEnabled: Boolean,
+     fgMultiplier: Int,
+ ): FpsAdvancedReadout {
+     val nativeText = "Native: " + (nativeFps?.toString() ?: "-")
+     val displayedText = if (displayedMeasured && displayedFps != null) {
+         "Displayed: " + displayedFps.toString()
+     } else {
+         "Displayed: measuring"
+     }
+     val frameGenText = if (fgEnabled) {
+         "Frame Generation: ON (" + fgMultiplier + "x)"
+     } else {
+         "Frame Generation: OFF"
+     }
+     return FpsAdvancedReadout(
+         nativeText = nativeText,
+         displayedText = displayedText,
+         frameGenText = frameGenText,
+         displayedIsEstimate = !displayedMeasured,
+     )
+ }

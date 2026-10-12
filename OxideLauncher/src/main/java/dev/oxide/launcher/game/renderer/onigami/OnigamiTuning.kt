@@ -71,5 +71,7 @@ object OnigamiTuning {
             ",\"diagnostics\":" + (if (r.diagnostics) 1 else 0) +
             ",\"swap_interval\":" + 1 +
             ",\"render_scale\":" + (r.renderScale / 100f) +
-            ",\"upscale_mode\":" + r.upscaleMode + "}"
+            ",\"upscale_mode\":" + r.upscaleMode +
+            ",\"frame_generation\":" + (if (r.frameGen) 1 else 0) +
+            ",\"frame_gen_multiplier\":" + r.frameGenMultiplier + "}"
 }

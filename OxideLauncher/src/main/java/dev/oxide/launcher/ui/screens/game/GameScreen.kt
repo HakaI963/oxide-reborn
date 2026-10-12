@@ -118,6 +118,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import dev.oxide.launcher.game.renderer.onigami.FrameGenStats
+import dev.oxide.launcher.game.renderer.onigami.OnigamiFrameGen
 import org.lwjgl.glfw.CallbackBridge
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
@@ -148,9 +150,23 @@ private class GameViewModel(
     /** 鼠标触摸指针处理层占用指针列表 */
     var occupiedPointers = mutableSetOf<PointerId>()
 
-    /** 游戏内帧率状态 */
+    /** 游戏内帧率状态 (native: Minecraft 实际渲染的新帧) */
     var gameFps by mutableIntStateOf(0)
         private set
+    /** 已确认展示帧率 (native + 已确认的生成帧), null 表示尚无测量 */
+    var displayedFps by mutableStateOf<Int?>(null)
+        private set
+    /** displayedFps 是否来自真实测量 (false 时 UI 显示 measuring, 不编造数字) */
+    var displayedMeasured by mutableStateOf(false)
+        private set
+    /** 帧生成的实际状态 (来自共享设置 + 本地支持性) */
+    var fgEnabled by mutableStateOf(false)
+        private set
+    /** 选择的倍率 (仅激活时展示) */
+    var fgMultiplier by mutableIntStateOf(2)
+        private set
+    private var prevFgStats: FrameGenStats? = null
+    private var prevFgTms: Long = 0L
     /** 帧率历史记录（最多保留最近15个时间节点） */
     var fpsHistory by mutableStateOf<List<Int>>(emptyList())
         private set
@@ -174,6 +190,10 @@ private class GameViewModel(
         fpsMin = 0
         fpsMaxResyncCountdown = -1
         fpsMinResyncCountdown = -1
+        displayedFps = null
+        displayedMeasured = false
+        prevFgStats = null
+        prevFgTms = 0L
         //开启一个新的协程，每秒更新一次帧率数据
         fpsJob = viewModelScope.launch(Dispatchers.Default) {
             while (true) {
@@ -183,6 +203,7 @@ private class GameViewModel(
                     break
                 }
                 recordFps(CallbackBridge.getCurrentFps())
+                pollFrameGenStats()
                 delay(1000L.milliseconds)
             }
         }
@@ -238,6 +259,49 @@ private class GameViewModel(
                 fpsMinResyncCountdown = FPS_RESYNC_NODES
             }
         }
+    }
+
+    /**
+     * Poll native frame-generation present counters (v1.17.0 Advanced meter).
+     *
+     * Native FPS stays authoritative from CallbackBridge. Displayed FPS comes
+     * ONLY from the native stats-file counters delta (confirmed presents).
+     * It is never native x multiplier. FG off + no stats file: displayed
+     * mirrors native (same present path, measured). FG on + no fresh stats:
+     * displayedMeasured=false so the UI renders "measuring".
+     */
+    private fun pollFrameGenStats() {
+        fgEnabled = OnigamiFrameGen.isEnabled()
+        fgMultiplier = OnigamiFrameGen.selectedMultiplier()
+        val stats = runCatching { OnigamiFrameGen.readStats() }.getOrNull()
+        if (stats == null) {
+            if (!fgEnabled) {
+                displayedFps = gameFps
+                displayedMeasured = true
+            } else {
+                displayedMeasured = false
+            }
+            return
+        }
+        val now = System.currentTimeMillis()
+        val prev = prevFgStats
+        if (prev != null && prevFgTms > 0L) {
+            val dt = (now - prevFgTms) / 1000.0
+            if (dt > 0.0) {
+                val rates = OnigamiFrameGen.rates(prev, stats, dt)
+                displayedFps = rates.second.toInt()
+                displayedMeasured = true
+            }
+        } else {
+            if (!stats.enabled) {
+                displayedFps = gameFps
+                displayedMeasured = true
+            } else {
+                displayedMeasured = false
+            }
+        }
+        prevFgStats = stats
+        prevFgTms = now
     }
 
     var editorRefresh by mutableIntStateOf(0)
@@ -865,6 +929,10 @@ fun GameScreen(
                     },
                     gameFps = gameFps,
                     fpsDisplayMode = AllSettings.fpsDisplayMode.state,
+                    displayedFps = viewModel.displayedFps,
+                    displayedMeasured = viewModel.displayedMeasured,
+                    fgEnabled = viewModel.fgEnabled,
+                    fgMultiplier = viewModel.fgMultiplier,
                     fpsHistory = viewModel.fpsHistory,
                     fpsMax = viewModel.fpsMax,
                     fpsMin = viewModel.fpsMin,
