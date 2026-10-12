@@ -78,3 +78,14 @@ self-gated (default off), full state save/restore, JNI-explicit config,
 game-process env export, translation reload. Meter: engine stats first,
 win-fg fallback, else mirror/measuring. Verify: logcat silica-fg tag +
 Renderer-tab diagnostics (counters + source).
+
+## Device test protocol (own engine, no release needed)
+
+1. Install the CI debug APK artifact (this code is NOT released).
+2. Pick Silica, start the game, open menu -> Renderer tab.
+3. Diagnostics line must flip from `src=none` to `src=gles` with rising
+   `native/displayed/gen` counters once FG is toggled on.
+4. `adb logcat -s silica-fg:V` must show `engine ready` then
+   `generated frames live`. Any `DISABLED: <reason>` line names the exact
+   cause (ES version, FBO, shader, swap).
+5. Advanced FPS meter: Native vs Displayed separate, never multiplied.
