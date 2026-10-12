@@ -544,6 +544,9 @@ private fun LazyListScope.rendererSection(
             },
         )
     }
+    item(key = "onigamiFgDiag") {
+        GameMenuNoteRow(OnigamiFrameGen.diagnosticsText())
+    }
     item(key = "onigamiFrameGenStatus") {
         val fgOn = AllSettings.onigamiFrameGen.state
         val mult = AllSettings.onigamiFrameGenMultiplier.state

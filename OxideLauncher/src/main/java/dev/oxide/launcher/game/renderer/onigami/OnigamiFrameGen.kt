@@ -101,6 +101,30 @@ object OnigamiFrameGen {
         override fun enabled(): Boolean = isEnabled()
     }
 
+    /**
+     * One-line diagnostics for the in-game Renderer tab (screenshot-able).
+     * Config state + native counters + backend reason. Pure overload below
+     * is unit-tested; this wrapper only reads live sources.
+     */
+    fun diagnosticsText(nowMs: Long = System.currentTimeMillis()): String {
+        val cfg = "cfg=" + (if (isEnabled()) "ON(" + selectedMultiplier() + "x)" else "OFF") +
+            ",guard=" + (if (AllSettings.onigamiFrameGenGuard.getValue()) "on" else "off")
+        return diagnosticsText(cfg, readStats(nowMs))
+    }
+
+    /** Pure diagnostics formatting. No estimates: absent stats say so. */
+    fun diagnosticsText(cfg: String, stats: FrameGenStats?): String {
+        if (stats == null) {
+            return cfg + " | native=no stats file yet (hook idle or game not swapping)"
+        }
+        return cfg + " | native=" + stats.nativeFrames +
+            " displayed=" + stats.displayedFrames +
+            " gen=" + stats.generatedFrames +
+            " drop=" + stats.dropped +
+            " genMs=" + (stats.genMsX100 / 100.0) +
+            " [" + stats.reason + "]"
+    }
+
     /** Pure helper: per-second rates from monotonic counters. No estimates. */
     fun rates(prev: FrameGenStats, cur: FrameGenStats, dtSec: Double): Pair<Double, Double> {
         if (dtSec <= 0.0) return 0.0 to 0.0
