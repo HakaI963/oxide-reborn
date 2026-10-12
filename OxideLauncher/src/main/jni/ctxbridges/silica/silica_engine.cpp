@@ -961,7 +961,6 @@ static void query_size_locked(EGLDisplay d, EGLSurface s, int& w, int& h) {
 // --- linked entries (C linkage) ---
 extern "C" {
 
-static long long g_cfgPollNs = 0;
 
 void silica_engine_before_swap(EGLDisplay dpy, EGLSurface surf) {
   int w = 0, h = 0;
