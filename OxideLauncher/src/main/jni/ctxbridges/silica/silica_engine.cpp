@@ -1061,7 +1061,6 @@ jboolean Java_dev_oxide_launcher_bridge_SilicaFgBridge_nativeBind(
   g_mDir = mDir;
   g_mEn = mEn;
   g_mMult = mMult;
-  g_boundLogged = true;
   diag("silica-fg: bridge bound (config pull live)");
   return JNI_TRUE;
 }
