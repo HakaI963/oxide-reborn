@@ -21,6 +21,7 @@
 
 #include "onigami/backend.h"
 #include "onigami/config.h"
+#include "onigami/bridge.h"
 
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
@@ -767,6 +768,29 @@ ONIGAMI_API unsigned long long onigami_dropped_frames(void) {
 ONIGAMI_API EGLBoolean onigami_hook_swap_buffers(
     EGLDisplay d, EGLSurface s,
     EGLBoolean (*real_swap)(EGLDisplay, EGLSurface)) {
+  // Self-healing lifecycle: nothing in the launcher currently calls
+  // onigami_on_process_start, which previously left the whole native config
+  // (render scale, vault, coalescing, frame generation) dormant at defaults.
+  // Run it once here so configured values actually take effect; data_dir()
+  // falls back to the ONIGAMI_DATA_DIR env the launcher already exports.
+  static std::once_flag hook_once;
+  std::call_once(hook_once, []() {
+    onigami_on_process_start(nullptr);
+    struct stat st;
+    std::string cfg = config_path();
+    if (stat(cfg.c_str(), &st) != 0) {
+      char b[256];
+      snprintf(b, sizeof(b),
+               "onigami-fg: bridge hook active, dir=%s (onigami.json absent: counting presents, FG off until configured)",
+               data_dir().c_str());
+      onigami::diag_write(b);
+    } else {
+      char b[192];
+      snprintf(b, sizeof(b), "onigami-fg: bridge hook active, dir=%s",
+               data_dir().c_str());
+      onigami::diag_write(b);
+    }
+  });
   int w = 0, h = 0;
   if (onigami::ensure_egl_loaded() && onigami::egl_procs().QuerySurface) {
     EGLint ew = 0, eh = 0;
