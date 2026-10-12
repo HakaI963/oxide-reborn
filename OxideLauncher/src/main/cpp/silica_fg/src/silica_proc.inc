@@ -62,6 +62,7 @@ void publish_locked() {
     << ",\"displayed_frames\":" << g_displayed
     << ",\"generated_frames\":" << g_gen
     << ",\"dropped\":" << g_drop
+    << ",\"gen_ms_x100\":" << (int)(g_genMs * 100.0)
     << ",\"reason\":\"" << g_reason << "\"}";
   f.close();
   rename(tmp.c_str(), dst.c_str());

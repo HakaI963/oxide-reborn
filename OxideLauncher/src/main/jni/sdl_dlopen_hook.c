@@ -38,6 +38,27 @@ static void *customDlsym(void *handle, const char *symbol) {
         originalSdlJniOnLoad = (jni_on_load_func_t) result;
         result = (void *) isolatedSdlJniOnLoad;
     }
+    // Silica FG: wrap ANY dlsym-resolved eglSwapBuffers (SDL's own EGL path,
+    // LWJGL-EGL, …) so generated frames ride every present path, not just the
+    // JNI bridge. The engine self-gates (default off = direct call). One slot:
+    // all in-process EGL handles serve one driver.
+    if (result != NULL && symbol != NULL && strcmp(symbol, "eglSwapBuffers") == 0) {
+        static void* silicaWrapFn = NULL;
+        static int silicaWrapTried = 0;
+        static int silicaWrapBusy = 0;
+        if (!silicaWrapFn && !silicaWrapTried && !silicaWrapBusy) {
+            silicaWrapTried = 1;
+            silicaWrapBusy = 1;
+            void* sh = dlopen("libsilica_fg.so", RTLD_LAZY | RTLD_LOCAL);
+            if (sh) {
+                typedef void* (*wrapfn_t)(void*);
+                wrapfn_t wf = (wrapfn_t)dlsym(sh, "silica_fg_wrap_swap");
+                if (wf) silicaWrapFn = wf(result);
+            }
+            silicaWrapBusy = 0;
+        }
+        if (silicaWrapFn) return silicaWrapFn;
+    }
     // LWJGL 的 org.lwjgl.sdl 绑定等消费方经 dlsym 解析 SDL 函数指针后直接调用，
     // hook_all 的 GOT 导入补丁拦截不到；在解析出口统一换成 sdl_hook 的 dlsym 层代理
     if (result != NULL && symbol != NULL) {
