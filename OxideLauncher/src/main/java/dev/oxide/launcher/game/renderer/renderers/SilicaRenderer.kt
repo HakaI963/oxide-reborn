@@ -104,7 +104,8 @@ object SilicaRenderer : RendererInterface {
 
     /**
      * Rewrite conf.toml immediately. win-fg watches it (~1Hz mtime), so
-     * in-game frame-generation changes apply live, no restart.
+     * in-game frame-generation changes apply live, no restart. Also pushes
+     * the own-engine state over JNI (best-effort; inert when idle).
      */
     fun refreshFgConfig() {
         runCatching {
@@ -112,5 +113,25 @@ object SilicaRenderer : RendererInterface {
             dir.mkdirs()
             writeFgPackage(dir)
         }
+        runCatching {
+            val dir = silicaDataDir()
+            dev.oxide.launcher.bridge.SilicaFgBridge.configure(
+                dir.absolutePath,
+                AllSettings.silicaFgEnabled.getValue(),
+                AllSettings.silicaFgMult.getValue(),
+                true,
+            )
+        }
     }
+
+    /** Current env map for in-game export (game process setenv heals IPC gap). */
+    fun gameEnv(): Map<String, String> = SilicaEnv.merged(
+        OnigamiPerformanceMode.OPTIMIZED.name,
+        silicaDataDir().absolutePath,
+        AllSettings.silicaFgEnabled.getValue(),
+        AllSettings.silicaFgMult.getValue(),
+        AllSettings.silicaFgModel.getValue(),
+        AllSettings.silicaFgPerf.getValue(),
+        AllSettings.silicaFgPacing.getValue(),
+    )
 }

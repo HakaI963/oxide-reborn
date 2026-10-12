@@ -38,11 +38,25 @@ object SilicaFrameGen {
         else -> "Frame Generation: ON (" + selectedMultiplier() + "x)"
     }
 
-    fun statsFile(): File = File(SilicaEnv.dataDir(), "winfg_stats.json")
+    fun statsFile(): File = File(SilicaEnv.dataDir(), "silica_fg_stats.json")
 
-    /** Latest layer-published stats, or null when absent/stale (>3s). */
-    fun readStats(nowMs: Long = System.currentTimeMillis()): FrameGenStats? {
-        val f = statsFile()
+    fun winfgStatsFile(): File = File(SilicaEnv.dataDir(), "winfg_stats.json")
+
+    /** Fresh stats source, if any: own GLES engine first, then win-fg layer. */
+    fun activeSource(nowMs: Long = System.currentTimeMillis()): String {
+        if (isFresh(statsFile(), nowMs)) return "gles"
+        if (isFresh(winfgStatsFile(), nowMs)) return "vulkan"
+        return "none"
+    }
+
+    private fun isFresh(f: File, nowMs: Long): Boolean =
+        runCatching { f.exists() && nowMs - f.lastModified() <= 3000L }.getOrDefault(false)
+
+    /** Latest engine/layer stats: own engine first, win-fg fallback. */
+    fun readStats(nowMs: Long = System.currentTimeMillis()): FrameGenStats? =
+        readFile(statsFile(), nowMs) ?: readFile(winfgStatsFile(), nowMs)
+
+    private fun readFile(f: File, nowMs: Long): FrameGenStats? {
         if (!f.exists()) return null
         if (nowMs - f.lastModified() > 3000L) return null
         return runCatching {
@@ -81,13 +95,14 @@ object SilicaFrameGen {
      * Config + layer package proof (manifest/.so presence) + live counters.
      */
     fun diagnosticsText(nowMs: Long = System.currentTimeMillis()): String {
+        val src = " src=" + activeSource(nowMs)
         val cfg = "cfg=" + (if (isEnabled()) "ON(" + selectedMultiplier() + "x)" else "OFF")
         val soOk = runCatching {
             System.loadLibrary(SilicaIdentity.WINFG_LIBRARY.removePrefix("lib").removeSuffix(".so"))
             true
         }.getOrDefault(false)
         val manOk = runCatching { File(SilicaEnv.layersDir(), SilicaEnv.MANIFEST_NAME).exists() }.getOrDefault(false)
-        return diagnosticsText(cfg, readStats(nowMs), soOk, manOk)
+        return diagnosticsText(cfg, readStats(nowMs), soOk, manOk) + src
     }
 
     /** Pure diagnostics formatting. No estimates: absent stats say so. */
