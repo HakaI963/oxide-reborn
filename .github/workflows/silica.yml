@@ -70,7 +70,7 @@ jobs:
           NM="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
           SYM="winfg-symbols-${{ matrix.abi }}.txt"
           "${NM}" -D --defined-only "${SO}" > "${SYM}"
-          for sym in vkNegotiateLoaderLayerInterfaceVersion winfg_QueuePresentKHR winfg_CreateSwapchainKHR; do
+          for sym in vkNegotiateLoaderLayerInterfaceVersion vkGetInstanceProcAddr vkGetDeviceProcAddr; do
             if grep -q " ${sym}" "${SYM}"; then
               echo "OK: exports ${sym}"
             else

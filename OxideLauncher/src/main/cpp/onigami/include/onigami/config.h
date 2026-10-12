@@ -11,9 +11,7 @@ struct Config {
   int swap_interval = 1;
   float render_scale = 1.0f;
   int upscale_mode = 0;
-  bool frame_generation = false;
-  int frame_gen_multiplier = 2;
-  bool frame_gen_guard = true;
+
 };
 Config load_config();
 const Config& current_config();
