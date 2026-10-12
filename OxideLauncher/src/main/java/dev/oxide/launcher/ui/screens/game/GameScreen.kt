@@ -118,9 +118,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import dev.oxide.launcher.bridge.SilicaFgBridge
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
 import dev.oxide.launcher.game.renderer.silica.FrameGenStats
+import dev.oxide.launcher.game.renderer.silica.SilicaEnv
 import dev.oxide.launcher.game.renderer.silica.SilicaFrameGen
 import org.lwjgl.glfw.CallbackBridge
 import java.io.File
@@ -171,6 +173,7 @@ private class GameViewModel(
     var fgReason by mutableStateOf("")
         private set
     private var prevFgStats: FrameGenStats? = null
+    private var gameEnvEnsured = false
     private var prevFgTms: Long = 0L
     /** 帧率历史记录（最多保留最近15个时间节点） */
     var fpsHistory by mutableStateOf<List<Int>>(emptyList())
@@ -275,7 +278,32 @@ private class GameViewModel(
      * displayed mirrors native (same present path, measured). FG on + no
      * fresh stats: displayedMeasured=false so the UI renders "measuring".
      */
+    /**
+     * One-time game-process bring-up: export renderer env (heals the
+     * main-process/:game-process env gap), push engine config, reload
+     * translation config (heals the never-called native lifecycle).
+     */
+    private fun ensureGameEnvOnce() {
+        if (gameEnvEnsured) return
+        gameEnvEnsured = true
+        if (!Renderers.isCurrentRendererValid() ||
+            Renderers.getCurrentRenderer() !== SilicaRenderer
+        ) return
+        runCatching {
+            val dir = SilicaEnv.dataDir()
+            SilicaFgBridge.exportEnv(SilicaRenderer.gameEnv())
+            SilicaFgBridge.configure(
+                dir.absolutePath,
+                AllSettings.silicaFgEnabled.getValue(),
+                AllSettings.silicaFgMult.getValue(),
+                true,
+            )
+            SilicaFgBridge.reloadTranslation(dir.absolutePath)
+        }
+    }
+
     private fun pollFrameGenStats() {
+        ensureGameEnvOnce()
         val silicaActive = Renderers.isCurrentRendererValid() &&
             Renderers.getCurrentRenderer() === SilicaRenderer
         fgEnabled = silicaActive && SilicaFrameGen.isEnabled()
