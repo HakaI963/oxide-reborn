@@ -99,6 +99,7 @@ fun DraggableGameBall(
     fgEnabled: Boolean = false,
     fgMultiplier: Int = 2,
     fgReason: String = "",
+    rendererName: String = "",
 ) {
     val description = stringResource(R.string.oxide_ingame_ball_menu)
     val openedText = stringResource(R.string.oxide_ingame_ball_opened)
@@ -144,6 +145,7 @@ fun DraggableGameBall(
                 fgEnabled = fgEnabled,
                 fgMultiplier = fgMultiplier,
                 fgReason = fgReason,
+                rendererName = rendererName,
             )
         }
     }
@@ -164,6 +166,7 @@ private fun GameBallContent(
     fgEnabled: Boolean = false,
     fgMultiplier: Int = 2,
     fgReason: String = "",
+    rendererName: String = "",
 ) {
     // 显示哪几块只有这一个出处，组合里不再散着判断
     val readouts = gameBallReadouts(gameFps, fpsDisplayMode, showMemory)
@@ -218,7 +221,7 @@ private fun GameBallContent(
                     val adv = fpsAdvancedReadout(gameFps, displayedFps, displayedMeasured, fgEnabled, fgMultiplier)
                     Column(modifier = Modifier.padding(end = 4.dp)) {
                         Text(
-                            text = "FPS",
+                            text = if (rendererName.isNotBlank()) "FPS · " + rendererName else "FPS",
                             fontSize = Oxide.Type.Body.fontSize,
                             lineHeight = Oxide.Type.Body.lineHeight,
                             color = Oxide.Fg,

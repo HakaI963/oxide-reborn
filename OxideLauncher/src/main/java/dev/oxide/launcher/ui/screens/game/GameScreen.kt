@@ -977,6 +977,11 @@ fun GameScreen(
                     fgEnabled = viewModel.fgEnabled,
                     fgMultiplier = viewModel.fgMultiplier,
                     fgReason = viewModel.fgReason,
+                    rendererName = if (Renderers.isCurrentRendererValid()) {
+                        Renderers.getCurrentRenderer().getRendererName().substringBefore(" (")
+                    } else {
+                        ""
+                    },
                     fpsHistory = viewModel.fpsHistory,
                     fpsMax = viewModel.fpsMax,
                     fpsMin = viewModel.fpsMin,

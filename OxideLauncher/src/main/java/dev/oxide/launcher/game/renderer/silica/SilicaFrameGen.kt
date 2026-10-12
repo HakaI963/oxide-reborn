@@ -86,6 +86,7 @@ object SilicaFrameGen {
                 generatedFrames = longAfter("generated_frames", 0L),
                 dropped = longAfter("dropped", 0L),
                 reason = strAfter("reason"),
+                genMsX100 = longAfter("gen_ms_x100", 0L),
             )
         }.getOrNull()
     }
@@ -116,6 +117,7 @@ object SilicaFrameGen {
             " displayed=" + stats.displayedFrames +
             " gen=" + stats.generatedFrames +
             " drop=" + stats.dropped +
+            " genMs=" + (stats.genMsX100 / 100.0) +
             " [" + stats.reason + "]"
     }
 
@@ -136,4 +138,5 @@ data class FrameGenStats(
     val generatedFrames: Long,
     val dropped: Long,
     val reason: String = "",
+    val genMsX100: Long = 0L,
 )
