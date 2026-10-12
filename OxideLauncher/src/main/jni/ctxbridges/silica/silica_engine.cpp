@@ -259,6 +259,57 @@ GLint g_wGuard = -1, g_wT = -1;
 int g_turn = 0, g_have = 0, g_confails = 0;
 const int kMaxFails = 3;
 
+
+long long mono_ns() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec;
+}
+
+void diag(const char* m) {
+  std::string fp = g_dataDir.empty() ? "/data/local/tmp/silica-fg.log"
+                                     : g_dataDir + "/silica-fg.log";
+  if (FILE* f = fopen(fp.c_str(), "a")) {
+    fprintf(f, "%s\n", m);
+    fclose(f);
+  }
+  __android_log_print(ANDROID_LOG_INFO, "silica-fg", "%s", m);
+}
+
+void publish_locked() {
+  long long now = mono_ns();
+  if (now - g_lastPublishNs < 1000000000LL) return;
+  g_lastPublishNs = now;
+  if (g_dataDir.empty()) return;
+  std::string dst = g_dataDir + "/silica_fg_stats.json";
+  std::string tmp = dst + ".tmp";
+  std::ofstream f(tmp.c_str(), std::ios::trunc);
+  if (!f) return;
+  f << "{\"enabled\":" << (g_enabled ? 1 : 0)
+    << ",\"multiplier\":" << g_mult
+    << ",\"native_frames\":" << g_native
+    << ",\"displayed_frames\":" << g_displayed
+    << ",\"generated_frames\":" << g_gen
+    << ",\"dropped\":" << g_drop
+    << ",\"gen_ms_x100\":" << (int)(g_genMs * 100.0)
+    << ",\"reason\":\"" << g_reason << "\"}";
+  f.close();
+  rename(tmp.c_str(), dst.c_str());
+}
+
+void note_fail_locked(const char* what) {
+  if (++g_confails >= kMaxFails && g_enabled) {
+    g_enabled = false;
+    g_reason = std::string("backend error (") + what +
+               "); disabled, native path intact";
+    char b[256];
+    snprintf(b, sizeof(b), "silica-fg: DISABLED: %s", g_reason.c_str());
+    diag(b);
+  }
+}
+
+void teardown_gl_locked();
+
 // ---- JNI config pull (cached; refreshed ~1Hz from the swap path) ----
 static JavaVM* g_vm = nullptr;
 static jclass g_bridgeClass = nullptr;
@@ -308,54 +359,6 @@ static void pull_config_locked() {
   g_enabled = want;
   g_mult = mult < 2 ? 2 : (mult > 4 ? 4 : mult);
   g_reason = want ? "active" : "disabled by configuration";
-}
-
-long long mono_ns() {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec;
-}
-
-void diag(const char* m) {
-  std::string fp = g_dataDir.empty() ? "/data/local/tmp/silica-fg.log"
-                                     : g_dataDir + "/silica-fg.log";
-  if (FILE* f = fopen(fp.c_str(), "a")) {
-    fprintf(f, "%s\n", m);
-    fclose(f);
-  }
-  __android_log_print(ANDROID_LOG_INFO, "silica-fg", "%s", m);
-}
-
-void publish_locked() {
-  long long now = mono_ns();
-  if (now - g_lastPublishNs < 1000000000LL) return;
-  g_lastPublishNs = now;
-  if (g_dataDir.empty()) return;
-  std::string dst = g_dataDir + "/silica_fg_stats.json";
-  std::string tmp = dst + ".tmp";
-  std::ofstream f(tmp.c_str(), std::ios::trunc);
-  if (!f) return;
-  f << "{\"enabled\":" << (g_enabled ? 1 : 0)
-    << ",\"multiplier\":" << g_mult
-    << ",\"native_frames\":" << g_native
-    << ",\"displayed_frames\":" << g_displayed
-    << ",\"generated_frames\":" << g_gen
-    << ",\"dropped\":" << g_drop
-    << ",\"gen_ms_x100\":" << (int)(g_genMs * 100.0)
-    << ",\"reason\":\"" << g_reason << "\"}";
-  f.close();
-  rename(tmp.c_str(), dst.c_str());
-}
-
-void note_fail_locked(const char* what) {
-  if (++g_confails >= kMaxFails && g_enabled) {
-    g_enabled = false;
-    g_reason = std::string("backend error (") + what +
-               "); disabled, native path intact";
-    char b[256];
-    snprintf(b, sizeof(b), "silica-fg: DISABLED: %s", g_reason.c_str());
-    diag(b);
-  }
 }
 
 void drain_errors() {
@@ -438,9 +441,9 @@ bool resolve_gl_locked() {
   SFG_NEED(MemoryBarrier, "glMemoryBarrier");
   SFG_NEED(DrawArrays, "glDrawArrays");
 #undef SFG_NEED
-  SFG_NEED_EGL(GetCurrentContext, "eglGetCurrentContext");
-  SFG_NEED_EGL(QuerySurface, "eglQuerySurface");
-  SFG_NEED_EGL(SwapBuffers, "eglSwapBuffers");
+  SFG_NEED(GetCurrentContext, "eglGetCurrentContext");
+  SFG_NEED(QuerySurface, "eglQuerySurface");
+  SFG_NEED(SwapBuffers, "eglSwapBuffers");
   g_resolved = true;
   return true;
 }
