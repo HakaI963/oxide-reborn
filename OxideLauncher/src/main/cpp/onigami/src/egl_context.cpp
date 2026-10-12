@@ -151,6 +151,15 @@ O_API EGLSurface eglGetCurrentSurface(EGLint r) {
 O_API EGLBoolean eglSwapBuffers(EGLDisplay d, EGLSurface s) {
     if (!ensure_egl_loaded() || !egl_procs().SwapBuffers) return EGL_FALSE;
     upscale_present(d, s);
+    int fg_w = 0, fg_h = 0;
+    if (egl_procs().QuerySurface) {
+        EGLint ew = 0, eh = 0;
+        if (egl_procs().QuerySurface(d, s, EGL_WIDTH, &ew)) fg_w = (int)ew;
+        if (egl_procs().QuerySurface(d, s, EGL_HEIGHT, &eh)) fg_h = (int)eh;
+    }
+    // Full-FG retain (v1.17.0): GPU-side copy of the outgoing frame for the
+    // interpolated present. Best effort; failures degrade to counting-only.
+    onigami::lsfg::precapture(d, fg_w, fg_h);
     EGLBoolean ok = egl_procs().SwapBuffers(d, s);
     if (onigami::current_config().diagnostics) {
         long long now = monotonic_ns();
@@ -170,18 +179,12 @@ O_API EGLBoolean eglSwapBuffers(EGLDisplay d, EGLSurface s) {
                 g_swap_stats.swaps, avg_ms, g_swap_stats.slow_swaps);
         }
     }
-    // Frame-generation present accounting (v1.17.0): counts ONLY the real
-    // backend result. Generated presents are confirmed by the lsfg backend;
-    // nothing is estimated here. Width/height are best-effort for history.
-    {
-        int w = 0, h = 0;
-        if (ensure_egl_loaded() && egl_procs().QuerySurface) {
-            EGLint ew = 0, eh = 0;
-            if (egl_procs().QuerySurface(d, s, EGL_WIDTH, &ew)) w = (int)ew;
-            if (egl_procs().QuerySurface(d, s, EGL_HEIGHT, &eh)) h = (int)eh;
-        }
-        onigami::lsfg::on_swap_buffers(ok == EGL_TRUE, w, h);
-    }
+    // Frame-generation accounting + interpolated present (v1.17.0): counts
+    // ONLY real backend results; the generated present issues a second
+    // backend swap with blend-interpolated content and counts it only on
+    // success. Nothing estimated, never a duplicate.
+    onigami::lsfg::on_swap_buffers(ok == EGL_TRUE, fg_w, fg_h);
+    if (ok == EGL_TRUE) onigami::lsfg::postgenerate(d, s, fg_w, fg_h);
     return ok;
 }
 O_API EGLBoolean eglSwapInterval(EGLDisplay d, EGLint interval) {

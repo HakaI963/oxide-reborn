@@ -1,20 +1,33 @@
 # ONIGAMI + LSFG-VK — v1.17.0 integration note
 
-## What v1.17.0 ships
+## What v1.17.0 ships: full 2x frame generation
 - Frame Generation toggle (default OFF) + 2x-only multiplier, persisted in
   the shared settings model (AllSettings.onigamiFrameGen /
   onigamiFrameGenMultiplier), shown in launcher Renderer settings and the
-  in-game Renderer tab. All rows are restart-required (native reads
-  onigami.json at context init).
-- EGL-level backend (libonigami.so): 2-frame history, EMA pacing
-  (4ms..200ms, LSFG scheduler-derived), monotonic native/displayed/
-  generated/dropped counters that count ONLY successful presents, surface
-  resize/recreate handling, clean disable path.
+  in-game Renderer tab. Restart-required (native reads onigami.json at
+  context init).
+- Full present path in libonigami.so (lsfg_framegen.cpp):
+  1. pre-swap GPU blit retains the outgoing frame (no CPU readback);
+  2. native backend swap, counted only on success;
+  3. blend-interpolated frame (mix of retained N-1/N at t=0.5 — a real
+     intermediate frame, never a duplicate) rendered and presented via a
+     second backend swap, counted only on success.
+  At most one generated frame per native frame: no queue can accumulate.
+  History (2 frames), FBO/textures/program/VBO/VAO are reused; resize,
+  surface loss, context change and shutdown drop retained state; 3
+  consecutive backend errors disable FG with a logged reason while the
+  native path continues untouched. All game GL state we touch is
+  saved/restored, and all FG GL calls use raw backend procs (never through
+  ONIGAMI translation), so Vitrail/shader-pack rendering is unaffected.
+- Interpolation quality staging (honest): the dispatched stage is BLEND.
+  LSFG's 4-level hierarchical Lucas-Kanade motion stage (PYRAMID_LEVELS=4,
+  BLOCK_SIZE=8, MAX_ITERATIONS=5) is not dispatched on mobile GPUs pending
+  Adreno 825 profiling; constants are in the source and the shader already
+  takes uT so a motion-vector warp plugs in without changing the path.
 - Advanced FPS meter: Native (CallbackBridge, game frames) vs Displayed
   (native stats file framegen_stats.json, confirmed presents only).
-  Displayed is never native x multiplier. When FG is off, displayed == native
-  from the same present path. Stale/absent stats render as "measuring", not
-  as a fabricated number.
+  Displayed is never native x multiplier. FG off → displayed mirrors native
+  (same path). No fresh measurement → UI shows `measuring`.
 - LSFG-VK MIT attribution in THIRD_PARTY.md + source headers.
 
 ## Why not a Vulkan-layer drop-in (exact technical reason)
@@ -28,34 +41,19 @@
    ends in a "(void)slot" no-op with a TODO to blit slot.image into an
    acquired swapchain image and present per synth frame. Only the real frame
    is presented today. Packaging the .so as-is would add an unconfigured
-   layer, not frames.
+   layer, not frames — so the missing pieces were built: retention, blend
+   interpolation, pacing, presentation, lifetime, all EGL-side.
 4. Replacing the stack with Vulkan/Zink was explicitly rejected
    (docs/ONIGAMI_ARCHITECTURE.md); Vitrail/shader-pack compat relies on the
    GL-on-ES path.
 
-## Smallest viable adaptation (what was done)
-- Vendored LSFG-VK stage logic as reference (pyramid/LK/warp/blend/pacing);
-  implemented the EGL analogue in lsfg_framegen.cpp with the same pacing
-  constants and history depth, GPU-side (no CPU readbacks), resources reused,
-  history dropped on resize/recreate.
-- v1.17.0 enables the counting/pacing/history path and a 2x interpolated
-  present gate; the generated counter increments ONLY on a confirmed second
-  successful swap. Until the GLES retained-frame blit validates on Adreno 825
-  under shader load, generated stays 0 and the status string says so — the
-  meter then correctly shows displayed == native.
-- 3x/4x, HDR swapchain formats, UI-mask tuning and Mali paths are NOT
-  exposed. Adreno 7xx README claims do not transfer to Adreno 825 without
-  measurement.
-
 ## Validation (honest status)
-- Focused unit tests: OnigamiFrameGenTest (rates math, stats parsing,
-  multiplier gating), GameOverlayLogic advanced-format tests, native-present
-  counter invariants reviewed in egl_context hook (success-only counting).
-- Device matrix (native FPS off vs on, displayed FPS, overhead, pacing,
-  artifacts, memory, Vitrail packs) requires Adreno 825 hardware and is NOT
-  claimed here. CI builds (ci.yml on PR, onigami.yml dispatch for
-  libonigami.so ABIs, release.yml for APKs) are the build gate; no local
-  NDK builds were used.
-- Baseline reminder: >200 FPS unshaded, ~20-25 FPS shaded. FG is not a
-  substitute for native optimization; higher displayed rate never means the
-  game simulated more frames.
+- Unit tests (run in CI): OnigamiFrameGenTest (rates math, stats parsing,
+  multiplier gating), FpsAdvancedLogicTest (no fabricated FPS).
+- Native compile gate is .github/workflows/onigami.yml (dispatch, 4 ABIs +
+  export check); PR CI runs unit tests, lint and debug APK. No local builds.
+- Device matrix (Adreno 825 native vs displayed, overhead, gen-ms, pacing,
+  artifacts, memory, Vitrail packs) requires hardware measurement; not
+  claimed here. Baseline reminder: >200 FPS unshaded, ~20-25 FPS shaded —
+  FG is not a substitute for native optimization, and a higher displayed
+  rate never means the game simulated more frames.
