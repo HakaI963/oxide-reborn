@@ -118,8 +118,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import dev.oxide.launcher.game.renderer.onigami.FrameGenStats
-import dev.oxide.launcher.game.renderer.onigami.OnigamiFrameGen
+import dev.oxide.launcher.game.renderer.Renderers
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
+import dev.oxide.launcher.game.renderer.silica.FrameGenStats
+import dev.oxide.launcher.game.renderer.silica.SilicaFrameGen
 import org.lwjgl.glfw.CallbackBridge
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
@@ -268,15 +270,17 @@ private class GameViewModel(
      * Poll native frame-generation present counters (v1.17.0 Advanced meter).
      *
      * Native FPS stays authoritative from CallbackBridge. Displayed FPS comes
-     * ONLY from the native stats-file counters delta (confirmed presents).
-     * It is never native x multiplier. FG off + no stats file: displayed
-     * mirrors native (same present path, measured). FG on + no fresh stats:
-     * displayedMeasured=false so the UI renders "measuring".
+     * Silica/win-fg stats-file counters delta (confirmed presents).
+     * It is never native x multiplier. Non-Silica or FG off + no stats:
+     * displayed mirrors native (same present path, measured). FG on + no
+     * fresh stats: displayedMeasured=false so the UI renders "measuring".
      */
     private fun pollFrameGenStats() {
-        fgEnabled = OnigamiFrameGen.isEnabled()
-        fgMultiplier = OnigamiFrameGen.selectedMultiplier()
-        val stats = runCatching { OnigamiFrameGen.readStats() }.getOrNull()
+        val silicaActive = Renderers.isCurrentRendererValid() &&
+            Renderers.getCurrentRenderer() === SilicaRenderer
+        fgEnabled = silicaActive && SilicaFrameGen.isEnabled()
+        fgMultiplier = SilicaFrameGen.selectedMultiplier()
+        val stats = if (silicaActive) runCatching { SilicaFrameGen.readStats() }.getOrNull() else null
         if (stats == null) {
             if (!fgEnabled) {
                 displayedFps = gameFps
@@ -284,7 +288,7 @@ private class GameViewModel(
                 fgReason = ""
             } else {
                 displayedMeasured = false
-                fgReason = "waiting for native stats"
+                fgReason = "waiting for layer stats"
             }
             return
         }
@@ -293,7 +297,7 @@ private class GameViewModel(
         if (prev != null && prevFgTms > 0L) {
             val dt = (now - prevFgTms) / 1000.0
             if (dt > 0.0) {
-                val rates = OnigamiFrameGen.rates(prev, stats, dt)
+                val rates = SilicaFrameGen.rates(prev, stats, dt)
                 displayedFps = rates.second.toInt()
                 displayedMeasured = true
             }
