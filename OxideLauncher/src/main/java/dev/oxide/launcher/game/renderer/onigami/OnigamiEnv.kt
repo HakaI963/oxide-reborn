@@ -20,7 +20,7 @@ object OnigamiEnv {
     const val KEY_LIBGL_ES = "LIBGL_ES"
     const val KEY_FLAVOR = "OXIDE_RENDERER_FLAVOR"
     const val KEY_DATA_DIR = "ONIGAMI_DATA_DIR"
-n    const val KEY_MODE = "ONIGAMI_MODE"
+    const val KEY_MODE = "ONIGAMI_MODE"
 
     fun baseEnv(mode: String): Map<String, String> = mapOf(
         KEY_LIBGL_ES to "3",

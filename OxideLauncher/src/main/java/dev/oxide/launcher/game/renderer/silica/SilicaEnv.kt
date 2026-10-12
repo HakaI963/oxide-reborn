@@ -57,6 +57,19 @@ object SilicaEnv {
         "ONIGAMI_DATA_DIR" to dir,
     )
 
+    fun fgEnv(dir: String, enabled: Boolean, mult: Int, model: Int, perf: Int, pacing: Boolean): Map<String, String> {
+        val m = mapOf(
+            KEY_FG_MULT to mult.coerceIn(2, 4).toString(),
+            KEY_FG_MODEL to model.coerceIn(3, 4).toString(),
+            KEY_FG_PERF to perf.coerceIn(0, 2).toString(),
+            KEY_FG_PACING to if (pacing) "on" else "off",
+            KEY_FG_CONF to confFile().absolutePath,
+            KEY_FG_STATS to dir,
+            KEY_LAYER_PATH to layersDir().absolutePath,
+        )
+        return if (enabled) m + mapOf(KEY_FG_ENABLE to "1") else m + mapOf(KEY_FG_DISABLE to "1")
+    }
+
     fun merged(mode: String, dir: String, enabled: Boolean, mult: Int, model: Int, perf: Int, pacing: Boolean): Map<String, String> =
         baseEnv(mode, dir) + fgEnv(dir, enabled, mult, model, perf, pacing)
 
