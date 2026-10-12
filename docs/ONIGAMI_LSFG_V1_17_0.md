@@ -1,3 +1,7 @@
+> SUPERSEDED in v1.19.0: the EGL-blend frame-generation backend
+> described here was removed and replaced by Silica + win-fg (see
+> docs/SILICA_ARCHITECTURE.md). Kept for history.
+
 # ONIGAMI + LSFG-VK — v1.17.0 integration note
 
 ## What v1.17.0 ships: real 2x/3x/4x frame generation

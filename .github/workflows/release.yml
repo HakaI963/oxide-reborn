@@ -193,9 +193,13 @@ jobs:
           "$BT/apksigner" verify --verbose "$APK"
           echo "release APK integrity gates passed for ${{ matrix.arch }}"
 
-      # Renderer gate: the release must ship ONIGAMI and must not ship the
-      # removed Silica backend. A silent regression here would ship the wrong
-      # backend, so it fails the build instead of being reported later.
+      # Renderer gate: the release must ship ONIGAMI and must not ship a
+      # libsilica.so translation backend (Silica reuses libonigami.so; its
+      # frame generation is the win-fg Vulkan layer). 64-bit APKs must also
+      # ship libwin_fg.so (upstream manifest declares library_arch 64;
+      # 32-bit ABIs run Silica as pure translation). A silent regression here
+      # would ship the wrong backend, so it fails the build instead of being
+      # reported later.
       - name: Verify renderer libraries in the release APK
         run: |
           set -euo pipefail
@@ -207,6 +211,16 @@ jobs:
           echo libsilica_so_entries=$SILICA
           test "$ONIGAMI" -ge 1 || { echo '::error::libonigami.so is missing from the release APK'; exit 1; }
           test "$SILICA" -eq 0 || { echo '::error::libsilica.so must not be in the release APK'; exit 1; }
+          if printf '%s\n' "$LIST" | grep -q '^lib/arm64-v8a/'; then
+            WINFG=$(printf '%s\n' "$LIST" | grep -c '^lib/arm64-v8a/libwin_fg.so' || true)
+            echo libwin_fg_arm64_entries=$WINFG
+            test "$WINFG" -ge 1 || { echo '::error::libwin_fg.so is missing from the arm64-v8a APK'; exit 1; }
+          fi
+          if printf '%s\n' "$LIST" | grep -q '^lib/x86_64/'; then
+            WINFG64=$(printf '%s\n' "$LIST" | grep -c '^lib/x86_64/libwin_fg.so' || true)
+            echo libwin_fg_x86_64_entries=$WINFG64
+            test "$WINFG64" -ge 1 || { echo '::error::libwin_fg.so is missing from the x86_64 APK'; exit 1; }
+          fi
           printf '%s\n' "$LIST" | grep libonigami | sort
           echo renderer gate passed for ${{ matrix.arch }}
       - name: Upload release APK (${{ matrix.arch }})

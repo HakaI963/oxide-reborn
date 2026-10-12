@@ -200,16 +200,19 @@ rearm, ANGLE half-load guard, Apple ARB-alias guard. The tree remains LGPL-2.1
 MobileGlues-derived; Copper Oxide impl, binaries, copperoxide.yml and all license
 notices stay until the independent Silica native exists.
 
-## LSFG-VK frame-generation reference (v1.17.0, MIT)
+## win-fg frame generation for Silica (MIT)
 
-Frame-generation math (pyramid downscale, hierarchical Lucas-Kanade motion
-estimation, bidirectional warp, UI-aware blend, present pacing) is derived
-from [Snap888/lsfg-vk](https://github.com/Snap888/lsfg-vk) (MIT,
-Copyright (c) 2024 LSFG-VK Contributors). The Vulkan implicit-layer
-plumbing (VK_LAYER_LSFG_frame_generation, vkCreateSwapchainKHR /
-vkQueuePresentKHR interception) is not shipped: ONIGAMI owns EGL/GLES
-contexts and no Vulkan swapchain, and upstream's own synth present path is
-an unfinished TODO. The EGL adaptation lives in
-OxideLauncher/src/main/cpp/onigami/src/lsfg_framegen.cpp (+ include/onigami/lsfg.h)
-with MIT attribution retained in the source header. Only 2x is exposed
-until higher multipliers validate on-device.
+Frame generation for the Silica renderer is
+[win-fg](https://github.com/The412Banner/win-fg) v0.3.0
+(`fbc69ed6c5bf16b824d0a29bd8b171675101f9dd`, MIT, Copyright (c) 2026
+The412Banner), vendored under
+`OxideLauncher/src/main/cpp/winfg/upstream/` (shaders, layer, build and
+manifest vendored verbatim; only `src/embedded_shaders.hpp` is regenerated
+at build time by the upstream shader pipeline, never shipped as a blob).
+Its optical-flow model code derives from the AMD FidelityFX SDK (MIT,
+Copyright (c) AMD — see
+`OxideLauncher/src/main/cpp/winfg/upstream/NOTICE_FIDELITYFX_OPTICALFLOW.md`,
+whose copyright and permission notice are retained as required).
+Silica-local changes are marked `SILICA patch` in the source and listed in
+`OxideLauncher/src/main/cpp/winfg/SILICA_PATCHES.md` (currently: FPS stats
+file only; no flow/synthesis/present/pacing changes).
