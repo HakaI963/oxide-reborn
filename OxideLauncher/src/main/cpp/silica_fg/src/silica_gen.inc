@@ -223,23 +223,14 @@ void on_swap_locked(bool swap_ok, int w, int h) {
 // Explicit configuration from the game process over JNI. No env dependence.
 void configure_locked(const char* dataDir, bool enabled, int mult, bool guard) {
   if (dataDir) g_dataDir = dataDir;
-  bool want = enabled && mult >= 2 && mult <= 4;
-  if (want != g_enabled || (want && mult != g_mult) ||
-      (want && guard != g_guard)) {
-    teardown_gl_locked();
-    g_confails = 0;
-    g_loggedReady = false;
-    g_loggedGen = false;
+  apply_cfg_values_locked(enabled, mult, guard, "jni");
+  write_cfg_locked();
+  // seed the watch so our own write does not count as an external change
+  if (!g_dataDir.empty()) {
+    struct stat st;
+    std::string p = g_dataDir + "/fg_engine.cfg";
+    if (stat(p.c_str(), &st) == 0) g_cfgMtime = (long long)st.st_mtime;
   }
-  g_enabled = want;
-  g_mult = mult < 2 ? 2 : (mult > 4 ? 4 : mult);
-  g_guard = guard;
-  g_configured = true;
-  g_reason = want ? "active" : "disabled by configuration";
-  char b[256];
-  snprintf(b, sizeof(b), "silica-fg: configure dir=%s enabled=%d mult=%dx guard=%d",
-           g_dataDir.c_str(), g_enabled ? 1 : 0, g_mult, g_guard ? 1 : 0);
-  diag(b);
   publish_locked();
 }
 
@@ -247,12 +238,13 @@ void configure_locked(const char* dataDir, bool enabled, int mult, bool guard) {
 // --- exported hook + JNI (C linkage) ---
 extern "C" {
 
-__attribute__((visibility("default"))) EGLBoolean silica_fg_present_hook(
-    EGLDisplay d, EGLSurface s,
+static EGLBoolean hook_impl(EGLDisplay d, EGLSurface s,
     EGLBoolean (*real_swap)(EGLDisplay, EGLSurface)) {
   int w = 0, h = 0;
   {
     std::lock_guard<std::mutex> l(g_mu);
+    if (g_dataDir.empty()) discover_dir_locked();
+    watch_cfg_locked();
     if (g_resolved && g_gl.QuerySurface) {
       EGLint ew = 0, eh = 0;
       if (g_gl.QuerySurface(d, s, EGL_WIDTH, &ew)) w = (int)ew;
@@ -265,14 +257,39 @@ __attribute__((visibility("default"))) EGLBoolean silica_fg_present_hook(
   }
   if (!real_swap) return EGL_FALSE;
   EGLBoolean ok = real_swap(d, s);
-  bool gen = false;
   {
     std::lock_guard<std::mutex> l(g_mu);
     on_swap_locked(ok == EGL_TRUE, w, h);
-    if (ok == EGL_TRUE) gen = postgenerate_locked(d, s, w, h, real_swap);
+    if (ok == EGL_TRUE) postgenerate_locked(d, s, w, h, real_swap);
   }
-  (void)gen;
   return ok;
+}
+
+__attribute__((visibility("default"))) EGLBoolean silica_fg_present_hook(
+    EGLDisplay d, EGLSurface s,
+    EGLBoolean (*real_swap)(EGLDisplay, EGLSurface)) {
+  return hook_impl(d, s, real_swap);
+}
+
+// dlsym-proxy entry: wraps ANY resolved eglSwapBuffers (bridge, SDL,
+// LWJGL-EGL). Single slot: all in-process EGL handles serve one driver.
+static EGLBoolean (*g_wrapReal)(EGLDisplay, EGLSurface) = nullptr;
+
+static EGLBoolean silica_fg_wrapped_swap(EGLDisplay d, EGLSurface s) {
+  EGLBoolean (*real)(EGLDisplay, EGLSurface);
+  {
+    std::lock_guard<std::mutex> l(g_mu);
+    real = g_wrapReal;
+  }
+  if (!real) return EGL_FALSE;
+  return hook_impl(d, s, real);
+}
+
+__attribute__((visibility("default"))) void* silica_fg_wrap_swap(void* real) {
+  if (!real) return nullptr;
+  std::lock_guard<std::mutex> l(g_mu);
+  g_wrapReal = reinterpret_cast<EGLBoolean (*)(EGLDisplay, EGLSurface)>(real);
+  return reinterpret_cast<void*>(&silica_fg_wrapped_swap);
 }
 
 __attribute__((visibility("default"))) jboolean
