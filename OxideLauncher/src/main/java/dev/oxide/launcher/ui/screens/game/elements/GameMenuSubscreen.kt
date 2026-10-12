@@ -511,16 +511,44 @@ private fun LazyListScope.rendererSection(
     }
     item(key = "onigamiFrameGen") {
         GameMenuSwitchRow(
-            label = "Frame generation (2x)",
+            label = "Frame generation",
             checked = AllSettings.onigamiFrameGen.state,
-            hint = "Restart required.",
-            onCheckedChange = { AllSettings.onigamiFrameGen.save(it) },
+            hint = "Applies live.",
+            onCheckedChange = {
+                AllSettings.onigamiFrameGen.save(it)
+                OnigamiRenderer.refreshNativeConfig()
+            },
+        )
+    }
+    item(key = "onigamiFrameGenMult") {
+        val mult = AllSettings.onigamiFrameGenMultiplier.state
+        GameMenuChoiceRow(
+            label = "FG multiplier",
+            options = listOf(2, 3, 4),
+            selected = mult,
+            optionText = { "${it}x" },
+            onSelect = {
+                AllSettings.onigamiFrameGenMultiplier.save(it)
+                OnigamiRenderer.refreshNativeConfig()
+            },
+        )
+    }
+    item(key = "onigamiFrameGenGuard") {
+        GameMenuSwitchRow(
+            label = "Artifact guard",
+            checked = AllSettings.onigamiFrameGenGuard.state,
+            hint = "Applies live.",
+            onCheckedChange = {
+                AllSettings.onigamiFrameGenGuard.save(it)
+                OnigamiRenderer.refreshNativeConfig()
+            },
         )
     }
     item(key = "onigamiFrameGenStatus") {
         val fgOn = AllSettings.onigamiFrameGen.state
+        val mult = AllSettings.onigamiFrameGenMultiplier.state
         GameMenuNoteRow(
-            if (fgOn) "Frame Generation: ON (2x). Only 2x is validated; 3x/4x stay hidden. Restart required."
+            if (fgOn) "Frame Generation: ON (" + mult + "x). Applies live, no restart."
             else "Frame Generation: OFF. Displayed FPS mirrors native from the same present path.",
         )
     }

@@ -56,6 +56,7 @@ import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.RendererInterface
 import dev.oxide.launcher.game.renderer.Renderers
+import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
 import dev.oxide.launcher.game.renderer.onigami.OnigamiVulkan
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.URL_CLOUD_DRIVE_DRIVER_PLUGINS
@@ -422,27 +423,32 @@ fun RendererSettingsScreen(
                         position = CardPosition.Top,
                         unit = AllSettings.onigamiFrameGen,
                         title = "ONIGAMI frame generation",
-                        summary = "Off by default. 2x interpolated presents (LSFG-VK derived). Restart required."
+                        summary = "Off by default. Real interpolated presents between game frames (LSFG-VK derived). Applies live, no restart.",
+                        onCheckedChange = { OnigamiRenderer.refreshNativeConfig() }
                     )
-                    SettingsCard(
+                    ListSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
-                        position = CardPosition.Bottom
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(all = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TitleAndSummary(
-                                title = "Multiplier: 2x (only validated mode)",
-                                summary = "3x/4x are not exposed until on-device validation. " +
-                                    "Status: " + dev.oxide.launcher.game.renderer.onigami.OnigamiFrameGen.statusText() + ". " +
-                                    "Advanced FPS meter shows measured Native vs Displayed; Displayed is never Native x multiplier. " +
-                                    "Restart required."
-                            )
+                        position = CardPosition.Middle,
+                        items = listOf(2, 3, 4),
+                        currentId = AllSettings.onigamiFrameGenMultiplier.state.toString(),
+                        defaultId = "2",
+                        title = "Frame generation multiplier",
+                        summary = "Applies live; higher costs more GPU per frame.",
+                        getItemText = { "${it}x" },
+                        getItemId = { it.toString() },
+                        onValueChange = {
+                            AllSettings.onigamiFrameGenMultiplier.save(it)
+                            OnigamiRenderer.refreshNativeConfig()
                         }
-                    }
+                    )
+                    SwitchSettingsCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        position = CardPosition.Bottom,
+                        unit = AllSettings.onigamiFrameGenGuard,
+                        title = "Artifact guard",
+                        summary = "Snaps scene cuts and fast motion to the current frame. Applies live.",
+                        onCheckedChange = { OnigamiRenderer.refreshNativeConfig() }
+                    )
                 }
             }
         }
