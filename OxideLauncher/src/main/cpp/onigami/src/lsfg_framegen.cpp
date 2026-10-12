@@ -777,17 +777,17 @@ ONIGAMI_API EGLBoolean onigami_hook_swap_buffers(
   std::call_once(hook_once, []() {
     onigami_on_process_start(nullptr);
     struct stat st;
-    std::string cfg = config_path();
+    std::string cfg = onigami::config_path();
     if (stat(cfg.c_str(), &st) != 0) {
       char b[256];
       snprintf(b, sizeof(b),
                "onigami-fg: bridge hook active, dir=%s (onigami.json absent: counting presents, FG off until configured)",
-               data_dir().c_str());
+               onigami::data_dir().c_str());
       onigami::diag_write(b);
     } else {
       char b[192];
       snprintf(b, sizeof(b), "onigami-fg: bridge hook active, dir=%s",
-               data_dir().c_str());
+               onigami::data_dir().c_str());
       onigami::diag_write(b);
     }
   });
