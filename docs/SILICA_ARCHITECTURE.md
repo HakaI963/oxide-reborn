@@ -89,3 +89,37 @@ Renderer-tab diagnostics (counters + source).
    `generated frames live`. Any `DISABLED: <reason>` line names the exact
    cause (ES version, FBO, shader, swap).
 5. Advanced FPS meter: Native vs Displayed separate, never multiplied.
+
+## Own-engine interception matrix (v1.19.x)
+
+The game can present through (a) the JNI bridge (GLFW path) or (b) SDL's
+own EGL handle. Both are covered, each exactly once:
+
+- (a) bridge `gl_swap_buffers` calls `silica_fg_present_hook` explicitly
+  (resolved always, engine self-gates; default off = direct swap).
+- (b) the process-wide dlsym proxy (`sdl_dlopen_hook.c`, ByteHook,
+  established mechanism) wraps any dlsym-resolved `eglSwapBuffers`
+  (SDL, LWJGL-EGL, …) with the engine trampoline
+  (`silica_fg_wrap_swap`, single real-pointer slot: one driver in-process).
+  Bridge-resolved pointers bypass libc dlsym, so no frame is ever wrapped
+  twice. Engine-absent/misconfigured = original pointer, bit-identical.
+
+## Config without env (file channel)
+
+The `:game` process may never see launcher env. All engine state
+converges through files in the shared UID dir instead:
+
+- Every settings change (any process) writes `fg_engine.cfg`
+  (enabled/mult/guard). The engine watches mtime ~1Hz; the file always
+  wins, so OFF sticks within a second no matter who toggled it.
+- Data dir bootstraps from `/proc/self/cmdline`
+  (`<pkg>[:suffix]` -> `/data/user/0/<pkg>/files/silica`, marker-verified).
+- JNI pushes remain for immediacy; files are the truth.
+
+## Yield guards (FG must never crater native)
+
+- Pre-flow skip when our EMA cost already exceeds 80% of the native
+  interval; per-subframe late-skip past 75% of it. Reason surfaces live
+  (`yielding (gpu-bound)`); the meter keeps measuring.
+- 3 consecutive real errors disable with a logged reason; setup skips never
+  count. Teardown frees everything on disable.
