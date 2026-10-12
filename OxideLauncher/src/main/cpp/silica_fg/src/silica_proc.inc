@@ -84,18 +84,32 @@ void drain_errors() {
     if (g_gl.GetError() == GL_NO_ERROR) break;
 }
 
+typedef void* (*egl_getproc_fn)(const char*);
+static void* g_eglH = nullptr;
+static void* g_glesH = nullptr;
+static egl_getproc_fn g_eglPA = nullptr;
+
 bool resolve_gl_locked() {
   if (g_resolved) return true;
-  void* eglH = dlopen("libEGL.so", RTLD_LAZY | RTLD_LOCAL);
-  if (!eglH) {
+  // Android exports only EGL/GLES2-era symbols from the .so files; every
+  // ES3+ entry point resolves EXCLUSIVELY through eglGetProcAddress. Raw
+  // dlsym alone leaves glBindImageTexture and friends NULL and the engine
+  // idle forever — resolve through the loader first, dlsym second.
+  if (!g_eglH) g_eglH = dlopen("libEGL.so", RTLD_LAZY | RTLD_LOCAL);
+  if (!g_eglH) {
     g_reason = "libEGL.so not loadable";
     return false;
   }
-  auto get = [eglH](const char* n) {
-    void* p = dlsym(eglH, n);
+  if (!g_eglPA)
+    g_eglPA = reinterpret_cast<egl_getproc_fn>(dlsym(g_eglH, "eglGetProcAddress"));
+  auto get = [](const char* n) -> void* {
+    void* p = nullptr;
+    if (g_eglPA) p = g_eglPA(n);
+    if (!p) p = dlsym(g_eglH, n);
     if (!p) {
-      void* gles = dlopen("libGLESv2.so", RTLD_LAZY | RTLD_LOCAL);
-      if (gles) p = dlsym(gles, n);
+      if (!g_glesH)
+        g_glesH = dlopen("libGLESv2.so", RTLD_LAZY | RTLD_LOCAL);
+      if (g_glesH) p = dlsym(g_glesH, n);
     }
     return p;
   };
