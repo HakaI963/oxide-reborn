@@ -22,6 +22,7 @@ import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
 import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
 import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
 import dev.oxide.launcher.game.version.installed.utils.isBiggerVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerOrEqualVer
 import dev.oxide.launcher.game.version.installed.utils.isLowerVer
@@ -60,6 +61,7 @@ class RendererVersionGateTest {
     private val builtinRenderers: List<RendererInterface> = listOf(
         CopperOxideRenderer,
         OnigamiRenderer,
+        SilicaRenderer,
         LTWRenderer,
         HolyGL4ESRenderer
     )
@@ -67,6 +69,7 @@ class RendererVersionGateTest {
     private val expectedRendererIds: Set<String> = setOf(
         "opengles3_oxide_copper",
         "opengles3_oxide_onigami",
+        "opengles3_oxide_silica",
         "opengles3_oxide_ltw",
         "opengles2_oxide_holy"
     )

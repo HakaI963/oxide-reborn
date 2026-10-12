@@ -20,6 +20,7 @@ package dev.oxide.launcher.game.renderer
 
 import dev.oxide.launcher.game.renderer.renderers.CopperOxideRenderer
 import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
 import dev.oxide.launcher.game.renderer.renderers.HolyGL4ESRenderer
 import dev.oxide.launcher.game.renderer.renderers.LTWRenderer
 import dev.oxide.launcher.utils.logging.Logger
@@ -51,6 +52,7 @@ object Renderers {
         addRenderers(
             CopperOxideRenderer,
             OnigamiRenderer,
+            SilicaRenderer,
             LTWRenderer,
             HolyGL4ESRenderer
         )
