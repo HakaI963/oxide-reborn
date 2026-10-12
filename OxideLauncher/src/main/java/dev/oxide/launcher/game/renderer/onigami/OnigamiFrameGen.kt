@@ -17,30 +17,30 @@ import java.io.File
 /**
  * ONIGAMI frame generation (v1.17.0, LSFG-VK derived).
  *
- * Integration note (honest architecture):
- * - ONIGAMI owns EGL/GLES contexts end to end; it owns no VkInstance,
- *   VkDevice, VkQueue or VkSwapchain. LSFG-VK upstream is a Vulkan implicit
- *   layer (vkCreateSwapchainKHR / vkQueuePresentKHR interception) whose own
- *   present chain is unfinished upstream (synth blit is a TODO no-op that
- *   only presents the real frame). A verbatim Vulkan-layer drop-in is
- *   therefore impractical without replacing the rendering stack, which is
- *   forbidden. See docs/ONIGAMI_LSFG_V1_17_0.md.
- * - Smallest viable adaptation: the LSFG-VK optical-flow / warp / blend
- *   stages (Snap888/lsfg-vk, MIT) are vendored as reference under
- *   cpp/onigami/src/lsfg/ with attribution; the v1.17.0 native backend
- *   (lsfg_framegen.cpp) implements EGL-level 2-frame history, pacing and a
- *   real GPU-side interpolated present (blend, never a duplicate) gated by
- *   capability checks. Only 2x is exposed until 3x/4x validate on-device.
+ * Integration (how it actually reaches the display):
+ * - The game's real present path is the JNI bridge (ctxbridges), which
+ *   resolves system EGL directly, so libonigami's own eglSwapBuffers wrapper
+ *   never fires there. When ONIGAMI is active the launcher sets
+ *   ONIGAMI_PRESENT_HOOK and the bridge calls onigami_hook_swap_buffers()
+ *   around its backend swap (fallback = direct swap). Display, contexts and
+ *   surfaces stay on the proven bridge path; only pre/post swap work is
+ *   added. The native backend retains frames GPU-side and presents mult-1
+ *   real interpolated frames per native frame (2x/3x/4x), each counted only
+ *   on a confirmed swap.
+ * - Settings apply LIVE: every FG change rewrites onigami.json immediately
+ *   (OnigamiRenderer.refreshNativeConfig) and the native backend re-reads it
+ *   (~1Hz mtime watch). No restart for frame generation.
  * - Native per-process stats are published at
- *   <dataDir>/framegen_stats.json once per second for the Advanced FPS
- *   meter; the file is the only cross-process channel (no extra JNI).
+ *   <dataDir>/framegen_stats.json ~1Hz for the Advanced FPS meter; the file
+ *   is the only cross-process channel (no extra JNI, no hot-path sync).
+ * - Not applicable on phones (not exposed): VR stereo views, HDR swapchain
+ *   formats. The dispatched interpolation stage is blend + scene-change
+ *   guard; full Lucas-Kanade motion stays staged pending Adreno 825
+ *   profiling. See docs/ONIGAMI_LSFG_V1_17_0.md.
  */
 object OnigamiFrameGen {
-    /** Multipliers validated for v1.17.0. 3x/4x stay hidden until measured. */
-    val SUPPORTED_MULTIPLIERS: List<Int> = listOf(2)
-
-    const val SETTING_KEY_ENABLED = "onigamiFrameGen"
-    const val SETTING_KEY_MULTIPLIER = "onigamiFrameGenMultiplier"
+    /** Multipliers with a real backend in v1.17.0. */
+    val SUPPORTED_MULTIPLIERS: List<Int> = listOf(2, 3, 4)
 
     fun isEnabled(): Boolean =
         AllSettings.onigamiFrameGen.getValue() &&
@@ -51,8 +51,8 @@ object OnigamiFrameGen {
     fun statusText(): String = when {
         !AllSettings.onigamiFrameGen.getValue() -> "Frame Generation: OFF"
         selectedMultiplier() !in SUPPORTED_MULTIPLIERS ->
-            "Frame Generation: unsupported (only 2x in v1.17.0)"
-        else -> "Frame Generation: ON (2x)"
+            "Frame Generation: unsupported multiplier"
+        else -> "Frame Generation: ON (" + selectedMultiplier() + "x)"
     }
 
     fun dataDir(): File = File(PathManager.DIR_FILES_PRIVATE, OnigamiIdentity.DATA_DIR)
@@ -76,6 +76,12 @@ object OnigamiFrameGen {
                 val c = j.indexOf(':', p); if (c < 0) return d
                 return j.substring(c + 1).trim().takeWhile { it.isDigit() }.toLongOrNull() ?: d
             }
+            fun strAfter(key: String): String {
+                val p = j.indexOf("\"" + key + "\":\""); if (p < 0) return ""
+                val s = p + key.length + 4
+                val e = j.indexOf('"', s); if (e < 0) return ""
+                return j.substring(s, e)
+            }
             FrameGenStats(
                 enabled = intAfter("enabled", 0) == 1,
                 multiplier = intAfter("multiplier", 2),
@@ -83,13 +89,15 @@ object OnigamiFrameGen {
                 displayedFrames = longAfter("displayed_frames", 0L),
                 generatedFrames = longAfter("generated_frames", 0L),
                 dropped = longAfter("dropped", 0L),
+                genMsX100 = longAfter("gen_ms_x100", 0L),
+                reason = strAfter("reason"),
             )
         }.getOrNull()
     }
 
     fun asPipeline(): OnigamiFrameGeneration = object : OnigamiFrameGeneration {
         override fun supported(): Boolean = true
-        override fun reason(): String = "2x EGL interpolation (LSFG-VK derived); 3x/4x unvalidated"
+        override fun reason(): String = "2x/3x/4x EGL interpolation (LSFG-VK derived), live apply"
         override fun enabled(): Boolean = isEnabled()
     }
 
@@ -109,4 +117,6 @@ data class FrameGenStats(
     val displayedFrames: Long,
     val generatedFrames: Long,
     val dropped: Long,
+    val genMsX100: Long = 0L,
+    val reason: String = "",
 )
