@@ -872,13 +872,6 @@ bool postgenerate_locked(EGLDisplay d, EGLSurface s, int w, int h) {
     g_gl.ActiveTexture(GL_TEXTURE2);
     g_gl.BindTexture(GL_TEXTURE_2D, g_flow[1]);
     g_gl.BindSampler(2, g_sampFlow);
-    g_gl.UseProgram(g_pWarp);
-    g_gl.ActiveTexture(GL_TEXTURE0);
-    g_gl.BindTexture(GL_TEXTURE_2D, older);
-    g_gl.ActiveTexture(GL_TEXTURE1);
-    g_gl.BindTexture(GL_TEXTURE_2D, newer);
-    g_gl.ActiveTexture(GL_TEXTURE2);
-    g_gl.BindTexture(GL_TEXTURE_2D, g_flow[1]);
     if (g_wGuard >= 0) g_gl.Uniform1f(g_wGuard, 1.0f);
     g_gl.BindVertexArray(g_vao);
     for (int k = 1; k < n; ++k) {
@@ -968,14 +961,48 @@ static void query_size_locked(EGLDisplay d, EGLSurface s, int& w, int& h) {
 // --- linked entries (C linkage) ---
 extern "C" {
 
+static long long g_cfgPollNs = 0;
+
+static void pull_config_locked() {
+  long long now = mono_ns();
+  if (now - g_cfgPollNs < 1000000000LL || !g_bridgeClass) return;
+  g_cfgPollNs = now;
+  JNIEnv* e = jni_env();
+  if (!e) return;
+  if (e->ExceptionCheck()) e->ExceptionClear();
+  jstring d = (jstring)e->CallStaticObjectMethod(g_bridgeClass, g_mDir);
+  bool en = e->CallStaticBooleanMethod(g_bridgeClass, g_mEn) == JNI_TRUE;
+  int mult = e->CallStaticIntMethod(g_bridgeClass, g_mMult);
+  if (e->ExceptionCheck()) {
+    e->ExceptionClear();
+    return;
+  }
+  std::string dir;
+  if (d) {
+    const char* c = e->GetStringUTFChars(d, nullptr);
+    if (c) dir = c;
+    e->ReleaseStringUTFChars(d, c);
+    e->DeleteLocalRef(d);
+  }
+  bool want = en && mult >= 2 && mult <= 4;
+  if (want != g_enabled || (want && mult != g_mult) ||
+      (!dir.empty() && dir != g_dataDir)) {
+    teardown_gl_locked();
+    g_confails = 0;
+    g_loggedReady = false;
+    g_loggedGen = false;
+  }
+  if (!dir.empty()) g_dataDir = dir;
+  g_enabled = want;
+  g_mult = mult < 2 ? 2 : (mult > 4 ? 4 : mult);
+  g_reason = want ? "active" : "disabled by configuration";
+}
+
 void silica_engine_before_swap(EGLDisplay dpy, EGLSurface surf) {
   int w = 0, h = 0;
   {
     std::lock_guard<std::mutex> l(g_mu);
-    if (g_dataDir.empty() && !read_config_once()) {
-      // not configured yet: nothing to do (counting starts at first swap
-      // only once configured, so displayed never fabricates)
-    }
+    pull_config_locked();
     query_size_locked(dpy, surf, w, h);
     precapture_locked(w, h);
   }
