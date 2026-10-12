@@ -35,7 +35,8 @@ class OnigamiFrameGenTest {
     @Test
     fun supportedMultipliers_only2x() {
         assertTrue(OnigamiFrameGen.SUPPORTED_MULTIPLIERS.contains(2))
-        assertFalse(OnigamiFrameGen.SUPPORTED_MULTIPLIERS.contains(3))
-        assertFalse(OnigamiFrameGen.SUPPORTED_MULTIPLIERS.contains(4))
+        assertTrue(OnigamiFrameGen.SUPPORTED_MULTIPLIERS.contains(3))
+        assertTrue(OnigamiFrameGen.SUPPORTED_MULTIPLIERS.contains(4))
+        assertFalse(OnigamiFrameGen.SUPPORTED_MULTIPLIERS.contains(5))
     }
 }

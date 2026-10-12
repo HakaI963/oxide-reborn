@@ -98,6 +98,7 @@ fun DraggableGameBall(
     displayedMeasured: Boolean = false,
     fgEnabled: Boolean = false,
     fgMultiplier: Int = 2,
+    fgReason: String = "",
 ) {
     val description = stringResource(R.string.oxide_ingame_ball_menu)
     val openedText = stringResource(R.string.oxide_ingame_ball_opened)
@@ -142,6 +143,7 @@ fun DraggableGameBall(
                 displayedMeasured = displayedMeasured,
                 fgEnabled = fgEnabled,
                 fgMultiplier = fgMultiplier,
+                fgReason = fgReason,
             )
         }
     }
@@ -161,6 +163,7 @@ private fun GameBallContent(
     displayedMeasured: Boolean = false,
     fgEnabled: Boolean = false,
     fgMultiplier: Int = 2,
+    fgReason: String = "",
 ) {
     // 显示哪几块只有这一个出处，组合里不再散着判断
     val readouts = gameBallReadouts(gameFps, fpsDisplayMode, showMemory)
@@ -242,6 +245,15 @@ private fun GameBallContent(
                             color = Oxide.Fg,
                             maxLines = 1,
                         )
+                        if (!displayedMeasured && fgEnabled && fgReason.isNotBlank()) {
+                            Text(
+                                text = "Stats: " + fgReason,
+                                fontSize = Oxide.Type.Body.fontSize,
+                                lineHeight = Oxide.Type.Body.lineHeight,
+                                color = Oxide.FgFaint,
+                                maxLines = 2,
+                            )
+                        }
                     }
                 } else if (readouts.showFpsChart) {
                     //帧率图表

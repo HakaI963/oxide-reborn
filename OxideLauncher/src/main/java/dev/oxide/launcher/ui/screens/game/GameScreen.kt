@@ -165,6 +165,9 @@ private class GameViewModel(
     /** 选择的倍率 (仅激活时展示) */
     var fgMultiplier by mutableIntStateOf(2)
         private set
+    /** Native backend status/reason line for the Advanced meter. */
+    var fgReason by mutableStateOf("")
+        private set
     private var prevFgStats: FrameGenStats? = null
     private var prevFgTms: Long = 0L
     /** 帧率历史记录（最多保留最近15个时间节点） */
@@ -278,8 +281,10 @@ private class GameViewModel(
             if (!fgEnabled) {
                 displayedFps = gameFps
                 displayedMeasured = true
+                fgReason = ""
             } else {
                 displayedMeasured = false
+                fgReason = "waiting for native stats"
             }
             return
         }
@@ -300,6 +305,7 @@ private class GameViewModel(
                 displayedMeasured = false
             }
         }
+        fgReason = stats.reason
         prevFgStats = stats
         prevFgTms = now
     }
@@ -933,6 +939,7 @@ fun GameScreen(
                     displayedMeasured = viewModel.displayedMeasured,
                     fgEnabled = viewModel.fgEnabled,
                     fgMultiplier = viewModel.fgMultiplier,
+                    fgReason = viewModel.fgReason,
                     fpsHistory = viewModel.fpsHistory,
                     fpsMax = viewModel.fpsMax,
                     fpsMin = viewModel.fpsMin,
