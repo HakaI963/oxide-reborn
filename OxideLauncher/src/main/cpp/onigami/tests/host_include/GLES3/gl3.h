@@ -145,3 +145,72 @@ void glFlush(void);
 #define GL_INVALID_INDEX 0xFFFFFFFFu
 #define GL_TRIANGLES 0x0004
 #define GL_UNSIGNED_INT 0x1405
+
+/* Host-test ES3 enums needed by the frame-generation present path
+ * (canonical Khronos values, identical to NDK headers). */
+#ifndef GL_TEXTURE_MIN_FILTER
+#define GL_TEXTURE_MIN_FILTER 0x2801
+#endif
+#ifndef GL_TEXTURE_MAG_FILTER
+#define GL_TEXTURE_MAG_FILTER 0x2800
+#endif
+#ifndef GL_LINEAR
+#define GL_LINEAR 0x2601
+#endif
+#ifndef GL_NEAREST
+#define GL_NEAREST 0x2600
+#endif
+#ifndef GL_TEXTURE_WRAP_S
+#define GL_TEXTURE_WRAP_S 0x2802
+#endif
+#ifndef GL_TEXTURE_WRAP_T
+#define GL_TEXTURE_WRAP_T 0x2803
+#endif
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
+#ifndef GL_RGBA8
+#define GL_RGBA8 0x8058
+#endif
+#ifndef GL_RGBA
+#define GL_RGBA 0x1908
+#endif
+#ifndef GL_UNSIGNED_BYTE
+#define GL_UNSIGNED_BYTE 0x1401
+#endif
+#ifndef GL_COLOR_ATTACHMENT0
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#endif
+#ifndef GL_FLOAT
+#define GL_FLOAT 0x1406
+#endif
+#ifndef GL_READ_FRAMEBUFFER_BINDING
+#define GL_READ_FRAMEBUFFER_BINDING 0x8CAA
+#endif
+#ifndef GL_DRAW_FRAMEBUFFER_BINDING
+#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
+#endif
+#ifndef GL_CURRENT_PROGRAM
+#define GL_CURRENT_PROGRAM 0x8B8D
+#endif
+#ifndef GL_VERTEX_ARRAY_BINDING
+#define GL_VERTEX_ARRAY_BINDING 0x85B5
+#endif
+#ifndef GL_ARRAY_BUFFER_BINDING
+#define GL_ARRAY_BUFFER_BINDING 0x889F
+#endif
+#ifndef GL_ACTIVE_TEXTURE
+#define GL_ACTIVE_TEXTURE 0x84E0
+#endif
+#ifndef GL_TEXTURE_BINDING_2D
+#define GL_TEXTURE_BINDING_2D 0x8069
+#endif
+#ifndef GL_TEXTURE1
+#define GL_TEXTURE1 0x84C1
+#endif
+#ifndef GL_SCISSOR_TEST
+#define GL_SCISSOR_TEST 0x0C11
+#endif
+#ifndef GL_STENCIL_TEST
+#define GL_STENCIL_TEST 0x0B90
+#endif

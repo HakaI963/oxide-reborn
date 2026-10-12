@@ -45,3 +45,12 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* procname)
 }
 #endif
 #define EGL_NOT_INITIALIZED 0x3001
+
+/* Host-test ES3 surface attributes needed by the frame-generation present
+ * path (canonical Khronos values, identical to NDK headers). */
+#ifndef EGL_WIDTH
+#define EGL_WIDTH 0x3057
+#endif
+#ifndef EGL_HEIGHT
+#define EGL_HEIGHT 0x3056
+#endif
