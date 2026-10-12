@@ -963,41 +963,6 @@ extern "C" {
 
 static long long g_cfgPollNs = 0;
 
-static void pull_config_locked() {
-  long long now = mono_ns();
-  if (now - g_cfgPollNs < 1000000000LL || !g_bridgeClass) return;
-  g_cfgPollNs = now;
-  JNIEnv* e = jni_env();
-  if (!e) return;
-  if (e->ExceptionCheck()) e->ExceptionClear();
-  jstring d = (jstring)e->CallStaticObjectMethod(g_bridgeClass, g_mDir);
-  bool en = e->CallStaticBooleanMethod(g_bridgeClass, g_mEn) == JNI_TRUE;
-  int mult = e->CallStaticIntMethod(g_bridgeClass, g_mMult);
-  if (e->ExceptionCheck()) {
-    e->ExceptionClear();
-    return;
-  }
-  std::string dir;
-  if (d) {
-    const char* c = e->GetStringUTFChars(d, nullptr);
-    if (c) dir = c;
-    e->ReleaseStringUTFChars(d, c);
-    e->DeleteLocalRef(d);
-  }
-  bool want = en && mult >= 2 && mult <= 4;
-  if (want != g_enabled || (want && mult != g_mult) ||
-      (!dir.empty() && dir != g_dataDir)) {
-    teardown_gl_locked();
-    g_confails = 0;
-    g_loggedReady = false;
-    g_loggedGen = false;
-  }
-  if (!dir.empty()) g_dataDir = dir;
-  g_enabled = want;
-  g_mult = mult < 2 ? 2 : (mult > 4 ? 4 : mult);
-  g_reason = want ? "active" : "disabled by configuration";
-}
-
 void silica_engine_before_swap(EGLDisplay dpy, EGLSurface surf) {
   int w = 0, h = 0;
   {
