@@ -448,5 +448,358 @@ bool resolve_gl_locked() {
   return true;
 }
 
-// __ENGINE_PART3__
+void teardown_gl_locked() {
+  if (g_vao) g_gl.DeleteVertexArrays(1, &g_vao);
+  if (g_vbo) g_gl.DeleteBuffers(1, &g_vbo);
+  GLuint progs[4] = {g_pBox, g_pFlow, g_pMed, g_pWarp};
+  for (int i = 0; i < 4; ++i)
+    if (progs[i]) g_gl.DeleteProgram(progs[i]);
+  if (g_fbo) g_gl.DeleteFramebuffers(1, &g_fbo);
+  if (g_samp) g_gl.DeleteSamplers(1, &g_samp);
+  if (g_sampFlow) g_gl.DeleteSamplers(1, &g_sampFlow);
+  GLuint texs[6] = {g_tex[0], g_tex[1], g_luma[0], g_luma[1], g_flow[0],
+                    g_flow[1]};
+  if (g_resolved) {
+    drain_errors();
+    g_gl.DeleteTextures(6, texs);
+    drain_errors();
+  }
+  g_tex[0] = g_tex[1] = g_luma[0] = g_luma[1] = g_flow[0] = g_flow[1] = 0;
+  g_fbo = g_vbo = g_vao = g_samp = g_sampFlow = 0;
+  g_pBox = g_pFlow = g_pMed = g_pWarp = 0;
+  g_boxSize = g_flowSize = g_flowGrid = g_medSize = -1;
+  g_wGuard = g_wT = -1;
+  g_ctx = EGL_NO_CONTEXT;
+  g_turn = 0;
+  g_have = 0;
+}
+
+bool compile_stage(GLuint sh, const char* src, const char* tag) {
+  g_gl.ShaderSource(sh, 1, &src, nullptr);
+  g_gl.CompileShader(sh);
+  GLint ok = 0;
+  g_gl.GetShaderiv(sh, GL_COMPILE_STATUS, &ok);
+  if (ok) return true;
+  char log[256] = {0};
+  GLsizei n = 0;
+  g_gl.GetShaderInfoLog(sh, (GLsizei)sizeof(log) - 1, &n, log);
+  log[sizeof(log) - 1] = 0;
+  char b[300];
+  snprintf(b, sizeof(b), "shader compile (%s): %.200s", tag, log);
+  g_reason = b;
+  return false;
+}
+
+GLuint link_compute(const char* src, const char* tag) {
+  GLuint sh = g_gl.CreateShader(GL_COMPUTE_SHADER);
+  if (!compile_stage(sh, src, tag)) {
+    g_gl.DeleteShader(sh);
+    return 0;
+  }
+  GLuint prog = g_gl.CreateProgram();
+  g_gl.AttachShader(prog, sh);
+  g_gl.LinkProgram(prog);
+  g_gl.DeleteShader(sh);
+  GLint st = 0;
+  g_gl.GetProgramiv(prog, GL_LINK_STATUS, &st);
+  if (!st) {
+    char log[256] = {0};
+    GLsizei n = 0;
+    g_gl.GetProgramInfoLog(prog, (GLsizei)sizeof(log) - 1, &n, log);
+    log[sizeof(log) - 1] = 0;
+    char b[300];
+    snprintf(b, sizeof(b), "program link (%s): %.200s", tag, log);
+    g_reason = b;
+    g_gl.DeleteProgram(prog);
+    return 0;
+  }
+  return prog;
+}
+
+GLuint link_raster(const char* vsrc, const char* fsrc, const char* tag) {
+  GLuint vs = g_gl.CreateShader(GL_VERTEX_SHADER);
+  GLuint fs = g_gl.CreateShader(GL_FRAGMENT_SHADER);
+  bool ok = compile_stage(vs, vsrc, tag) && compile_stage(fs, fsrc, tag);
+  GLuint prog = 0;
+  if (ok) {
+    prog = g_gl.CreateProgram();
+    g_gl.AttachShader(prog, vs);
+    g_gl.AttachShader(prog, fs);
+    g_gl.LinkProgram(prog);
+    GLint st = 0;
+    g_gl.GetProgramiv(prog, GL_LINK_STATUS, &st);
+    if (!st) {
+      char log[256] = {0};
+      GLsizei n = 0;
+      g_gl.GetProgramInfoLog(prog, (GLsizei)sizeof(log) - 1, &n, log);
+      log[sizeof(log) - 1] = 0;
+      char b[300];
+      snprintf(b, sizeof(b), "program link (%s): %.200s", tag, log);
+      g_reason = b;
+      g_gl.DeleteProgram(prog);
+      prog = 0;
+    }
+  }
+  g_gl.DeleteShader(vs);
+  g_gl.DeleteShader(fs);
+  return prog;
+}
+
+static void tex_rgba(GLuint t, int w, int h) {
+  g_gl.BindTexture(GL_TEXTURE_2D, t);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  g_gl.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA,
+                  GL_UNSIGNED_BYTE, nullptr);
+}
+
+static void tex_r8(GLuint t, int w, int h) {
+  g_gl.BindTexture(GL_TEXTURE_2D, t);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  g_gl.TexImage2D(GL_TEXTURE_2D, 0, GL_R8, w, h, 0, GL_RED, GL_UNSIGNED_BYTE,
+                  nullptr);
+}
+
+static void tex_rg16f(GLuint t, int w, int h) {
+  g_gl.BindTexture(GL_TEXTURE_2D, t);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  g_gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  g_gl.TexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, w, h, 0, GL_RG, GL_HALF_FLOAT,
+                  nullptr);
+}
+
+bool ensure_gl_locked(int w, int h) {
+  if (!resolve_gl_locked()) return false;
+  EGLContext cur =
+      g_gl.GetCurrentContext ? g_gl.GetCurrentContext() : EGL_NO_CONTEXT;
+  if (cur == EGL_NO_CONTEXT) return false;
+  if (w <= 0 || h <= 0) return false;
+  if (g_ctx == cur && g_w == w && g_h == h && g_pWarp != 0) return true;
+  teardown_gl_locked();
+  const GLubyte* ver = g_gl.GetString(GL_VERSION);
+  if (!ver) return false;
+  int major = 0, minor = 0;
+  sscanf((const char*)ver, "OpenGL ES %d.%d", &major, &minor);
+  if (major < 3 || (major == 3 && minor < 1)) {
+    g_reason = "GLES 3.1+ required for compute flow";
+    return false;
+  }
+  g_ctx = cur;
+  g_w = w;
+  g_h = h;
+  g_qw = (w + 3) / 4;
+  g_qh = (h + 3) / 4;
+  g_fw = (g_qw + 7) / 8;
+  g_fh = (g_qh + 7) / 8;
+  drain_errors();
+  g_gl.GenTextures(2, g_tex);
+  for (int i = 0; i < 2; ++i) tex_rgba(g_tex[i], w, h);
+  g_gl.GenTextures(2, g_luma);
+  for (int i = 0; i < 2; ++i) tex_r8(g_luma[i], g_qw, g_qh);
+  g_gl.GenTextures(2, g_flow);
+  for (int i = 0; i < 2; ++i) tex_rg16f(g_flow[i], g_fw, g_fh);
+  g_gl.BindTexture(GL_TEXTURE_2D, 0);
+  g_gl.GenFramebuffers(1, &g_fbo);
+  g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, g_fbo);
+  g_gl.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                            GL_TEXTURE_2D, g_tex[0], 0);
+  bool fboOk = g_gl.CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) ==
+               GL_FRAMEBUFFER_COMPLETE;
+  g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+  if (!fboOk || g_gl.GetError() != GL_NO_ERROR) {
+    g_reason = "retention FBO incomplete";
+    teardown_gl_locked();
+    return false;
+  }
+  g_pBox = link_compute(kBox, "box");
+  g_pFlow = link_compute(kFlow, "flow");
+  g_pMed = link_compute(kMedian, "med");
+  g_pWarp = link_raster(kWarpVert, kWarpFrag, "warp");
+  if (!g_pBox || !g_pFlow || !g_pMed || !g_pWarp) {
+    teardown_gl_locked();
+    return false;
+  }
+  g_boxSize = g_gl.GetUniformLocation(g_pBox, "uDstSize");
+  g_flowSize = g_gl.GetUniformLocation(g_pFlow, "uSize");
+  g_flowGrid = g_gl.GetUniformLocation(g_pFlow, "uFlowSize");
+  g_medSize = g_gl.GetUniformLocation(g_pMed, "uSize");
+  g_wGuard = g_gl.GetUniformLocation(g_pWarp, "uGuard");
+  g_wT = g_gl.GetUniformLocation(g_pWarp, "uT");
+  static const GLfloat tri[6] = {-1.f, -1.f, 3.f, -1.f, -1.f, 3.f};
+  g_gl.GenBuffers(1, &g_vbo);
+  g_gl.GenVertexArrays(1, &g_vao);
+  g_gl.BindVertexArray(g_vao);
+  g_gl.BindBuffer(GL_ARRAY_BUFFER, g_vbo);
+  g_gl.BufferData(GL_ARRAY_BUFFER, sizeof(tri), tri, GL_STATIC_DRAW);
+  g_gl.EnableVertexAttribArray(0);
+  g_gl.VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+  g_gl.BindVertexArray(0);
+  g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
+  g_gl.GenSamplers(1, &g_samp);
+  g_gl.SamplerParameteri(g_samp, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  g_gl.SamplerParameteri(g_samp, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  g_gl.SamplerParameteri(g_samp, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  g_gl.SamplerParameteri(g_samp, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  g_gl.GenSamplers(1, &g_sampFlow);
+  g_gl.SamplerParameteri(g_sampFlow, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  g_gl.SamplerParameteri(g_sampFlow, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  g_gl.SamplerParameteri(g_sampFlow, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  g_gl.SamplerParameteri(g_sampFlow, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  g_gl.UseProgram(g_pWarp);
+  GLint uP = g_gl.GetUniformLocation(g_pWarp, "uPrev");
+  GLint uC = g_gl.GetUniformLocation(g_pWarp, "uCurr");
+  GLint uF = g_gl.GetUniformLocation(g_pWarp, "uFlow");
+  GLint uPx = g_gl.GetUniformLocation(g_pWarp, "uPx2Uv");
+  if (uP >= 0) g_gl.Uniform1i(uP, 0);
+  if (uC >= 0) g_gl.Uniform1i(uC, 1);
+  if (uF >= 0) g_gl.Uniform1i(uF, 2);
+  if (uPx >= 0) g_gl.Uniform2f(uPx, 4.0f / (float)w, 4.0f / (float)h);
+  g_gl.UseProgram(0);
+  if (g_gl.GetError() != GL_NO_ERROR) {
+    g_reason = "resource setup GL error";
+    teardown_gl_locked();
+    return false;
+  }
+  if (!g_loggedReady) {
+    g_loggedReady = true;
+    char b[192];
+    snprintf(b, sizeof(b), "silica-fg: engine ready (%dx%d, flow %dx%d)", w, h,
+             g_fw, g_fh);
+    diag(b);
+  }
+  return true;
+}
+
+static void unbind_images() {
+  for (GLuint u = 0; u < 8; ++u)
+    g_gl.BindImageTexture(u, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
+}
+
+static bool pass_box(GLuint srcTex, GLuint dstTex) {
+  g_gl.BindImageTexture(0, srcTex, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
+  g_gl.BindImageTexture(3, dstTex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8);
+  g_gl.UseProgram(g_pBox);
+  if (g_boxSize >= 0) g_gl.Uniform2i(g_boxSize, g_qw, g_qh);
+  g_gl.DispatchCompute((GLuint)((g_qw + 7) / 8), (GLuint)((g_qh + 7) / 8), 1);
+  g_gl.MemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+  bool ok = g_gl.GetError() == GL_NO_ERROR;
+  g_gl.UseProgram(0);
+  return ok;
+}
+
+static bool pass_flow() {
+  g_gl.BindImageTexture(2, g_luma[g_turn], 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
+  g_gl.BindImageTexture(3, g_luma[g_turn ^ 1], 0, GL_FALSE, 0, GL_READ_ONLY,
+                        GL_R8);
+  g_gl.BindImageTexture(4, g_flow[0], 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG16F);
+  g_gl.UseProgram(g_pFlow);
+  if (g_flowSize >= 0) g_gl.Uniform2i(g_flowSize, g_qw, g_qh);
+  if (g_flowGrid >= 0) g_gl.Uniform2i(g_flowGrid, g_fw, g_fh);
+  g_gl.DispatchCompute((GLuint)((g_fw + 7) / 8), (GLuint)((g_fh + 7) / 8), 1);
+  g_gl.MemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+  bool ok = g_gl.GetError() == GL_NO_ERROR;
+  g_gl.UseProgram(0);
+  return ok;
+}
+
+static bool pass_median() {
+  g_gl.BindImageTexture(4, g_flow[0], 0, GL_FALSE, 0, GL_READ_ONLY, GL_RG16F);
+  g_gl.BindImageTexture(5, g_flow[1], 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG16F);
+  g_gl.UseProgram(g_pMed);
+  if (g_medSize >= 0) g_gl.Uniform2i(g_medSize, g_fw, g_fh);
+  g_gl.DispatchCompute((GLuint)((g_fw + 7) / 8), (GLuint)((g_fh + 7) / 8), 1);
+  g_gl.MemoryBarrier(
+      (GLbitfield)(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT |
+                   GL_TEXTURE_FETCH_BARRIER_BIT));
+  bool ok = g_gl.GetError() == GL_NO_ERROR;
+  g_gl.UseProgram(0);
+  return ok;
+}
+
+static bool run_flow_locked() {
+  if (!pass_flow()) return false;
+  if (!pass_median()) return false;
+  unbind_images();
+  return true;
+}
+
+struct SavedState {
+  GLint prog = 0, vao = 0, vbo = 0, active = GL_TEXTURE0;
+  GLint vp[4] = {0, 0, 0, 0};
+  GLint rfbo = 0, dfbo = 0;
+  GLint tex[3] = {0, 0, 0};
+  GLint samp[3] = {0, 0, 0};
+  GLboolean en[5] = {GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE};
+  GLint imgName[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  GLint imgLevel[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  GLint imgLayered[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  GLint imgLayer[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  GLint imgAccess[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  GLint imgFormat[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+};
+
+static void save_state(SavedState& s) {
+  g_gl.GetIntegerv(GL_CURRENT_PROGRAM, &s.prog);
+  g_gl.GetIntegerv(GL_VERTEX_ARRAY_BINDING, &s.vao);
+  g_gl.GetIntegerv(GL_ARRAY_BUFFER_BINDING, &s.vbo);
+  g_gl.GetIntegerv(GL_ACTIVE_TEXTURE, &s.active);
+  g_gl.GetIntegerv(GL_VIEWPORT, s.vp);
+  g_gl.GetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &s.rfbo);
+  g_gl.GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &s.dfbo);
+  for (int i = 0; i < 3; ++i) {
+    g_gl.ActiveTexture((GLenum)(GL_TEXTURE0 + i));
+    g_gl.GetIntegerv(GL_TEXTURE_BINDING_2D, &s.tex[i]);
+    g_gl.GetIntegerv(GL_SAMPLER_BINDING, &s.samp[i]);
+  }
+  s.en[0] = g_gl.IsEnabled(GL_BLEND);
+  s.en[1] = g_gl.IsEnabled(GL_SCISSOR_TEST);
+  s.en[2] = g_gl.IsEnabled(GL_DEPTH_TEST);
+  s.en[3] = g_gl.IsEnabled(GL_STENCIL_TEST);
+  s.en[4] = g_gl.IsEnabled(GL_CULL_FACE);
+  for (int i = 0; i < 8; ++i) {
+    g_gl.GetIntegerv((GLenum)(GL_IMAGE_BINDING_NAME + i), &s.imgName[i]);
+    g_gl.GetIntegerv((GLenum)(GL_IMAGE_BINDING_LEVEL + i), &s.imgLevel[i]);
+    g_gl.GetIntegerv((GLenum)(GL_IMAGE_BINDING_LAYERED + i), &s.imgLayered[i]);
+    g_gl.GetIntegerv((GLenum)(GL_IMAGE_BINDING_LAYER + i), &s.imgLayer[i]);
+    g_gl.GetIntegerv((GLenum)(GL_IMAGE_BINDING_ACCESS + i), &s.imgAccess[i]);
+    g_gl.GetIntegerv((GLenum)(GL_IMAGE_BINDING_FORMAT + i), &s.imgFormat[i]);
+  }
+  drain_errors();
+}
+
+static void restore_state(const SavedState& s) {
+  for (int i = 0; i < 3; ++i) {
+    g_gl.ActiveTexture((GLenum)(GL_TEXTURE0 + i));
+    g_gl.BindTexture(GL_TEXTURE_2D, (GLuint)s.tex[i]);
+    g_gl.BindSampler((GLuint)i, (GLuint)s.samp[i]);
+  }
+  g_gl.ActiveTexture((GLenum)s.active);
+  g_gl.BindVertexArray((GLuint)s.vao);
+  g_gl.BindBuffer(GL_ARRAY_BUFFER, (GLuint)s.vbo);
+  g_gl.UseProgram((GLuint)s.prog);
+  g_gl.BindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)s.rfbo);
+  g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)s.dfbo);
+  g_gl.Viewport(s.vp[0], s.vp[1], s.vp[2], s.vp[3]);
+  if (s.en[0]) g_gl.Enable(GL_BLEND);
+  if (s.en[1]) g_gl.Enable(GL_SCISSOR_TEST);
+  if (s.en[2]) g_gl.Enable(GL_DEPTH_TEST);
+  if (s.en[3]) g_gl.Enable(GL_STENCIL_TEST);
+  if (s.en[4]) g_gl.Enable(GL_CULL_FACE);
+  for (int i = 0; i < 8; ++i) {
+    g_gl.BindImageTexture(
+        (GLuint)i, (GLuint)s.imgName[i], s.imgLevel[i],
+        (GLboolean)s.imgLayered[i], s.imgLayer[i], (GLenum)s.imgAccess[i],
+        (GLenum)(s.imgFormat[i] ? s.imgFormat[i] : GL_RGBA8));
+  }
+}
+
+// __ENGINE_PART4__
+
 
