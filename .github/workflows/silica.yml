@@ -1,0 +1,133 @@
+name: Silica win-fg native
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to build from and commit the binaries to
+        required: false
+        default: main
+        type: string
+
+concurrency:
+  group: silica-${{ inputs.branch }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  WINFG_SRC: OxideLauncher/src/main/cpp/winfg/upstream
+  WINFG_PIN: "v0.3.0-silica+fbc69ed"
+
+jobs:
+  build:
+    name: Build libwin_fg (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: true
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Deps (glslang, python, cmake, ninja)
+        run: sudo apt-get update && sudo apt-get install -y glslang-tools python3 cmake ninja-build
+      - name: Compile + embed shaders (upstream pipeline)
+        run: |
+          set -euo pipefail
+          cd "${WINFG_SRC}"
+          sh tools/build_shaders.sh
+          python3 tools/embed_spv.py
+          test -s src/embedded_shaders.hpp
+      - name: Vulkan-Headers (Apache-2.0)
+        run: git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers vk-headers
+      - name: Setup NDK r27d
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27d
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -S "${WINFG_SRC}" -B build/${{ matrix.abi }} -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="${{ matrix.abi }}" -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWINFG_GIT_DESCRIBE="${{ env.WINFG_PIN }}" \
+            -DVULKAN_INCLUDE="${GITHUB_WORKSPACE}/vk-headers/include"
+      - name: Build
+        run: cmake --build build/${{ matrix.abi }} --target win_fg
+      - name: Verify stamp and layer exports
+        run: |
+          set -euo pipefail
+          SO="build/${{ matrix.abi }}/libwin_fg.so"
+          test -s "${SO}"
+          ls -lh "${SO}"
+          strings "${SO}" | grep 'win-fg-build' || { echo "::error::build stamp missing"; exit 1; }
+          NM="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          SYM="winfg-symbols-${{ matrix.abi }}.txt"
+          "${NM}" -D --defined-only "${SO}" > "${SYM}"
+          for sym in vkNegotiateLoaderLayerInterfaceVersion winfg_QueuePresentKHR winfg_CreateSwapchainKHR; do
+            if grep -q " ${sym}" "${SYM}"; then
+              echo "OK: exports ${sym}"
+            else
+              echo "::error::${sym} missing from libwin_fg"
+              exit 1
+            fi
+          done
+          if grep -qi "mobileglues\\|copperoxide\\|onigami\\|lsfg" "${SYM}"; then
+            echo "::error::foreign symbols leaked into libwin_fg"
+            exit 1
+          else
+            echo "OK: no foreign symbols"
+          fi
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: libwinfg-${{ matrix.abi }}
+          path: build/${{ matrix.abi }}/libwin_fg.so
+          if-no-files-found: error
+          retention-days: 7
+
+  commit-libs:
+    name: Commit libwin_fg to jniLibs
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: libwinfg-*
+          merge-multiple: false
+      - name: Place binaries
+        run: |
+          set -euo pipefail
+          for abi in arm64-v8a x86_64; do
+            SRC="artifacts/libwinfg-${abi}/libwin_fg.so"
+            DST="OxideLauncher/src/main/jniLibs/${abi}/libwin_fg.so"
+            test -s "${SRC}"
+            cp "${SRC}" "${DST}"
+          done
+          ls -lh OxideLauncher/src/main/jniLibs/*/libwin_fg.so
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git add -A OxideLauncher/src/main/jniLibs
+          if git diff --cached --quiet; then
+            echo "Binaries unchanged; nothing to commit."
+          else
+            git -c user.name="oxide-ci" -c user.email="oxide-ci@users.noreply.github.com" \
+              commit -m "Silica win-fg: libwin_fg.so (${{ inputs.branch }}, NDK r27d, Release)"
+            git push
+          fi
