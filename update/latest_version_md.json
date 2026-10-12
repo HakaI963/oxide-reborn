@@ -1,43 +1,43 @@
 {
-  "code": 101800,
-  "version": "1.18.0",
+  "code": 101900,
+  "version": "1.19.0",
   "created_at": "2026-10-12",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.18.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.18.0/OxideLauncher-1.18.0.apk",
+      "file_name": "OxideLauncher-1.19.0.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.19.0/OxideLauncher-1.19.0.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.18.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.18.0/OxideLauncher-1.18.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.19.0-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.19.0/OxideLauncher-1.19.0-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.18.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.18.0/OxideLauncher-1.18.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.19.0-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.19.0/OxideLauncher-1.19.0-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.18.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.18.0/OxideLauncher-1.18.0-x86.apk",
+      "file_name": "OxideLauncher-1.19.0-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.19.0/OxideLauncher-1.19.0-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.18.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.18.0/OxideLauncher-1.18.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.19.0-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.19.0/OxideLauncher-1.19.0-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Launcher 1.18.0\n\n## True frame generation (bridge-hook present path)\n\nRoot cause fixed: the game's real swap path (JNI bridge, system EGL) never passed libonigami's wrapper, so no counting and no frame generation could ever run. The bridge now calls the native present hook around its backend swap (fallback = direct swap); the backend self-heals the native lifecycle on first fire, so configured values (render scale, vault, frame generation) actually take effect. Interpolated presents 2x/3x/4x, artifact guard, all applying live with no restart.\n\n## FG diagnostics in the Renderer tab\n\nThe in-game Renderer tab shows live native/displayed/generated/dropped counters plus the backend reason, so any failure is screenshot-able without logcat.\n\n## FPS facts\n\nNo launcher-side FPS cap exists (verified). If Minecraft renders at most 120, that is the game's own Video Settings → Max Framerate default; displayed FPS is also physically capped by the screen refresh rate. With FG on, native FPS drops (extra GPU work per frame is how all frame generation works) while displayed smoothness rises — the Advanced meter shows both separately."
+    "markdown": "# Oxide Launcher 1.19.0\n\n## New renderer: Silica (Vulkan FG)\n\nSilica pairs ONIGAMI-class translation (shared core, separate data dir) with win-fg optical-flow frame generation (The412Banner, MIT, vendored): 2x/3x/4x interpolated presents, flow model + quality preset + pacing controls, all applying live. FG hooks the game's own Vulkan swapchain (Minecraft 26.2+); without one Silica runs as pure translation and says so. Old EGL-blend FG removed.\n\n## Real-time FPS with generated frames\n\nAdvanced meter shows measured Native vs Displayed from win-fg layer counters (never native x multiplier), plus in-tab diagnostics (package proof + live counters + reason)."
   },
   "bodies": []
 }
