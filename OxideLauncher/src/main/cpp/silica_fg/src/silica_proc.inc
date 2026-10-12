@@ -41,6 +41,9 @@ void diag(const char* m) {
   std::string dir = g_dataDir.empty() ? "/data/local/tmp/silica-fg" : g_dataDir;
   // best-effort file log (same UID files dir when configured)
   std::string fp = dir + "/silica-fg.log";
+#if __has_include(<android/log.h>)
+  __android_log_print(ANDROID_LOG_INFO, "silica-fg", "%s", m);
+#endif
   if (FILE* f = fopen(fp.c_str(), "a")) {
     fprintf(f, "%s\n", m);
     fclose(f);
