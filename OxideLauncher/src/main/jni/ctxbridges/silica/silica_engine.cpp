@@ -235,4 +235,215 @@ const char kWarpFrag[] =
     "float m=mix(uT,1.0,smoothstep(0.10,0.35,dl)*uGuard);\n"
     "oC=mix(a,b,m);}\n";
 
-// __ENGINE_PART2__
+std::mutex g_mu;
+bool g_enabled = false;
+int g_mult = 2;
+std::string g_dataDir;
+std::string g_reason = "idle (awaiting bind)";
+unsigned long long g_native = 0, g_displayed = 0, g_gen = 0, g_drop = 0;
+double g_genMs = 0.0, g_nativeDtMs = 0.0;
+long long g_lastSwapNs = 0, g_lastPublishNs = 0, g_lastCfgNs = 0;
+bool g_loggedReady = false, g_loggedGen = false;
+
+Gl g_gl;
+bool g_resolved = false;
+EGLContext g_ctx = EGL_NO_CONTEXT;
+int g_w = 0, g_h = 0, g_qw = 0, g_qh = 0, g_fw = 0, g_fh = 0;
+GLuint g_tex[2] = {0, 0};
+GLuint g_luma[2] = {0, 0};
+GLuint g_flow[2] = {0, 0};
+GLuint g_fbo = 0, g_vbo = 0, g_vao = 0, g_samp = 0, g_sampFlow = 0;
+GLuint g_pBox = 0, g_pFlow = 0, g_pMed = 0, g_pWarp = 0;
+GLint g_boxSize = -1, g_flowSize = -1, g_flowGrid = -1, g_medSize = -1;
+GLint g_wGuard = -1, g_wT = -1;
+int g_turn = 0, g_have = 0, g_confails = 0;
+const int kMaxFails = 3;
+
+// ---- JNI config pull (cached; refreshed ~1Hz from the swap path) ----
+static JavaVM* g_vm = nullptr;
+static jclass g_bridgeClass = nullptr;
+static jmethodID g_mDir = nullptr, g_mEn = nullptr, g_mMult = nullptr;
+static std::string g_cfgDir;
+static bool g_cfgEn = false;
+static int g_cfgMult = 2;
+
+static JNIEnv* jni_env() {
+  if (!g_vm) return nullptr;
+  JNIEnv* e = nullptr;
+  if (g_vm->GetEnv(reinterpret_cast<void**>(&e), JNI_VERSION_1_6) != JNI_OK)
+    return nullptr;
+  return e;
+}
+
+static void pull_config_locked() {
+  long long now = mono_ns();
+  if (now - g_lastCfgNs < 1000000000LL || !g_bridgeClass) return;
+  g_lastCfgNs = now;
+  JNIEnv* e = jni_env();
+  if (!e) return;  // render thread detached: keep last config
+  if (e->ExceptionCheck()) e->ExceptionClear();
+  jstring d = (jstring)e->CallStaticObjectMethod(g_bridgeClass, g_mDir);
+  bool en = e->CallStaticBooleanMethod(g_bridgeClass, g_mEn) == JNI_TRUE;
+  int mult = e->CallStaticIntMethod(g_bridgeClass, g_mMult);
+  if (e->ExceptionCheck()) {
+    e->ExceptionClear();
+    return;  // keep last known-good config
+  }
+  std::string dir;
+  if (d) {
+    const char* c = e->GetStringUTFChars(d, nullptr);
+    if (c) dir = c;
+    e->ReleaseStringUTFChars(d, c);
+    e->DeleteLocalRef(d);
+  }
+  bool want = en && mult >= 2 && mult <= 4;
+  if (want != g_enabled || (want && mult != g_mult) ||
+      (!g_dataDir.empty() && dir != g_dataDir && !dir.empty())) {
+    teardown_gl_locked();
+    g_confails = 0;
+    g_loggedReady = false;
+    g_loggedGen = false;
+  }
+  if (!dir.empty()) g_dataDir = dir;
+  g_enabled = want;
+  g_mult = mult < 2 ? 2 : (mult > 4 ? 4 : mult);
+  g_reason = want ? "active" : "disabled by configuration";
+}
+
+long long mono_ns() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec;
+}
+
+void diag(const char* m) {
+  std::string fp = g_dataDir.empty() ? "/data/local/tmp/silica-fg.log"
+                                     : g_dataDir + "/silica-fg.log";
+  if (FILE* f = fopen(fp.c_str(), "a")) {
+    fprintf(f, "%s\n", m);
+    fclose(f);
+  }
+  __android_log_print(ANDROID_LOG_INFO, "silica-fg", "%s", m);
+}
+
+void publish_locked() {
+  long long now = mono_ns();
+  if (now - g_lastPublishNs < 1000000000LL) return;
+  g_lastPublishNs = now;
+  if (g_dataDir.empty()) return;
+  std::string dst = g_dataDir + "/silica_fg_stats.json";
+  std::string tmp = dst + ".tmp";
+  std::ofstream f(tmp.c_str(), std::ios::trunc);
+  if (!f) return;
+  f << "{\"enabled\":" << (g_enabled ? 1 : 0)
+    << ",\"multiplier\":" << g_mult
+    << ",\"native_frames\":" << g_native
+    << ",\"displayed_frames\":" << g_displayed
+    << ",\"generated_frames\":" << g_gen
+    << ",\"dropped\":" << g_drop
+    << ",\"gen_ms_x100\":" << (int)(g_genMs * 100.0)
+    << ",\"reason\":\"" << g_reason << "\"}";
+  f.close();
+  rename(tmp.c_str(), dst.c_str());
+}
+
+void note_fail_locked(const char* what) {
+  if (++g_confails >= kMaxFails && g_enabled) {
+    g_enabled = false;
+    g_reason = std::string("backend error (") + what +
+               "); disabled, native path intact";
+    char b[256];
+    snprintf(b, sizeof(b), "silica-fg: DISABLED: %s", g_reason.c_str());
+    diag(b);
+  }
+}
+
+void drain_errors() {
+  for (int i = 0; i < 8; ++i)
+    if (g_gl.GetError() == GL_NO_ERROR) break;
+}
+
+bool resolve_gl_locked() {
+  if (g_resolved) return true;
+  void* eglH = dlopen("libEGL.so", RTLD_LAZY | RTLD_LOCAL);
+  if (!eglH) {
+    g_reason = "libEGL.so not loadable";
+    return false;
+  }
+  typedef void* (*getproc_fn)(const char*);
+  getproc_fn pa = reinterpret_cast<getproc_fn>(dlsym(eglH, "eglGetProcAddress"));
+  auto get = [&](const char* n) -> void* {
+    void* p = nullptr;
+    if (pa) p = pa(n);
+    if (!p) p = dlsym(eglH, n);
+    return p;
+  };
+#define SFG_NEED(fn, str)                           \
+  g_gl.fn = reinterpret_cast<P_##fn>(get(str));     \
+  if (!g_gl.fn) {                                   \
+    g_reason = std::string("GLES proc missing: ") + str; \
+    return false;                                   \
+  }
+  SFG_NEED(GetError, "glGetError");
+  SFG_NEED(GetIntegerv, "glGetIntegerv");
+  SFG_NEED(GetString, "glGetString");
+  SFG_NEED(IsEnabled, "glIsEnabled");
+  SFG_NEED(Enable, "glEnable");
+  SFG_NEED(Disable, "glDisable");
+  SFG_NEED(Viewport, "glViewport");
+  SFG_NEED(ActiveTexture, "glActiveTexture");
+  SFG_NEED(GenTextures, "glGenTextures");
+  SFG_NEED(BindTexture, "glBindTexture");
+  SFG_NEED(TexParameteri, "glTexParameteri");
+  SFG_NEED(TexImage2D, "glTexImage2D");
+  SFG_NEED(DeleteTextures, "glDeleteTextures");
+  SFG_NEED(BindImageTexture, "glBindImageTexture");
+  SFG_NEED(GenSamplers, "glGenSamplers");
+  SFG_NEED(SamplerParameteri, "glSamplerParameteri");
+  SFG_NEED(BindSampler, "glBindSampler");
+  SFG_NEED(DeleteSamplers, "glDeleteSamplers");
+  SFG_NEED(GenFramebuffers, "glGenFramebuffers");
+  SFG_NEED(BindFramebuffer, "glBindFramebuffer");
+  SFG_NEED(FramebufferTexture2D, "glFramebufferTexture2D");
+  SFG_NEED(CheckFramebufferStatus, "glCheckFramebufferStatus");
+  SFG_NEED(DeleteFramebuffers, "glDeleteFramebuffers");
+  SFG_NEED(BlitFramebuffer, "glBlitFramebuffer");
+  SFG_NEED(GenBuffers, "glGenBuffers");
+  SFG_NEED(BindBuffer, "glBindBuffer");
+  SFG_NEED(BufferData, "glBufferData");
+  SFG_NEED(DeleteBuffers, "glDeleteBuffers");
+  SFG_NEED(GenVertexArrays, "glGenVertexArrays");
+  SFG_NEED(BindVertexArray, "glBindVertexArray");
+  SFG_NEED(DeleteVertexArrays, "glDeleteVertexArrays");
+  SFG_NEED(EnableVertexAttribArray, "glEnableVertexAttribArray");
+  SFG_NEED(VertexAttribPointer, "glVertexAttribPointer");
+  SFG_NEED(CreateShader, "glCreateShader");
+  SFG_NEED(ShaderSource, "glShaderSource");
+  SFG_NEED(CompileShader, "glCompileShader");
+  SFG_NEED(GetShaderiv, "glGetShaderiv");
+  SFG_NEED(GetShaderInfoLog, "glGetShaderInfoLog");
+  SFG_NEED(DeleteShader, "glDeleteShader");
+  SFG_NEED(CreateProgram, "glCreateProgram");
+  SFG_NEED(AttachShader, "glAttachShader");
+  SFG_NEED(LinkProgram, "glLinkProgram");
+  SFG_NEED(GetProgramiv, "glGetProgramiv");
+  SFG_NEED(GetProgramInfoLog, "glGetProgramInfoLog");
+  SFG_NEED(DeleteProgram, "glDeleteProgram");
+  SFG_NEED(UseProgram, "glUseProgram");
+  SFG_NEED(GetUniformLocation, "glGetUniformLocation");
+  SFG_NEED(Uniform1i, "glUniform1i");
+  SFG_NEED(Uniform1f, "glUniform1f");
+  SFG_NEED(Uniform2i, "glUniform2i");
+  SFG_NEED(DispatchCompute, "glDispatchCompute");
+  SFG_NEED(MemoryBarrier, "glMemoryBarrier");
+  SFG_NEED(DrawArrays, "glDrawArrays");
+#undef SFG_NEED
+  SFG_NEED_EGL(GetCurrentContext, "eglGetCurrentContext");
+  SFG_NEED_EGL(QuerySurface, "eglQuerySurface");
+  SFG_NEED_EGL(SwapBuffers, "eglSwapBuffers");
+  g_resolved = true;
+  return true;
+}
+
+// __ENGINE_PART3__
+
