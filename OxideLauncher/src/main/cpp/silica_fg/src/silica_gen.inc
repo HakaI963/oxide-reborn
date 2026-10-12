@@ -10,6 +10,98 @@ static bool pass_box(GLuint srcTex, GLuint dstTex);
 static bool pass_flow();
 static bool pass_median();
 
+static double g_nativeDtMs = 0.0;
+static long long g_lastWatchNs = 0;
+static long long g_cfgMtime = 0;
+static bool g_dirDiscovered = false;
+
+static void discover_dir_locked() {
+  if (g_dirDiscovered || !g_dataDir.empty()) return;
+  g_dirDiscovered = true;
+  char cmd[256] = {0};
+  FILE* f = fopen("/proc/self/cmdline", "r");
+  if (!f) return;
+  size_t n = fread(cmd, 1, sizeof(cmd) - 1, f);
+  fclose(f);
+  if (n == 0) return;
+  std::string proc(cmd);
+  size_t colon = proc.find(':');
+  std::string pkg = (colon == std::string::npos) ? proc : proc.substr(0, colon);
+  if (pkg.empty()) return;
+  std::string cand = "/data/user/0/" + pkg + "/files/silica";
+  struct stat st;
+  std::string p1 = cand + "/conf.toml";
+  std::string p2 = cand + "/onigami.json";
+  if (stat(p1.c_str(), &st) != 0 && stat(p2.c_str(), &st) != 0) return;
+  g_dataDir = cand;
+  char b[300];
+  snprintf(b, sizeof(b), "silica-fg: data dir discovered: %s", cand.c_str());
+  diag(b);
+}
+
+static void apply_cfg_values_locked(bool enabled, int mult, bool guard,
+                                    const char* why) {
+  bool want = enabled && mult >= 2 && mult <= 4;
+  bool changed = (want != g_enabled) || (want && mult != g_mult) ||
+                 (want && guard != g_guard);
+  if (changed) {
+    teardown_gl_locked();
+    g_confails = 0;
+    g_loggedReady = false;
+    g_loggedGen = false;
+  }
+  g_enabled = want;
+  g_mult = mult < 2 ? 2 : (mult > 4 ? 4 : mult);
+  g_guard = guard;
+  g_configured = true;
+  g_reason = want ? "active" : "disabled by configuration";
+  if (changed) {
+    char b[256];
+    snprintf(b, sizeof(b), "silica-fg: config %s enabled=%d mult=%dx guard=%d",
+             why, g_enabled ? 1 : 0, g_mult, g_guard ? 1 : 0);
+    diag(b);
+  }
+}
+
+static void write_cfg_locked() {
+  if (g_dataDir.empty()) return;
+  std::string tmp = g_dataDir + "/fg_engine.cfg.tmp";
+  std::string dst = g_dataDir + "/fg_engine.cfg";
+  FILE* f = fopen(tmp.c_str(), "w");
+  if (!f) return;
+  fprintf(f, "enabled=%d\nmultiplier=%d\nguard=%d\n", g_enabled ? 1 : 0,
+          g_mult, g_guard ? 1 : 0);
+  fclose(f);
+  rename(tmp.c_str(), dst.c_str());
+}
+
+static void watch_cfg_locked() {
+  long long now = mono_ns();
+  if (now - g_lastWatchNs < 1000000000LL) return;
+  g_lastWatchNs = now;
+  if (g_dataDir.empty()) return;
+  std::string p = g_dataDir + "/fg_engine.cfg";
+  struct stat st;
+  if (stat(p.c_str(), &st) != 0) return;
+  if ((long long)st.st_mtime == g_cfgMtime) return;
+  g_cfgMtime = (long long)st.st_mtime;
+  bool en = false;
+  int mult = 2;
+  bool guard = true;
+  if (FILE* f = fopen(p.c_str(), "r")) {
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+      int v = 0;
+      if (sscanf(line, "enabled=%d", &v) == 1) en = (v != 0);
+      else if (sscanf(line, "multiplier=%d", &v) == 1) mult = v;
+      else if (sscanf(line, "guard=%d", &v) == 1) guard = (v != 0);
+    }
+    fclose(f);
+  }
+  apply_cfg_values_locked(en, mult, guard, "live file");
+  publish_locked();
+}
+
 static bool run_flow_locked() {
   if (!pass_flow()) return false;
   if (!pass_median()) return false;
@@ -23,6 +115,11 @@ bool postgenerate_locked(EGLDisplay d, EGLSurface s, int w, int h,
   if (!ensure_gl_locked(w, h)) {
     // ensure fails hard only on real errors; not-ready returns silently.
     // Count a failure only when FG was mid-flight (targets existed before).
+    publish_locked();
+    return false;
+  }
+  if (g_genMs > 0.0 && g_nativeDtMs > 0.0 && g_genMs > 0.8 * g_nativeDtMs) {
+    g_reason = "yielding (gpu-bound)";
     publish_locked();
     return false;
   }
@@ -63,6 +160,10 @@ bool postgenerate_locked(EGLDisplay d, EGLSurface s, int w, int h,
         any_fail = true;
         break;
       }
+      if (g_nativeDtMs > 0.0) {
+        double elapsed = (double)(mono_ns() - g_lastSwapNs) / 1000000.0;
+        if (elapsed > 0.75 * g_nativeDtMs) break;
+      }
       EGLBoolean ok = real_swap ? real_swap(d, s) : EGL_FALSE;
       if (ok == EGL_TRUE) {
         presented++;
@@ -78,6 +179,7 @@ bool postgenerate_locked(EGLDisplay d, EGLSurface s, int w, int h,
   double ms = (double)(t1 - t0) / 1000000.0;
   g_genMs = g_genMs == 0.0 ? ms : g_genMs * 0.9 + ms * 0.1;
   if (presented > 0) {
+    g_reason = "active";
     g_gen += (unsigned long long)presented;
     g_displayed += (unsigned long long)presented;
     g_confails = 0;
@@ -104,6 +206,11 @@ void on_swap_locked(bool swap_ok, int w, int h) {
     g_drop++;
     publish_locked();
     return;
+  }
+  if (g_lastSwapNs != 0) {
+    double dt = (double)(now - g_lastSwapNs) / 1000000.0;
+    if (dt > 0.0 && dt < 1000.0)
+      g_nativeDtMs = (g_nativeDtMs == 0.0) ? dt : g_nativeDtMs * 0.9 + dt * 0.1;
   }
   g_native++;
   g_displayed++;
