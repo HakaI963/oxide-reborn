@@ -207,7 +207,7 @@ object AllSettings : SettingsRegistry() {
     /**
      * Onigami frame generation (LSFG-VK derived, v1.17.0): false = off (default).
      * Real toggle, read by libonigami.so at context init (restart required).
-     * Only 2x is exposed until 3x/4x are validated on-device.
+     * 2x/3x/4x interpolated presents. Applies live, no restart.
      */
     val onigamiFrameGen = boolSetting("onigamiFrameGen", false)
 
@@ -216,7 +216,13 @@ object AllSettings : SettingsRegistry() {
      * pinned to 2..2 so unimplemented modes cannot be selected.
      * Restart required.
      */
-    val onigamiFrameGenMultiplier = intSetting("onigamiFrameGenMultiplier", 2, 2..2)
+    val onigamiFrameGenMultiplier = intSetting("onigamiFrameGenMultiplier", 2, 2..4)
+
+    /**
+     * Frame-generation artifact guard (v1.17.0): snaps scene cuts and fast
+     * motion to the current frame instead of smearing a ghost. Applies live.
+     */
+    val onigamiFrameGenGuard = boolSetting("onigamiFrameGenGuard", true)
 
     //Game
     /**
