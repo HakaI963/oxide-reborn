@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include "gl_bridge.h"
 #include "egl_loader.h"
+#include "silica/silica_engine.h"
 
 //
 // Created by maks on 17.09.2022.
@@ -19,12 +20,7 @@
 
 static const char* g_LogTag = "GLBridge";
 static __thread gl_render_window_t* currentBundle;
-/* Silica FG engine hook (v1.19.0+): resolved always, engine self-gates
- * (default off = direct swap). Display/contexts/surfaces stay here. */
-typedef EGLBoolean (*silica_real_swap_fn)(EGLDisplay dpy, EGLSurface draw);
-static EGLBoolean (*silica_hook_p)(EGLDisplay dpy, EGLSurface draw,
-    silica_real_swap_fn real_swap) = NULL;
-static int silica_hook_cooldown = 0;
+
 static EGLDisplay g_EglDisplay;
 
 bool gl_init() {
@@ -239,29 +235,9 @@ void gl_swap_buffers() {
         currentBundle->state = STATE_RENDERER_ALIVE;
     }
 
-    if (!silica_hook_p) {
-        // Resolve once (retry rarely): libsilica_fg.so ships in all APKs.
-        if (silica_hook_cooldown <= 0) {
-            void* sh = dlopen("libsilica_fg.so", RTLD_LAZY | RTLD_LOCAL);
-            if (sh) {
-                silica_hook_p = dlsym(sh, "silica_fg_present_hook");
-                if (silica_hook_p) {
-                    __android_log_print(ANDROID_LOG_INFO, g_LogTag,
-                                        "Silica FG engine hook active");
-                }
-            }
-            if (!silica_hook_p) silica_hook_cooldown = 600;
-        } else {
-            silica_hook_cooldown--;
-        }
-    }
     if (currentBundle->surface != NULL) {
-        EGLBoolean swap_ok;
-        if (silica_hook_p)
-            swap_ok = silica_hook_p(g_EglDisplay, currentBundle->surface,
-                                     eglSwapBuffers_p);
-        else
-            swap_ok = eglSwapBuffers_p(g_EglDisplay, currentBundle->surface);
+        silica_engine_before_swap(g_EglDisplay, currentBundle->surface);
+        EGLBoolean swap_ok = eglSwapBuffers_p(g_EglDisplay, currentBundle->surface);
         if (!swap_ok && eglGetError_p() == EGL_BAD_SURFACE)
         {
             eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -274,6 +250,7 @@ void gl_swap_buffers() {
             }
             __android_log_print(ANDROID_LOG_INFO, g_LogTag, "The window has died, awaiting window change");
         }
+        else silica_engine_after_swap(g_EglDisplay, currentBundle->surface, swap_ok);
     }
 
 }

@@ -27,6 +27,7 @@ LOCAL_SRC_FILES := \
     ctxbridges/osmesa_loader.c \
     ctxbridges/swap_interval_no_egl.c \
     ctxbridges/virgl_bridge.c \
+    ctxbridges/silica/silica_engine.cpp \
     environ/environ.c \
     logger/logger.c \
     input_bridge_v3.c \
