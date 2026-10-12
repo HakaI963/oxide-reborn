@@ -9,6 +9,7 @@
 // EGL_NOT_INITIALIZED with a diag line. Nothing is invented.
 #include "onigami/backend.h"
 #include "onigami/config.h"
+#include "onigami/lsfg.h"
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <cstring>
@@ -168,6 +169,18 @@ O_API EGLBoolean eglSwapBuffers(EGLDisplay d, EGLSurface s) {
                 "onigami: frame pacing swaps=%lld avg_ms=%.2f slow_frames(>50ms)=%lld",
                 g_swap_stats.swaps, avg_ms, g_swap_stats.slow_swaps);
         }
+    }
+    // Frame-generation present accounting (v1.17.0): counts ONLY the real
+    // backend result. Generated presents are confirmed by the lsfg backend;
+    // nothing is estimated here. Width/height are best-effort for history.
+    {
+        int w = 0, h = 0;
+        if (ensure_egl_loaded() && egl_procs().QuerySurface) {
+            EGLint ew = 0, eh = 0;
+            if (egl_procs().QuerySurface(d, s, EGL_WIDTH, &ew)) w = (int)ew;
+            if (egl_procs().QuerySurface(d, s, EGL_HEIGHT, &eh)) h = (int)eh;
+        }
+        onigami::lsfg::on_swap_buffers(ok == EGL_TRUE, w, h);
     }
     return ok;
 }
