@@ -61,6 +61,12 @@ struct DeviceState {
     uint64_t paceLastWaitNs = 0;
     uint64_t paceLate      = 0;    // count of pacing-skip (late) events
     uint64_t paceInserts   = 0;    // count of paced inserts (periodic summary)
+    // ── SILICA stats (Oxide Launcher patch, MIT-licensed file): confirmed-
+    // present counters for the in-game FPS meter. Displayed = native + gen.
+    uint64_t silicaNative = 0;
+    uint64_t silicaGen = 0;
+    uint64_t silicaDrop = 0;
+    long long silicaLastNs = 0;
 };
 
 // Returns the conf.toml mtime (0 if absent).
@@ -798,6 +804,43 @@ static const uint64_t kPaceMinDtNs = 500000ull;     // reject dt samples < 0.5 m
 static const uint64_t kPaceMaxDtNs = 100000000ull;  // reject dt samples > 100 ms
 
 // ── present hook ─────────────────────────────────────────────────────────────
+// ── SILICA stats writer (Oxide Launcher patch) ─────────────────────────────
+// Writes $WIN_FG_STATS_DIR/winfg_stats.json at ~1Hz so the launcher FPS meter
+// reports measured native vs displayed FPS. No-op unless the env is set.
+// Throttled, tmp+rename, best-effort; never touches the present path.
+#include <cstdlib>
+static long long silica_mono_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec;
+}
+static void silica_stats_write(DeviceState* st) {
+    long long now = silica_mono_ns();
+    if (now - st->silicaLastNs < 1000000000LL) return;
+    st->silicaLastNs = now;
+    const char* dir = getenv("WIN_FG_STATS_DIR");
+    if (!dir || !dir[0]) return;
+    char tmp[1024], dst[1024];
+    snprintf(tmp, sizeof(tmp), "%s/winfg_stats.json.tmp", dir);
+    snprintf(dst, sizeof(dst), "%s/winfg_stats.json", dir);
+    const char* reason;
+    if (!st->cfg.enabled) reason = "disabled by configuration";
+    else if (!st->fg.valid()) reason = "flow not ready yet";
+    else reason = "active";
+    FILE* f = fopen(tmp, "w");
+    if (!f) return;
+    fprintf(f, "{\"enabled\":%d,\"multiplier\":%d,\"native_frames\":%llu,"
+               "\"displayed_frames\":%llu,\"generated_frames\":%llu,"
+               "\"dropped\":%llu,\"reason\":\"%s\"}",
+            st->cfg.enabled ? 1 : 0, st->cfg.multiplier,
+            (unsigned long long)st->silicaNative,
+            (unsigned long long)(st->silicaNative + st->silicaGen),
+            (unsigned long long)st->silicaGen,
+            (unsigned long long)st->silicaDrop, reason);
+    fclose(f);
+    rename(tmp, dst);
+}
+
 // First-draft bring-up: runs the flow+synth compute for (prev,curr) into an
 // owned target to prove the pipeline end-to-end, then presents the real frame
 // unchanged (safe passthrough). Inserting the generated frame as an extra
@@ -838,6 +881,8 @@ extern "C" VkResult VKAPI_CALL winfg_QueuePresentKHR(VkQueue queue, const VkPres
         lastEnabled = en;
     }
     ++presents;
+    ++st->silicaNative;   // SILICA patch: every entry presents exactly one real frame
+    silica_stats_write(st);  // SILICA patch: throttled publish
     WFG_LOGD(dbg, "P#%llu present-enter: enabled=%d mult=%d fg.valid=%d capture=%d swapCount=%u",
              presents, en, st->cfg.multiplier, st->fg.valid() ? 1 : 0,
              st->cfg.capture ? 1 : 0, pPresentInfo->swapchainCount);
@@ -1125,6 +1170,9 @@ extern "C" VkResult VKAPI_CALL winfg_QueuePresentKHR(VkQueue queue, const VkPres
                 }
                 WFG_LOGD(dbg, "P#%llu present-generated BEGIN (spare=%u)", presents, spareIdx);
                 VkResult pg = presentOne(fc.genSem, spareIdx, nullptr);   // generated frame: NEVER carry a present-id (may be skipped)
+                if (pg == VK_SUCCESS || pg == VK_SUBOPTIMAL_KHR) ++st->silicaGen;  // SILICA patch
+                else ++st->silicaDrop;                                          // SILICA patch
+                silica_stats_write(st);  // SILICA patch: throttled publish
                 uint64_t tGenDone = mono_ns();
                 WFG_LOGD(dbg, "P#%llu present-generated DONE r=%d", presents, (int)pg);
 
