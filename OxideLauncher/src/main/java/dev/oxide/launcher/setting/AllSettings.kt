@@ -205,24 +205,37 @@ object AllSettings : SettingsRegistry() {
     val onigamiUpscaleMode = intSetting("onigamiUpscaleMode", 0, 0..1)
 
     /**
-     * Onigami frame generation (LSFG-VK derived, v1.17.0): false = off (default).
-     * Real toggle, read by libonigami.so at context init (restart required).
-     * 2x/3x/4x interpolated presents. Applies live, no restart.
+     * Silica frame generation (win-fg Vulkan layer): false = off (default).
+     * Applies live via conf.toml hot-reload, no restart. Requires a game
+     * that presents Vulkan swapchains (Minecraft 26.2+); otherwise Silica
+     * runs as pure translation and the meter says so.
      */
-    val onigamiFrameGen = boolSetting("onigamiFrameGen", false)
+    val silicaFgEnabled = boolSetting("silicaFgEnabled", false)
 
     /**
-     * Frame-generation multiplier. v1.17.0 supports only 2x; the range is
-     * pinned to 2..2 so unimplemented modes cannot be selected.
-     * Restart required.
+     * Presented-to-real multiplier, 2x/3x/4x. win-fg recomputes flow per
+     * generated frame. Applies live. Higher costs more GPU per frame.
      */
-    val onigamiFrameGenMultiplier = intSetting("onigamiFrameGenMultiplier", 2, 2..4)
+    val silicaFgMult = intSetting("silicaFgMult", 2, 2..4)
 
     /**
-     * Frame-generation artifact guard (v1.17.0): snaps scene cuts and fast
-     * motion to the current frame instead of smearing a ghost. Applies live.
+     * Flow model: 3 = optical flow (cheaper), 4 = bidirectional + occlusion
+     * gate (sharper, heavier, layer default). Applies live (rebuilds flow).
      */
-    val onigamiFrameGenGuard = boolSetting("onigamiFrameGenGuard", true)
+    val silicaFgModel = intSetting("silicaFgModel", 4, 3..4)
+
+    /**
+     * Performance preset: 0 quality / 1 balanced / 2 performance (finest
+     * search level). Applies live (rebuilds pyramid; avoid rapid flipping).
+     */
+    val silicaFgPerf = intSetting("silicaFgPerf", 1, 0..2)
+
+    /**
+     * Even-cadence pacing: place generated frames near the true temporal
+     * midpoint instead of back-to-back. Applies live. Off by default
+     * (upstream default).
+     */
+    val silicaFgPacing = boolSetting("silicaFgPacing", false)
 
     //Game
     /**
