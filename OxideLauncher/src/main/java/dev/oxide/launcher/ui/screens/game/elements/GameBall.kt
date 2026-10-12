@@ -94,6 +94,10 @@ fun DraggableGameBall(
     opened: Boolean,
     alpha: Float = 1f,
     onClick: () -> Unit = {},
+    displayedFps: Int? = null,
+    displayedMeasured: Boolean = false,
+    fgEnabled: Boolean = false,
+    fgMultiplier: Int = 2,
 ) {
     val description = stringResource(R.string.oxide_ingame_ball_menu)
     val openedText = stringResource(R.string.oxide_ingame_ball_opened)
@@ -134,6 +138,10 @@ fun DraggableGameBall(
                 showMemory = showMemory,
                 opened = opened,
                 chartSize = chartSize,
+                displayedFps = displayedFps,
+                displayedMeasured = displayedMeasured,
+                fgEnabled = fgEnabled,
+                fgMultiplier = fgMultiplier,
             )
         }
     }
@@ -149,6 +157,10 @@ private fun GameBallContent(
     showMemory: Boolean,
     opened: Boolean,
     chartSize: GameFpsChartSize,
+    displayedFps: Int? = null,
+    displayedMeasured: Boolean = false,
+    fgEnabled: Boolean = false,
+    fgMultiplier: Int = 2,
 ) {
     // 显示哪几块只有这一个出处，组合里不再散着判断
     val readouts = gameBallReadouts(gameFps, fpsDisplayMode, showMemory)
@@ -196,7 +208,42 @@ private fun GameBallContent(
             }
             //帧率显示
             BallVisibility(visible = readouts.showFps) {
-                if (readouts.showFpsChart) {
+                if (fpsDisplayMode == FpsDisplayMode.ADVANCED) {
+                    // Advanced mode (v1.17.0): Native vs Displayed vs FG state.
+                    // Displayed renders only from confirmed presents; without a
+                    // measurement it says "measuring", never native x multiplier.
+                    val adv = fpsAdvancedReadout(gameFps, displayedFps, displayedMeasured, fgEnabled, fgMultiplier)
+                    Column(modifier = Modifier.padding(end = 4.dp)) {
+                        Text(
+                            text = "FPS",
+                            fontSize = Oxide.Type.Body.fontSize,
+                            lineHeight = Oxide.Type.Body.lineHeight,
+                            color = Oxide.Fg,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = adv.nativeText,
+                            fontSize = Oxide.Type.Body.fontSize,
+                            lineHeight = Oxide.Type.Body.lineHeight,
+                            color = Oxide.Fg,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = adv.displayedText,
+                            fontSize = Oxide.Type.Body.fontSize,
+                            lineHeight = Oxide.Type.Body.lineHeight,
+                            color = Oxide.Fg,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = adv.frameGenText,
+                            fontSize = Oxide.Type.Body.fontSize,
+                            lineHeight = Oxide.Type.Body.lineHeight,
+                            color = Oxide.Fg,
+                            maxLines = 1,
+                        )
+                    }
+                } else if (readouts.showFpsChart) {
                     //帧率图表
                     FpsChart(
                         modifier = Modifier.padding(end = 4.dp),
