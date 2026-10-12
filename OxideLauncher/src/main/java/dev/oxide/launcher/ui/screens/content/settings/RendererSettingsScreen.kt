@@ -57,6 +57,7 @@ import dev.oxide.launcher.game.plugin.renderer_v2.RendererV2Data
 import dev.oxide.launcher.game.renderer.RendererInterface
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
+import dev.oxide.launcher.game.renderer.silica.SilicaVulkan
 import dev.oxide.launcher.game.renderer.onigami.OnigamiVulkan
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.path.URL_CLOUD_DRIVE_DRIVER_PLUGINS
@@ -131,7 +132,9 @@ fun RendererSettingsScreen(
                     // stored id and pop the Vulkan confirm only for ONIGAMI.
                     LaunchedEffect(currentRendererId) {
                         if (currentRendererId != previousRendererId) {
-                            if (OnigamiVulkan.needsVulkanSwitch(currentRendererId, AllSettings.graphicsApi.state)) {
+                            if (OnigamiVulkan.needsVulkanSwitch(currentRendererId, AllSettings.graphicsApi.state) ||
+                                SilicaVulkan.needsVulkanSwitch(currentRendererId, AllSettings.graphicsApi.state)
+                            ) {
                                 pendingVulkanRendererId = currentRendererId
                             } else {
                                 previousRendererId = currentRendererId
@@ -188,8 +191,8 @@ fun RendererSettingsScreen(
                     // graphics API too, cancel restores the previous renderer.
                     if (pendingVulkanRendererId != null) {
                         SimpleAlertDialog(
-                            title = OnigamiVulkan.DIALOG_TITLE,
-                            text = OnigamiVulkan.DIALOG_MESSAGE,
+                            title = if (SilicaVulkan.isSilica(pendingVulkanRendererId ?: "")) SilicaVulkan.DIALOG_TITLE else OnigamiVulkan.DIALOG_TITLE,
+                            text = if (SilicaVulkan.isSilica(pendingVulkanRendererId ?: "")) SilicaVulkan.DIALOG_MESSAGE else OnigamiVulkan.DIALOG_MESSAGE,
                             confirmText = OnigamiVulkan.DIALOG_CONFIRM,
                             onConfirm = {
                                 AllSettings.graphicsApi.save(GraphicsApi.VULKAN)

@@ -46,6 +46,7 @@ import dev.oxide.launcher.game.multirt.RuntimesManager
 import dev.oxide.launcher.game.plugin.driver.DriverPluginManager
 import dev.oxide.launcher.game.renderer.Renderers
 import dev.oxide.launcher.game.renderer.onigami.OnigamiVulkan
+import dev.oxide.launcher.game.renderer.silica.SilicaVulkan
 import dev.oxide.launcher.game.support.touch_controller.VibrationHandler
 import dev.oxide.launcher.game.version.installed.GraphicsApi
 import dev.oxide.launcher.game.version.installed.Version
@@ -216,7 +217,7 @@ private fun VersionConfigs(
                     config.renderer = item.id
                     // ONIGAMI (Vulkan) requires Vulkan: pin this instance to
                     // Vulkan without touching the global settings.
-                    if (OnigamiVulkan.requiresVulkan(item.id)) {
+                    if (OnigamiVulkan.requiresVulkan(item.id) || SilicaVulkan.requiresVulkan(item.id)) {
                         config.graphicsApi = GraphicsApi.VULKAN
                     }
                     config.saveOrShowError(submitError)
