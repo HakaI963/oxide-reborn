@@ -305,7 +305,7 @@ class OAuthClientIdWiringTest {
     fun theVersionCodeIsMonotonic() {
         // 101800 是 v1.18.0；versionCode 变小或不变，会让已经装上的用户装不了这一版
         val code = propertyValue(moduleGradleProperties().readText(), "launcher_version_code")
-        assertEquals("launcher_version_code must be the integer 101700 for v1.17.0", "101700", code)
+        assertEquals("launcher_version_code must be the integer 101800 for v1.18.0", "101800", code)
         assertTrue(
             "launcher_version_code must parse as an integer so versionCode never silently defaults",
             code?.toIntOrNull() != null,
