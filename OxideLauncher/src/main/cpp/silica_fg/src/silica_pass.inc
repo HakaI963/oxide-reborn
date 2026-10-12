@@ -129,8 +129,9 @@ void precapture_locked(EGLDisplay d, int w, int h) {
     return;
   }
   if (w <= 0 || h <= 0) return;
-  if (g_ctx == EGL_NO_CONTEXT || g_w != w || g_h != h || g_fbo == 0) {
-    return;  // targets not built yet: postgenerate() builds them
+  if (g_ctx == EGL_NO_CONTEXT || g_w != w || g_h != h || g_fbo == 0 ||
+      g_pBox == 0) {
+    return;  // targets/programs not built yet: postgenerate() builds them
   }
   EGLContext cur = EGL_NO_CONTEXT;
   // context identity is rechecked in postgenerate; blit needs current ctx
