@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.22.1)
+project("silica_fg")
+enable_language(CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -funwind-tables -O3 -D_THREAD_SAFE -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -fvisibility=hidden -O3")
+add_library(${CMAKE_PROJECT_NAME} SHARED
+    src/silica_engine.cpp
+)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE include src)
+if (NOT MSVC)
+    target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -Wl,-Bsymbolic-functions)
+endif()
+target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC android log)
