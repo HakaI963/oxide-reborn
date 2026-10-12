@@ -113,15 +113,7 @@ object SilicaRenderer : RendererInterface {
             dir.mkdirs()
             writeFgPackage(dir)
         }
-        runCatching {
-            val dir = silicaDataDir()
-            dev.oxide.launcher.bridge.SilicaFgBridge.configure(
-                dir.absolutePath,
-                AllSettings.silicaFgEnabled.getValue(),
-                AllSettings.silicaFgMult.getValue(),
-                true,
-            )
-        }
+
     }
 
     /** Current env map for in-game export (game process setenv heals IPC gap). */

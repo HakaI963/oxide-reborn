@@ -9,40 +9,43 @@
  */
 package dev.oxide.launcher.bridge
 
+import dev.oxide.launcher.game.renderer.silica.SilicaEnv
+import dev.oxide.launcher.setting.AllSettings
+
 /**
- * JNI bridge to the Silica own-FG engine (libsilica_fg.so).
+ * JNI side of the Silica own-FG engine (linked into libpojavexec).
  *
- * All configuration is explicit (no env dependence): the game process calls
- * these at startup and on every settings change. Best-effort everywhere;
- * false means "not active", never a crash.
+ * Direction is pull, not push: native calls these getters (~1Hz) from the
+ * game thread, so settings apply in every process layout with no timing or
+ * env dependence. Best-effort everywhere; defaults mean "off".
  */
 object SilicaFgBridge {
-    private fun load(): Boolean =
-        runCatching { System.loadLibrary("silica_fg"); true }.getOrDefault(false)
-
-    private external fun nativeConfigure(
-        dataDir: String, enabled: Boolean, mult: Int, guard: Boolean
-    ): Boolean
-
-    private external fun nativeReloadTranslation(dataDir: String): Boolean
-
-    /** Push FG state into the engine. Runs in any process; inert without swaps. */
-    fun configure(dataDir: String, enabled: Boolean, mult: Int, guard: Boolean): Boolean =
-        runCatching { load() && nativeConfigure(dataDir, enabled, mult, guard) }
-            .getOrDefault(false)
+    private external fun nativeBind(): Boolean
 
     /**
-     * Reload libonigami translation config from dataDir/onigami.json.
-     * The launcher otherwise never calls the native lifecycle, which used to
-     * leave every native knob dormant at defaults.
+     * Bind JNI getters for the engine. Must run in the game process
+     * (GameScreen). Idempotent.
      */
-    fun reloadTranslation(dataDir: String): Boolean =
-        runCatching { load() && nativeReloadTranslation(dataDir) }.getOrDefault(false)
+    fun bind(): Boolean = runCatching {
+        System.loadLibrary("pojavexec")
+        nativeBind()
+    }.getOrDefault(false)
+
+    @JvmStatic
+    fun engineDataDir(): String =
+        runCatching { SilicaEnv.dataDir().absolutePath }.getOrDefault("")
+
+    @JvmStatic
+    fun engineEnabled(): Boolean =
+        runCatching { AllSettings.silicaFgEnabled.getValue() }.getOrDefault(false)
+
+    @JvmStatic
+    fun engineMult(): Int =
+        runCatching { AllSettings.silicaFgMult.getValue() }.getOrDefault(2)
 
     /**
-     * Export env into THIS process (game process heals what the launcher
-     * process env never reaches: bridge gating, native dirs, win-fg layer).
-     * Returns how many entries stuck.
+     * Export env into THIS process (heals what launcher env never reaches,
+     * e.g. for the win-fg Vulkan path). Returns how many entries stuck.
      */
     fun exportEnv(env: Map<String, String>): Int {
         var n = 0

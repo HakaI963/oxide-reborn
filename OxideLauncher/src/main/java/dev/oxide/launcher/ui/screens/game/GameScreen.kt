@@ -295,15 +295,8 @@ private class GameViewModel(
             Renderers.getCurrentRenderer() !== SilicaRenderer
         ) return
         runCatching {
-            val dir = SilicaEnv.dataDir()
             SilicaFgBridge.exportEnv(SilicaRenderer.gameEnv())
-            SilicaFgBridge.configure(
-                dir.absolutePath,
-                AllSettings.silicaFgEnabled.getValue(),
-                AllSettings.silicaFgMult.getValue(),
-                true,
-            )
-            SilicaFgBridge.reloadTranslation(dir.absolutePath)
+            SilicaFgBridge.bind()
         }
     }
 
