@@ -180,6 +180,9 @@ const int kBlockSize = 8;
 const int kMaxIterations = 5;
 const int kMaxConsecFails = 3;
 
+// Forward: config apply/teardown run before the GL section is defined.
+void teardown_gl_locked();
+
 std::mutex g_mu;
 bool g_enabled = false;
 int g_mult = 2;
