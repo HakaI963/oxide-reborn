@@ -62,8 +62,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.oxide.launcher.R
 import dev.oxide.launcher.game.renderer.Renderers
-import dev.oxide.launcher.game.renderer.onigami.OnigamiFrameGen
 import dev.oxide.launcher.game.renderer.renderers.OnigamiRenderer
+import dev.oxide.launcher.game.renderer.renderers.SilicaRenderer
+import dev.oxide.launcher.game.renderer.silica.SilicaFrameGen
 import dev.oxide.launcher.game.sdl.SdlBridge
 import dev.oxide.launcher.setting.AllSettings
 import dev.oxide.launcher.setting.enums.FpsDisplayMode
@@ -221,10 +222,13 @@ fun GameMenuSubscreen(
                             onEditLayout = onEditLayout,
                         )
 
-                        GameMenuSection.Renderer -> rendererSection(
-                            windowWidth = window.width,
-                            windowHeight = window.height,
-                        )
+                        GameMenuSection.Renderer -> {
+                            rendererSection(
+                                windowWidth = window.width,
+                                windowHeight = window.height,
+                            )
+                            silicaSection()
+                        }
 
                         GameMenuSection.Mouse -> mouseSection()
 
@@ -293,7 +297,8 @@ private fun GameMenuSectionRail(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val onigamiTabVisible = Renderers.isCurrentRendererValid() && Renderers.getCurrentRenderer() === OnigamiRenderer
-        GameMenuSection.entries.filter { it != GameMenuSection.Renderer || onigamiTabVisible }.forEach { section ->
+        val silicaTabVisible = Renderers.isCurrentRendererValid() && Renderers.getCurrentRenderer() === SilicaRenderer
+        GameMenuSection.entries.filter { it != GameMenuSection.Renderer || onigamiTabVisible || silicaTabVisible }.forEach { section ->
             GameMenuSectionChip(
                 label = stringResource(section.labelRes),
                 selected = section == selected,
@@ -510,56 +515,96 @@ private fun LazyListScope.rendererSection(
                 (if (upscaleOn && scale < 100) "Bilinear" else "Off") + ".",
         )
     }
-    item(key = "onigamiFrameGen") {
+    item(key = "onigamiFps") {
+        GameMenuNoteRow("Live FPS stays in the top-center pill; Advanced FPS mode shows measured Native vs Displayed.")
+    }
+}
+
+/**
+ * In-game Silica renderer tab: only when Silica is active.
+ *
+ * Frame-generation rows apply live (conf.toml hot-reload, win-fg watches
+ * it ~1Hz). Translation rows are absent here by design: Silica shares the
+ * ONIGAMI translation core and its vault/scale knobs live in the launcher
+ * settings. FG needs Minecraft 26.2+ rendering Vulkan; otherwise Silica
+ * runs as pure translation and the diagnostics line says so.
+ */
+private fun LazyListScope.silicaSection() {
+    if (!Renderers.isCurrentRendererValid()) return
+    if (Renderers.getCurrentRenderer() !== SilicaRenderer) return
+    group(R.string.oxide_set_tab_renderer, "renderer")
+    item(key = "silicaVulkan") {
+        GameMenuNoteRow("Silica FG needs Minecraft 26.2+ rendering Vulkan; otherwise pure translation.")
+    }
+    item(key = "silicaFg") {
         GameMenuSwitchRow(
             label = "Frame generation",
-            checked = AllSettings.onigamiFrameGen.state,
+            checked = AllSettings.silicaFgEnabled.state,
             hint = "Applies live.",
             onCheckedChange = {
-                AllSettings.onigamiFrameGen.save(it)
-                OnigamiRenderer.refreshNativeConfig()
+                AllSettings.silicaFgEnabled.save(it)
+                SilicaRenderer.refreshFgConfig()
             },
         )
     }
-    item(key = "onigamiFrameGenMult") {
-        val mult = AllSettings.onigamiFrameGenMultiplier.state
+    item(key = "silicaMult") {
         GameMenuChoiceRow(
             label = "FG multiplier",
             options = listOf(2, 3, 4),
-            selected = mult,
+            selected = AllSettings.silicaFgMult.state,
             optionText = { "${it}x" },
             onSelect = {
-                AllSettings.onigamiFrameGenMultiplier.save(it)
-                OnigamiRenderer.refreshNativeConfig()
+                AllSettings.silicaFgMult.save(it)
+                SilicaRenderer.refreshFgConfig()
             },
         )
     }
-    item(key = "onigamiFrameGenGuard") {
+    item(key = "silicaModel") {
+        GameMenuChoiceRow(
+            label = "Flow model",
+            options = listOf(3, 4),
+            selected = AllSettings.silicaFgModel.state,
+            optionText = { if (it == 4) "Bidirectional" else "Optical flow" },
+            onSelect = {
+                AllSettings.silicaFgModel.save(it)
+                SilicaRenderer.refreshFgConfig()
+            },
+        )
+    }
+    item(key = "silicaPerf") {
+        GameMenuChoiceRow(
+            label = "Quality preset",
+            options = listOf(0, 1, 2),
+            selected = AllSettings.silicaFgPerf.state,
+            optionText = { if (it == 0) "Quality" else if (it == 1) "Balanced" else "Performance" },
+            onSelect = {
+                AllSettings.silicaFgPerf.save(it)
+                SilicaRenderer.refreshFgConfig()
+            },
+        )
+    }
+    item(key = "silicaPacing") {
         GameMenuSwitchRow(
-            label = "Artifact guard",
-            checked = AllSettings.onigamiFrameGenGuard.state,
+            label = "Even pacing",
+            checked = AllSettings.silicaFgPacing.state,
             hint = "Applies live.",
             onCheckedChange = {
-                AllSettings.onigamiFrameGenGuard.save(it)
-                OnigamiRenderer.refreshNativeConfig()
+                AllSettings.silicaFgPacing.save(it)
+                SilicaRenderer.refreshFgConfig()
             },
         )
     }
-    item(key = "onigamiFgDiag") {
-        GameMenuNoteRow(OnigamiFrameGen.diagnosticsText())
+    item(key = "silicaDiag") {
+        GameMenuNoteRow(SilicaFrameGen.diagnosticsText())
     }
-    item(key = "onigamiFrameGenStatus") {
-        val fgOn = AllSettings.onigamiFrameGen.state
-        val mult = AllSettings.onigamiFrameGenMultiplier.state
-        GameMenuNoteRow(
-            if (fgOn) "Frame Generation: ON (" + mult + "x). Applies live, no restart."
-            else "Frame Generation: OFF. Displayed FPS mirrors native from the same present path.",
-        )
+    item(key = "silicaStatus") {
+        GameMenuNoteRow(SilicaFrameGen.statusText())
     }
-    item(key = "onigamiFps") {
-        GameMenuNoteRow("Advanced FPS mode shows measured Native vs Displayed. Displayed counts only confirmed presents, never Native x multiplier.")
+    item(key = "silicaFps") {
+        GameMenuNoteRow("Advanced FPS mode shows measured Native vs Displayed (win-fg layer counts). Displayed is never Native x multiplier.")
     }
 }
+
 
 /** 输入与控制布局 */
 private fun LazyListScope.controlsSection(
