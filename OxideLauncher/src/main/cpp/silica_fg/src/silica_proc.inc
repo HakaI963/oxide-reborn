@@ -159,6 +159,14 @@ bool resolve_gl_locked() {
   SFG_NEED(MemoryBarrier, "glMemoryBarrier");
   SFG_NEED(DrawArrays, "glDrawArrays");
 #undef SFG_NEED
+  g_gl.GetCurrentContext =
+      reinterpret_cast<P_eglGetCurrentContext>(get("eglGetCurrentContext"));
+  g_gl.QuerySurface =
+      reinterpret_cast<P_eglQuerySurface>(get("eglQuerySurface"));
+  if (!g_gl.GetCurrentContext || !g_gl.QuerySurface) {
+    g_reason = "EGL procs missing";
+    return false;
+  }
   g_resolved = true;
   return true;
 }

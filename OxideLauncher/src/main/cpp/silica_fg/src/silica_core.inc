@@ -88,6 +88,8 @@ SFG_FN(void, glMemoryBarrier, GLbitfield b);
 SFG_FN(void, glDrawArrays, GLenum m, GLint f, GLsizei c);
 #undef SFG_FN
 
+typedef EGLContext (*P_eglGetCurrentContext)(void);
+typedef EGLBoolean (*P_eglQuerySurface)(EGLDisplay d, EGLSurface s, EGLint a, EGLint* v);
 struct Gl {
   P_glGetError GetError = nullptr;
   P_glGetIntegerv GetIntegerv = nullptr;
@@ -143,6 +145,8 @@ struct Gl {
   P_glDispatchCompute DispatchCompute = nullptr;
   P_glMemoryBarrier MemoryBarrier = nullptr;
   P_glDrawArrays DrawArrays = nullptr;
+  P_eglGetCurrentContext GetCurrentContext = nullptr;
+  P_eglQuerySurface QuerySurface = nullptr;
 };
 
 const char kBox[] =

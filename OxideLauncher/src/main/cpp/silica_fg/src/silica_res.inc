@@ -125,14 +125,19 @@ static void tex_rg16f(GLuint t, int w, int h) {
 }
 
 // Full rebuild for (context, size). Returns false on any error (reason set).
-bool ensure_gl_locked(EGLContext cur, int w, int h) {
+bool ensure_gl_locked(int w, int h) {
+  if (!resolve_gl_locked()) return false;
+  EGLContext cur =
+      g_gl.GetCurrentContext ? g_gl.GetCurrentContext() : EGL_NO_CONTEXT;
+  if (cur == EGL_NO_CONTEXT) return false;  // no context: silent skip
+  if (w <= 0 || h <= 0) return false;
   if (g_ctx == cur && g_w == w && g_h == h && g_pWarp != 0) return true;
   teardown_gl_locked();
-  if (!resolve_gl_locked()) return false;
   // GLES 3.1+ required for compute.
   const GLubyte* ver = g_gl.GetString(GL_VERSION);
+  if (!ver) return false;  // context not ready for queries: silent skip
   int major = 0, minor = 0;
-  if (ver) sscanf((const char*)ver, "OpenGL ES %d.%d", &major, &minor);
+  sscanf((const char*)ver, "OpenGL ES %d.%d", &major, &minor);
   if (major < 3 || (major == 3 && minor < 1)) {
     g_reason = "GLES 3.1+ required for compute flow";
     return false;
