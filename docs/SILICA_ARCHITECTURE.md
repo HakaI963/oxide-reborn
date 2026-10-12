@@ -68,60 +68,21 @@ placed where each piece actually runs. This note records the full diagnosis
 - Advanced FPS meter: Native (CallbackBridge) vs Displayed (layer counts,
   never native x multiplier).
 
-## Own GLES engine (v1.19.0+): placement proof
+## Own GLES engine (rewrite): linked, pulled, loud
 
-win-fg serves only real Vulkan swapchains. The GLES game path needed its
-own engine, placed at the only interception point that provably runs every
-displayed frame: the JNI bridge swap. Engine: libsilica_fg.so, clean-room
-GLES 3.1 compute (quarter luma, block-match flow, median, warp-blend),
-self-gated (default off), full state save/restore, JNI-explicit config,
-game-process env export, translation reload. Meter: engine stats first,
-win-fg fallback, else mirror/measuring. Verify: logcat silica-fg tag +
-Renderer-tab diagnostics (counters + source).
+The separate-engine attempt (dlopen + env + files) had too many silent
+links. The rewrite removes all of them:
 
-## Device test protocol (own engine, no release needed)
-
-1. Install the CI debug APK artifact (this code is NOT released).
-2. Pick Silica, start the game, open menu -> Renderer tab.
-3. Diagnostics line must flip from `src=none` to `src=gles` with rising
-   `native/displayed/gen` counters once FG is toggled on.
-4. `adb logcat -s silica-fg:V` must show `engine ready` then
-   `generated frames live`. Any `DISABLED: <reason>` line names the exact
-   cause (ES version, FBO, shader, swap).
-5. Advanced FPS meter: Native vs Displayed separate, never multiplied.
-
-## Own-engine interception matrix (v1.19.x)
-
-The game can present through (a) the JNI bridge (GLFW path) or (b) SDL's
-own EGL handle. Both are covered, each exactly once:
-
-- (a) bridge `gl_swap_buffers` calls `silica_fg_present_hook` explicitly
-  (resolved always, engine self-gates; default off = direct swap).
-- (b) the process-wide dlsym proxy (`sdl_dlopen_hook.c`, ByteHook,
-  established mechanism) wraps any dlsym-resolved `eglSwapBuffers`
-  (SDL, LWJGL-EGL, …) with the engine trampoline
-  (`silica_fg_wrap_swap`, single real-pointer slot: one driver in-process).
-  Bridge-resolved pointers bypass libc dlsym, so no frame is ever wrapped
-  twice. Engine-absent/misconfigured = original pointer, bit-identical.
-
-## Config without env (file channel)
-
-The `:game` process may never see launcher env. All engine state
-converges through files in the shared UID dir instead:
-
-- Every settings change (any process) writes `fg_engine.cfg`
-  (enabled/mult/guard). The engine watches mtime ~1Hz; the file always
-  wins, so OFF sticks within a second no matter who toggled it.
-- Data dir bootstraps from `/proc/self/cmdline`
-  (`<pkg>[:suffix]` -> `/data/user/0/<pkg>/files/silica`, marker-verified).
-- JNI pushes remain for immediacy; files are the truth.
-
-## Yield guards (FG must never crater native)
-
-- Pre-flow skip when our EMA cost already exceeds 80% of the native
-  interval; per-subframe late-skip past 75% of it. Reason surfaces live
-  (`yielding (gpu-bound)`); the meter keeps measuring.
-- 3 consecutive real errors disable with a logged reason; setup skips never
-  count. Teardown frees everything on disable.
-
-Test build: CI debug APK after libsilica_fg commit.
+- Engine lives INSIDE libpojavexec (`ctxbridges/silica/silica_engine.cpp`,
+  linked): present at load by construction, verified by the release gate
+  (`silica_fg_build_id` in every libpojavexec.so).
+- Bridge calls it directly (GLFW path); the dlsym proxy returns its address
+  for any dlsym-resolved eglSwapBuffers (SDL/LWJGL-EGL path). Bridge pointers
+  bypass libc dlsym: no frame wraps twice. Default off = direct calls.
+- Config is pulled over JNI from game-process singletons (~1Hz, exception
+  guarded, keeps last-known): no env, no files, no push timing. Stats path
+  comes from the same getter: meter and engine agree by construction.
+- Binds once from the game UI thread (classloader-safe); counting needs no
+  bind and flows from the first swap, so the meter is live immediately.
+- Same compute core (quarter luma, block-match flow, median, warp-blend,
+  yield guards, save/restore, success-only counting) + logcat + reason.
