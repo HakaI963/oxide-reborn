@@ -800,6 +800,247 @@ static void restore_state(const SavedState& s) {
   }
 }
 
-// __ENGINE_PART4__
+void precapture_locked(int w, int h) {
+  if (!g_enabled) return;
+  if (w <= 0 || h <= 0) return;
+  if (g_pBox == 0 || g_fbo == 0) return;  // built post-swap: never hitch swap
+  drain_errors();
+  GLint saveR = 0, saveD = 0;
+  g_gl.GetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &saveR);
+  g_gl.GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &saveD);
+  g_gl.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+  g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, g_fbo);
+  g_gl.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                            GL_TEXTURE_2D, g_tex[g_turn], 0);
+  g_gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT,
+                       GL_NEAREST);
+  bool ok = g_gl.GetError() == GL_NO_ERROR;
+  g_gl.BindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)saveR);
+  g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)saveD);
+  if (!ok) {
+    note_fail_locked("retain-blit");
+    publish_locked();
+    return;
+  }
+  if (!pass_box(g_tex[g_turn], g_luma[g_turn])) {
+    note_fail_locked("retain-luma");
+    publish_locked();
+    return;
+  }
+  unbind_images();
+  g_turn ^= 1;
+  if (g_have < 2) g_have++;
+}
+
+bool postgenerate_locked(EGLDisplay d, EGLSurface s, int w, int h) {
+  if (!g_enabled || g_have < 2) return false;  // warmup: nothing invented
+  if (!ensure_gl_locked(w, h)) {
+    publish_locked();
+    return false;
+  }
+  // Yield before paying flow cost when already over budget: FG must never
+  // crater native fps. Visible as reason; the meter keeps measuring.
+  if (g_genMs > 0.0 && g_nativeDtMs > 0.0 && g_genMs > 0.8 * g_nativeDtMs) {
+    g_reason = "yielding (gpu-bound)";
+    publish_locked();
+    return false;
+  }
+  long long t0 = mono_ns();
+  SavedState saved;
+  save_state(saved);
+  bool flowOk = run_flow_locked();
+  bool any_fail = !flowOk;
+  int presented = 0;
+  const int n = g_mult;
+  if (flowOk) {
+    GLuint older = g_tex[g_turn];      // frame N-1
+    GLuint newer = g_tex[g_turn ^ 1];  // frame N
+    g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    g_gl.Viewport(0, 0, g_w, g_h);
+    g_gl.Disable(GL_BLEND);
+    g_gl.Disable(GL_SCISSOR_TEST);
+    g_gl.Disable(GL_DEPTH_TEST);
+    g_gl.Disable(GL_STENCIL_TEST);
+    g_gl.Disable(GL_CULL_FACE);
+    g_gl.UseProgram(g_pWarp);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    g_gl.BindTexture(GL_TEXTURE_2D, older);
+    g_gl.BindSampler(0, g_samp);
+    g_gl.ActiveTexture(GL_TEXTURE1);
+    g_gl.BindTexture(GL_TEXTURE_2D, newer);
+    g_gl.BindSampler(1, g_samp);
+    g_gl.ActiveTexture(GL_TEXTURE2);
+    g_gl.BindTexture(GL_TEXTURE_2D, g_flow[1]);
+    g_gl.BindSampler(2, g_sampFlow);
+    g_gl.UseProgram(g_pWarp);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    g_gl.BindTexture(GL_TEXTURE_2D, older);
+    g_gl.ActiveTexture(GL_TEXTURE1);
+    g_gl.BindTexture(GL_TEXTURE_2D, newer);
+    g_gl.ActiveTexture(GL_TEXTURE2);
+    g_gl.BindTexture(GL_TEXTURE_2D, g_flow[1]);
+    if (g_wGuard >= 0) g_gl.Uniform1f(g_wGuard, 1.0f);
+    g_gl.BindVertexArray(g_vao);
+    for (int k = 1; k < n; ++k) {
+      if (g_wT >= 0) g_gl.Uniform1f(g_wT, (float)k / (float)n);
+      g_gl.DrawArrays(GL_TRIANGLES, 0, 3);
+      if (g_gl.GetError() != GL_NO_ERROR) {
+        any_fail = true;
+        break;
+      }
+      // Late-skip: never queue into a full pipeline when behind.
+      if (g_nativeDtMs > 0.0) {
+        double elapsed = (double)(mono_ns() - g_lastSwapNs) / 1000000.0;
+        if (elapsed > 0.75 * g_nativeDtMs) break;
+      }
+      EGLBoolean ok = EGL_FALSE;
+      if (g_gl.SwapBuffers) ok = g_gl.SwapBuffers(d, s);
+      if (ok == EGL_TRUE) {
+        presented++;
+      } else {
+        any_fail = true;
+        break;  // stop the chain: never present past a failure
+      }
+    }
+  }
+  restore_state(saved);
+  unbind_images();
+  g_gl.ActiveTexture(GL_TEXTURE0);
+  long long t1 = mono_ns();
+  double ms = (double)(t1 - t0) / 1000000.0;
+  g_genMs = g_genMs == 0.0 ? ms : g_genMs * 0.9 + ms * 0.1;
+  if (presented > 0) {
+    g_reason = "active";
+    g_gen += (unsigned long long)presented;
+    g_displayed += (unsigned long long)presented;
+    g_confails = 0;
+    if (!g_loggedGen) {
+      g_loggedGen = true;
+      char b[192];
+      snprintf(b, sizeof(b), "silica-fg: generated frames live (%dx, +%d/frame)",
+               n, n - 1);
+      diag(b);
+    }
+  }
+  if (any_fail) {
+    g_drop++;
+    note_fail_locked("present");
+  }
+  publish_locked();
+  return presented > 0;
+}
+
+void on_swap_locked(bool swap_ok, int w, int h) {
+  long long now = mono_ns();
+  if (!swap_ok) {
+    g_drop++;
+    publish_locked();
+    return;
+  }
+  if (g_lastSwapNs != 0) {
+    double dt = (double)(now - g_lastSwapNs) / 1000000.0;
+    if (dt > 0.0 && dt < 1000.0)
+      g_nativeDtMs = (g_nativeDtMs == 0.0) ? dt : g_nativeDtMs * 0.9 + dt * 0.1;
+  }
+  g_native++;
+  g_displayed++;
+  g_lastSwapNs = now;
+  (void)w;
+  (void)h;
+  publish_locked();
+}
+
+static void query_size_locked(EGLDisplay d, EGLSurface s, int& w, int& h) {
+  w = 0;
+  h = 0;
+  if (!g_resolved) {
+    // resolve procs (cheap after first) so size query works pre-init
+    if (!resolve_gl_locked()) return;
+  }
+  if (!g_gl.QuerySurface) return;
+  EGLint ew = 0, eh = 0;
+  if (g_gl.QuerySurface(d, s, EGL_WIDTH, &ew)) w = (int)ew;
+  if (g_gl.QuerySurface(d, s, EGL_HEIGHT, &eh)) h = (int)eh;
+}
+
+}  // namespace
+
+// --- linked entries (C linkage) ---
+extern "C" {
+
+void silica_engine_before_swap(EGLDisplay dpy, EGLSurface surf) {
+  int w = 0, h = 0;
+  {
+    std::lock_guard<std::mutex> l(g_mu);
+    if (g_dataDir.empty() && !read_config_once()) {
+      // not configured yet: nothing to do (counting starts at first swap
+      // only once configured, so displayed never fabricates)
+    }
+    query_size_locked(dpy, surf, w, h);
+    precapture_locked(w, h);
+  }
+  (void)dpy;
+  (void)surf;
+}
+
+void silica_engine_after_swap(EGLDisplay dpy, EGLSurface surf, int ok) {
+  int w = 0, h = 0;
+  {
+    std::lock_guard<std::mutex> l(g_mu);
+    query_size_locked(dpy, surf, w, h);
+    on_swap_locked(ok != 0, w, h);
+    if (ok) postgenerate_locked(dpy, surf, w, h);
+  }
+}
+
+EGLBoolean silica_engine_wrapped_swap(EGLDisplay dpy, EGLSurface surf) {
+  silica_engine_before_swap(dpy, surf);
+  EGLBoolean ok = EGL_FALSE;
+  {
+    std::lock_guard<std::mutex> l(g_mu);
+    if (g_gl.SwapBuffers) ok = g_gl.SwapBuffers(dpy, surf);
+  }
+  silica_engine_after_swap(dpy, surf, ok == EGL_TRUE);
+  return ok;
+}
+
+void* silica_engine_swap_entry(void) {
+  return reinterpret_cast<void*>(&silica_engine_wrapped_swap);
+}
+
+const char* silica_fg_build_id(void) {
+  return "silica-fg-own-1.19";
+}
+
+jboolean Java_dev_oxide_launcher_bridge_SilicaFgBridge_nativeBind(
+    JNIEnv* env, jclass clazz) {
+  if (!env || !clazz) return JNI_FALSE;
+  JavaVM* vm = nullptr;
+  if (env->GetJavaVM(&vm) != JNI_OK || !vm) return JNI_FALSE;
+  jclass ref = (jclass)env->NewGlobalRef(clazz);
+  if (!ref) return JNI_FALSE;
+  jmethodID mDir = env->GetStaticMethodID(ref, "engineDataDir",
+                                          "()Ljava/lang/String;");
+  jmethodID mEn = env->GetStaticMethodID(ref, "engineEnabled", "()Z");
+  jmethodID mMult = env->GetStaticMethodID(ref, "engineMult", "()I");
+  if (!mDir || !mEn || !mMult) {
+    env->DeleteGlobalRef(ref);
+    return JNI_FALSE;
+  }
+  std::lock_guard<std::mutex> l(g_mu);
+  if (g_bridgeClass) env->DeleteGlobalRef(g_bridgeClass);
+  g_vm = vm;
+  g_bridgeClass = ref;
+  g_mDir = mDir;
+  g_mEn = mEn;
+  g_mMult = mMult;
+  g_boundLogged = true;
+  diag("silica-fg: bridge bound (config pull live)");
+  return JNI_TRUE;
+}
+
+}  // extern "C"
+}  // namespace silica_engine
+
 
 
