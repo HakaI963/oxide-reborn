@@ -142,6 +142,7 @@ struct Gl {
   P_glGetUniformLocation GetUniformLocation = nullptr;
   P_glUniform1i Uniform1i = nullptr;
   P_glUniform1f Uniform1f = nullptr;
+  P_glUniform2f Uniform2f = nullptr;
   P_glUniform2i Uniform2i = nullptr;
   P_glDispatchCompute DispatchCompute = nullptr;
   P_glMemoryBarrier MemoryBarrier = nullptr;
@@ -437,14 +438,15 @@ bool resolve_gl_locked() {
   SFG_NEED(GetUniformLocation, "glGetUniformLocation");
   SFG_NEED(Uniform1i, "glUniform1i");
   SFG_NEED(Uniform1f, "glUniform1f");
+  SFG_NEED(Uniform2f, "glUniform2f");
   SFG_NEED(Uniform2i, "glUniform2i");
   SFG_NEED(DispatchCompute, "glDispatchCompute");
   SFG_NEED(MemoryBarrier, "glMemoryBarrier");
   SFG_NEED(DrawArrays, "glDrawArrays");
 #undef SFG_NEED
-  SFG_NEED(GetCurrentContext, "eglGetCurrentContext");
-  SFG_NEED(QuerySurface, "eglQuerySurface");
-  SFG_NEED(SwapBuffers, "eglSwapBuffers");
+  SFG_FN(GetCurrentContext, "eglGetCurrentContext");
+  SFG_FN(QuerySurface, "eglQuerySurface");
+  SFG_FN(SwapBuffers, "eglSwapBuffers");
   g_resolved = true;
   return true;
 }
