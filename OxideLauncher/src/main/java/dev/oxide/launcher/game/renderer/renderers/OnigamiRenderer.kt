@@ -49,8 +49,7 @@ object OnigamiRenderer : RendererInterface {
         OnigamiEnv.merged(
             OnigamiPerformanceMode.OPTIMIZED.name,
             dir.absolutePath,
-            AllSettings.onigamiFrameGen.getValue(),
-            AllSettings.onigamiFrameGenMultiplier.getValue(),
+        ),
         )
     }
 
@@ -64,8 +63,6 @@ object OnigamiRenderer : RendererInterface {
                 AllSettings.onigamiDiagnostics.getValue(),
                 AllSettings.onigamiRenderScale.getValue(),
                 AllSettings.onigamiUpscaleMode.getValue(),
-                AllSettings.onigamiFrameGen.getValue(),
-                AllSettings.onigamiFrameGenMultiplier.getValue(),
             )
             val tmp = File(dir, "onigami.json.tmp")
             val dst = File(dir, "onigami.json")
