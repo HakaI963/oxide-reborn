@@ -49,7 +49,6 @@ object OnigamiRenderer : RendererInterface {
         OnigamiEnv.merged(
             OnigamiPerformanceMode.OPTIMIZED.name,
             dir.absolutePath,
-        ),
         )
     }
 

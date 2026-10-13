@@ -197,6 +197,7 @@ private class GameViewModel(
                     break
                 }
                 recordFps(CallbackBridge.getCurrentFps())
+                pollFrameGenStats()
                 delay(1000L.milliseconds)
             }
         }
@@ -259,6 +260,7 @@ private class GameViewModel(
      * presents come from the single native path and both numbers measure the
      * same frames. Advanced mode keeps showing them separately and honestly.
      */
+    private fun pollFrameGenStats() {
         fgEnabled = false
         fgMultiplier = 2
         displayedFps = gameFps
