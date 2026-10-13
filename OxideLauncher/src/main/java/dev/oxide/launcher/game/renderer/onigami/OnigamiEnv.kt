@@ -21,9 +21,6 @@ object OnigamiEnv {
     const val KEY_FLAVOR = "OXIDE_RENDERER_FLAVOR"
     const val KEY_DATA_DIR = "ONIGAMI_DATA_DIR"
     const val KEY_MODE = "ONIGAMI_MODE"
-    const val KEY_FRAME_GEN = "ONIGAMI_FRAME_GEN"
-    const val KEY_FRAME_GEN_MULT = "ONIGAMI_FRAME_GEN_MULT"
-    const val KEY_LSFG_MULT = "LSFG_MULTIPLIER"
 
     fun baseEnv(mode: String): Map<String, String> = mapOf(
         KEY_LIBGL_ES to "3",
@@ -36,15 +33,7 @@ object OnigamiEnv {
         return mapOf(KEY_DATA_DIR to privateDir)
     }
 
-    fun frameGenEnv(enabled: Boolean, multiplier: Int): Map<String, String> {
-        if (!enabled) return emptyMap()
-        val m = if (multiplier == 2) "2" else "2"
-        return mapOf(KEY_FRAME_GEN to "1", KEY_FRAME_GEN_MULT to m, KEY_LSFG_MULT to m)
-    }
-
     fun merged(mode: String, privateDir: String): Map<String, String> =
         baseEnv(mode) + dataDirEnv(privateDir)
 
-    fun merged(mode: String, privateDir: String, frameGen: Boolean, multiplier: Int): Map<String, String> =
-        merged(mode, privateDir) + frameGenEnv(frameGen, multiplier)
 }
