@@ -83,6 +83,7 @@ SFG_FN(void, glUseProgram, GLuint program);
 SFG_FN(GLint, glGetUniformLocation, GLuint program, const GLchar* name);
 SFG_FN(void, glUniform1i, GLint location, GLint v0);
 SFG_FN(void, glUniform1f, GLint location, GLfloat v0);
+SFG_FN(void, glUniform2f, GLint location, GLfloat v0, GLfloat v1);
 SFG_FN(void, glUniform2i, GLint location, GLint v0, GLint v1);
 SFG_FN(void, glDispatchCompute, GLuint x, GLuint y, GLuint z);
 SFG_FN(void, glMemoryBarrier, GLbitfield b);
