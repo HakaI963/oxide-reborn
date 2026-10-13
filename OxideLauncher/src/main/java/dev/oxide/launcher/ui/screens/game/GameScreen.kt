@@ -118,8 +118,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import dev.oxide.launcher.game.renderer.onigami.FrameGenStats
-import dev.oxide.launcher.game.renderer.onigami.OnigamiFrameGen
 import org.lwjgl.glfw.CallbackBridge
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
@@ -165,8 +163,6 @@ private class GameViewModel(
     /** 选择的倍率 (仅激活时展示) */
     var fgMultiplier by mutableIntStateOf(2)
         private set
-    private var prevFgStats: FrameGenStats? = null
-    private var prevFgTms: Long = 0L
     /** 帧率历史记录（最多保留最近15个时间节点） */
     var fpsHistory by mutableStateOf<List<Int>>(emptyList())
         private set
@@ -192,8 +188,6 @@ private class GameViewModel(
         fpsMinResyncCountdown = -1
         displayedFps = null
         displayedMeasured = false
-        prevFgStats = null
-        prevFgTms = 0L
         //开启一个新的协程，每秒更新一次帧率数据
         fpsJob = viewModelScope.launch(Dispatchers.Default) {
             while (true) {
@@ -203,7 +197,6 @@ private class GameViewModel(
                     break
                 }
                 recordFps(CallbackBridge.getCurrentFps())
-                pollFrameGenStats()
                 delay(1000L.milliseconds)
             }
         }
@@ -262,48 +255,15 @@ private class GameViewModel(
     }
 
     /**
-     * Poll native frame-generation present counters (v1.17.0 Advanced meter).
-     *
-     * Native FPS stays authoritative from CallbackBridge. Displayed FPS comes
-     * ONLY from the native stats-file counters delta (confirmed presents).
-     * It is never native x multiplier. FG off + no stats file: displayed
-     * mirrors native (same present path, measured). FG on + no fresh stats:
-     * displayedMeasured=false so the UI renders "measuring".
+     * Displayed FPS mirrors native: this build has no frame generation, so
+     * presents come from the single native path and both numbers measure the
+     * same frames. Advanced mode keeps showing them separately and honestly.
      */
-    private fun pollFrameGenStats() {
-        fgEnabled = OnigamiFrameGen.isEnabled()
-        fgMultiplier = OnigamiFrameGen.selectedMultiplier()
-        val stats = runCatching { OnigamiFrameGen.readStats() }.getOrNull()
-        if (stats == null) {
-            if (!fgEnabled) {
-                displayedFps = gameFps
-                displayedMeasured = true
-            } else {
-                displayedMeasured = false
-            }
-            return
-        }
-        val now = System.currentTimeMillis()
-        val prev = prevFgStats
-        if (prev != null && prevFgTms > 0L) {
-            val dt = (now - prevFgTms) / 1000.0
-            if (dt > 0.0) {
-                val rates = OnigamiFrameGen.rates(prev, stats, dt)
-                displayedFps = rates.second.toInt()
-                displayedMeasured = true
-            }
-        } else {
-            if (!stats.enabled) {
-                displayedFps = gameFps
-                displayedMeasured = true
-            } else {
-                displayedMeasured = false
-            }
-        }
-        prevFgStats = stats
-        prevFgTms = now
+        fgEnabled = false
+        fgMultiplier = 2
+        displayedFps = gameFps
+        displayedMeasured = true
     }
-
     var editorRefresh by mutableIntStateOf(0)
         private set
     /** 可观察的控制布局 */

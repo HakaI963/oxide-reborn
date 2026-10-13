@@ -509,21 +509,6 @@ private fun LazyListScope.rendererSection(
                 (if (upscaleOn && scale < 100) "Bilinear" else "Off") + ".",
         )
     }
-    item(key = "onigamiFrameGen") {
-        GameMenuSwitchRow(
-            label = "Frame generation (2x)",
-            checked = AllSettings.onigamiFrameGen.state,
-            hint = "Restart required.",
-            onCheckedChange = { AllSettings.onigamiFrameGen.save(it) },
-        )
-    }
-    item(key = "onigamiFrameGenStatus") {
-        val fgOn = AllSettings.onigamiFrameGen.state
-        GameMenuNoteRow(
-            if (fgOn) "Frame Generation: ON (2x). Only 2x is validated; 3x/4x stay hidden. Restart required."
-            else "Frame Generation: OFF. Displayed FPS mirrors native from the same present path.",
-        )
-    }
     item(key = "onigamiFps") {
         GameMenuNoteRow("Advanced FPS mode shows measured Native vs Displayed. Displayed counts only confirmed presents, never Native x multiplier.")
     }
