@@ -5,7 +5,7 @@
 // disocclusion guard. No third-party FG code. Called directly by the
 // bridge (linked, never dlopened); config pulled over JNI from
 // game-process singletons; stats to the same dir string. Default off.
-#include "silica/silica_engine.h"
+#include "silica_engine.h"
 
 #include <EGL/egl.h>
 #include <GLES3/gl31.h>
