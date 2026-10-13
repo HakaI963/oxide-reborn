@@ -56,16 +56,12 @@ Config load_config() {
     c.swap_interval = parse_int_after(j, "swap_interval", 1);
     c.render_scale = parse_float_after(j, "render_scale", 1.0f);
     c.upscale_mode = parse_int_after(j, "upscale_mode", 0);
-    c.frame_generation = parse_bool_after(j, "frame_generation", false);
-    c.frame_gen_multiplier = parse_int_after(j, "frame_gen_multiplier", 2);
     if (c.swap_interval < 0) c.swap_interval = 0;
     if (c.swap_interval > 1) c.swap_interval = 1;
     if (c.render_scale < 0.5f) c.render_scale = 0.5f;
     if (c.render_scale > 1.0f) c.render_scale = 1.0f;
     if (c.upscale_mode < 0) c.upscale_mode = 0;
     if (c.upscale_mode > 1) c.upscale_mode = 1;
-    // v1.17.0: only 2x is implemented; clamp anything else and let lsfg report it.
-    if (c.frame_gen_multiplier != 2) c.frame_gen_multiplier = 2;
     if (c.program_vault_mb < 0) c.program_vault_mb = 0;
     if (c.program_vault_mb > 1024) c.program_vault_mb = 1024;
     return c;
