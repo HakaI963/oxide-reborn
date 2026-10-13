@@ -510,7 +510,7 @@ private fun LazyListScope.rendererSection(
         )
     }
     item(key = "onigamiFps") {
-        GameMenuNoteRow("Advanced FPS mode shows measured Native vs Displayed. Displayed counts only confirmed presents, never Native x multiplier.")
+        GameMenuNoteRow("Advanced FPS mode shows Native vs Displayed (same path; this build has no frame generation).")
     }
 }
 
