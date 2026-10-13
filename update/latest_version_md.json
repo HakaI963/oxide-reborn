@@ -1,43 +1,43 @@
 {
-  "code": 101700,
-  "version": "1.17.0",
-  "created_at": "2026-10-12",
+  "code": 101701,
+  "version": "1.17.1",
+  "created_at": "2026-10-13",
   "cloud_drives": [],
   "files": [
     {
-      "file_name": "OxideLauncher-1.17.0.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.0/OxideLauncher-1.17.0.apk",
+      "file_name": "OxideLauncher-1.17.1.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.1/OxideLauncher-1.17.1.apk",
       "arch": "all",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.17.0-arm64-v8a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.0/OxideLauncher-1.17.0-arm64-v8a.apk",
+      "file_name": "OxideLauncher-1.17.1-arm64-v8a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.1/OxideLauncher-1.17.1-arm64-v8a.apk",
       "arch": "arm64",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.17.0-armeabi-v7a.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.0/OxideLauncher-1.17.0-armeabi-v7a.apk",
+      "file_name": "OxideLauncher-1.17.1-armeabi-v7a.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.1/OxideLauncher-1.17.1-armeabi-v7a.apk",
       "arch": "arm",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.17.0-x86.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.0/OxideLauncher-1.17.0-x86.apk",
+      "file_name": "OxideLauncher-1.17.1-x86.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.1/OxideLauncher-1.17.1-x86.apk",
       "arch": "x86",
       "size": 0
     },
     {
-      "file_name": "OxideLauncher-1.17.0-x86_64.apk",
-      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.0/OxideLauncher-1.17.0-x86_64.apk",
+      "file_name": "OxideLauncher-1.17.1-x86_64.apk",
+      "uri": "https://github.com/HakaI963/oxide-reborn/releases/download/v1.17.1/OxideLauncher-1.17.1-x86_64.apk",
       "arch": "x86_64",
       "size": 0
     }
   ],
   "default_body": {
     "language": "en",
-    "markdown": "# Oxide Launcher 1.17.0\n\n## ONIGAMI frame generation (LSFG-VK derived)\n\nFull 2x interpolated-present path in libonigami.so: GPU-side frame retention (blit, no CPU readback), blend-interpolated intermediate frames at t=0.5 presented between native frames, success-only accounting. Toggle (off by default) + 2x-only multiplier in launcher Renderer settings and the in-game Renderer tab; restart-required. At most one generated frame per native frame; 3x/4x stay hidden until on-device validation.\n\n## Advanced FPS meter\n\nNew Advanced mode shows measured Native FPS (game-rendered) vs Displayed FPS (confirmed presents incl. generated frames) plus the actual frame-generation state. Displayed is never native x multiplier; without a fresh measurement it reads measuring. Simple number/chart modes preserved.\n\n## Notes\n\nVitrail/shader-pack GL-on-ES path untouched. Higher displayed rate never means the game simulated more frames; see docs/ONIGAMI_LSFG_V1_17_0.md for architecture and limits."
+    "markdown": "# Oxide Launcher 1.17.1\n\n## Stable base, frame generation removed\n\nRestored from the v1.17.0 base with the LSFG frame-generation backend fully removed (native, settings, UI, docs): ONIGAMI is pure translation again. No new features; this release exists to be a clean, crash-free baseline.\n\n## FPS meter\n\nAdvanced mode shows Native vs Displayed from the single native path (no frame generation in this build)."
   },
   "bodies": []
 }
