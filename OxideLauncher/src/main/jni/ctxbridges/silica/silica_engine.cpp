@@ -1000,6 +1000,11 @@ EGLBoolean silica_engine_wrapped_swap(EGLDisplay dpy, EGLSurface surf) {
   return ok;
 }
 
+int silica_engine_swaps_seen(void) {
+  std::lock_guard<std::mutex> l(g_mu);
+  return g_native > 0 ? 1 : 0;
+}
+
 void* silica_engine_swap_entry(void) {
   return reinterpret_cast<void*>(&silica_engine_wrapped_swap);
 }

@@ -14,8 +14,11 @@
 
 typedef void *(*dlsym_func_t)(void *handle, const char *symbol);
 
-/* Silica engine entry (linked via libpojavexec: no dlopen, load-verified). */
+/* Silica engine entries (linked via libpojavexec). Wrap only AFTER the
+ * bridge has seen real swaps: boot-time resolvers (LWJGL probe, SDL init)
+ * keep the raw pointer, so JVM boot behavior is bit-identical. */
 void* silica_engine_swap_entry(void);
+int silica_engine_swaps_seen(void);
 typedef jint (*jni_on_load_func_t)(JavaVM *vm, void *reserved);
 
 typedef bytehook_stub_t (*bytehook_hook_all_fn)(const char *callee_path_name, const char *symbol,
@@ -46,8 +49,10 @@ static void *customDlsym(void *handle, const char *symbol) {
     // engine self-gates (default off = direct call). Bridge-resolved pointers
     // bypass libc dlsym, so no frame is ever wrapped twice.
     if (result != NULL && symbol != NULL && strcmp(symbol, "eglSwapBuffers") == 0) {
-        void* w = silica_engine_swap_entry();
-        if (w != NULL) return w;
+        if (silica_engine_swaps_seen() > 0) {
+            void* w = silica_engine_swap_entry();
+            if (w != NULL) return w;
+        }
     }
     // LWJGL-EGL, …) so generated frames ride every present path, not just the
     // JNI bridge. The engine self-gates (default off = direct call). One slot:
