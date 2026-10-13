@@ -204,20 +204,6 @@ object AllSettings : SettingsRegistry() {
      */
     val onigamiUpscaleMode = intSetting("onigamiUpscaleMode", 0, 0..1)
 
-    /**
-     * Onigami frame generation (LSFG-VK derived, v1.17.0): false = off (default).
-     * Real toggle, read by libonigami.so at context init (restart required).
-     * Only 2x is exposed until 3x/4x are validated on-device.
-     */
-    val onigamiFrameGen = boolSetting("onigamiFrameGen", false)
-
-    /**
-     * Frame-generation multiplier. v1.17.0 supports only 2x; the range is
-     * pinned to 2..2 so unimplemented modes cannot be selected.
-     * Restart required.
-     */
-    val onigamiFrameGenMultiplier = intSetting("onigamiFrameGenMultiplier", 2, 2..2)
-
     //Game
     /**
      * 版本隔离
