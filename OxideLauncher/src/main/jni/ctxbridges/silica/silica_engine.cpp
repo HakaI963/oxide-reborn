@@ -443,10 +443,11 @@ bool resolve_gl_locked() {
   SFG_NEED(DispatchCompute, "glDispatchCompute");
   SFG_NEED(MemoryBarrier, "glMemoryBarrier");
   SFG_NEED(DrawArrays, "glDrawArrays");
+  SFG_NEED(GetCurrentContext, "eglGetCurrentContext");
+  SFG_NEED(QuerySurface, "eglQuerySurface");
+  SFG_NEED(SwapBuffers, "eglSwapBuffers");
 #undef SFG_NEED
-  SFG_FN(GetCurrentContext, "eglGetCurrentContext");
-  SFG_FN(QuerySurface, "eglQuerySurface");
-  SFG_FN(SwapBuffers, "eglSwapBuffers");
+
   g_resolved = true;
   return true;
 }
