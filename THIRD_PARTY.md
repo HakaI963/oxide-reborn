@@ -200,16 +200,3 @@ rearm, ANGLE half-load guard, Apple ARB-alias guard. The tree remains LGPL-2.1
 MobileGlues-derived; Copper Oxide impl, binaries, copperoxide.yml and all license
 notices stay until the independent Silica native exists.
 
-## LSFG-VK frame-generation reference (v1.17.0, MIT)
-
-Frame-generation math (pyramid downscale, hierarchical Lucas-Kanade motion
-estimation, bidirectional warp, UI-aware blend, present pacing) is derived
-from [Snap888/lsfg-vk](https://github.com/Snap888/lsfg-vk) (MIT,
-Copyright (c) 2024 LSFG-VK Contributors). The Vulkan implicit-layer
-plumbing (VK_LAYER_LSFG_frame_generation, vkCreateSwapchainKHR /
-vkQueuePresentKHR interception) is not shipped: ONIGAMI owns EGL/GLES
-contexts and no Vulkan swapchain, and upstream's own synth present path is
-an unfinished TODO. The EGL adaptation lives in
-OxideLauncher/src/main/cpp/onigami/src/lsfg_framegen.cpp (+ include/onigami/lsfg.h)
-with MIT attribution retained in the source header. Only 2x is exposed
-until higher multipliers validate on-device.
